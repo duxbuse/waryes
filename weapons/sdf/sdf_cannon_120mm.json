@@ -1,0 +1,19 @@
+{
+    "name": "Battle Cannon",
+    "range": {
+        "ground": 2000,
+        "air": null
+    },
+    "penetration": 150,
+    "damage": "40 HE",
+    "suppression": 300,
+    "rate_of_fire": 8,
+    "accuracy": {
+        "static": 50,
+        "moving": 25
+    },
+    "aim_time": 2.0,
+    "reload_time": 6.0,
+    "salvo_length": 1,
+    "supply_cost": 20
+}

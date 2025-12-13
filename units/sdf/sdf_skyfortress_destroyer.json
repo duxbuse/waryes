@@ -1,0 +1,39 @@
+{
+    "cost": 260,
+    "health": 150,
+    "speed": {
+        "road": 550,
+        "off_road": 550
+    },
+    "armor": {
+        "front": 40,
+        "side": 40,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 5000,
+    "autonomy": {
+        "road": 4000,
+        "off_road": 4000
+    },
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 3,
+            "max_ammo": 1200
+        },
+        {
+            "weapon_id": "pdf_hellstrike_missile",
+            "count": 8,
+            "max_ammo": 8
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 400
+        }
+    ]
+}

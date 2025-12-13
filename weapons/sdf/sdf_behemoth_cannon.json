@@ -1,0 +1,19 @@
+{
+    "name": "Behemoth Cannon",
+    "range": {
+        "ground": 3000,
+        "air": null
+    },
+    "penetration": 250,
+    "damage": "100 HE",
+    "suppression": 400,
+    "rate_of_fire": 3,
+    "accuracy": {
+        "static": 60,
+        "moving": 30
+    },
+    "aim_time": 3.0,
+    "reload_time": 8.0,
+    "salvo_length": 1,
+    "supply_cost": 50
+}

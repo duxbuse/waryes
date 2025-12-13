@@ -1,0 +1,70 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Faction Schema",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Unique identifier for the faction (e.g., 'sdf')."
+        },
+        "name": {
+            "type": "string",
+            "description": "Display name of the faction."
+        },
+        "short_name": {
+            "type": "string",
+            "description": "Abbreviation (e.g., 'SDF')."
+        },
+        "description": {
+            "type": "string",
+            "description": "Lore description and themes."
+        },
+        "mechanics": {
+            "type": "array",
+            "description": "Unique faction mechanics.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "effect": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name",
+                    "effect"
+                ]
+            }
+        },
+        "divisions": {
+            "type": "array",
+            "description": "List of division IDs belonging to this faction.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "assets": {
+            "type": "object",
+            "description": "Paths to assets.",
+            "properties": {
+                "flag_icon": {
+                    "type": "string"
+                },
+                "anthem_audio": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string",
+                    "description": "General faction icon."
+                }
+            }
+        }
+    },
+    "required": [
+        "id",
+        "name",
+        "divisions"
+    ]
+}

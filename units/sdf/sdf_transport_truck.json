@@ -1,0 +1,23 @@
+{
+    "cost": 15,
+    "health": 40,
+    "speed": {
+        "road": 80,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 5,
+        "side": 5,
+        "rear": 0,
+        "top": 0
+    },
+    "fuel": 300,
+    "autonomy": {
+        "road": 600,
+        "off_road": 400
+    },
+    "optics": "Normal",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": []
+}

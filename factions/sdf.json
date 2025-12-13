@@ -1,0 +1,22 @@
+{
+    "id": "sdf",
+    "name": "Sector Defense Force",
+    "short_name": "SDF",
+    "description": "The backbone of the Imperium. Values quantity over quality. Theme: Industrial, militaristic, disciplined.",
+    "mechanics": [
+        {
+            "name": "Chain of Command",
+            "effect": "Units outside of command radius suffer morale penalties. Protect your officers."
+        }
+    ],
+    "divisions": [
+        "sdf_212th_heavy_armor",
+        "sdf_45th_siege",
+        "sdf_101st_airborne",
+        "sdf_7th_mechanized"
+    ],
+    "assets": {
+        "flag_icon": "assets/icons/factions/sdf_flag.png",
+        "anthem_audio": "assets/audio/factions/sdf_anthem.wav"
+    }
+}

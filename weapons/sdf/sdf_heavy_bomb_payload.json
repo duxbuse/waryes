@@ -1,0 +1,19 @@
+{
+    "name": "Heavy Bomb Payload",
+    "range": {
+        "ground": 500,
+        "air": null
+    },
+    "penetration": 120,
+    "damage": "250 HE",
+    "suppression": 400,
+    "rate_of_fire": 0,
+    "accuracy": {
+        "static": 30,
+        "moving": 30
+    },
+    "aim_time": 1.0,
+    "reload_time": 30.0,
+    "salvo_length": 1,
+    "supply_cost": 60
+}

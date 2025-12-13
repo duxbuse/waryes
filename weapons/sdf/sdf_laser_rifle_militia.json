@@ -1,0 +1,19 @@
+{
+    "name": "Laser Rifle (Militia Pattern)",
+    "range": {
+        "ground": 450,
+        "air": null
+    },
+    "penetration": 0,
+    "damage": "1 HE",
+    "suppression": 3,
+    "rate_of_fire": 60,
+    "accuracy": {
+        "static": 25,
+        "moving": 10
+    },
+    "aim_time": 1.5,
+    "reload_time": 3.5,
+    "salvo_length": 3,
+    "supply_cost": 2
+}

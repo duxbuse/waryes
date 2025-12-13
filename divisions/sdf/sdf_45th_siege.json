@@ -1,0 +1,127 @@
+{
+    "id": "sdf_45th_siege",
+    "name": "45th Siege Regiment (Artillery)",
+    "faction_id": "sdf",
+    "description": "Massed Artillery, Static Defense, Entrenchment. Pounding the enemy to dust from afar before advancing.",
+    "playstyle": "Excellent at holding ground.",
+    "slot_costs": {
+        "logistics": [
+            1,
+            1,
+            1,
+            2,
+            2,
+            3
+        ],
+        "infantry": [
+            1,
+            1,
+            1,
+            2,
+            2,
+            3
+        ],
+        "tanks": [
+            2,
+            3,
+            4
+        ],
+        "recon": [
+            1,
+            1,
+            2,
+            3
+        ],
+        "anti_air": [
+            1,
+            1,
+            2,
+            2
+        ],
+        "artillery": [
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+        ],
+        "air": [
+            3,
+            4
+        ],
+        "vtol": [
+            3,
+            4
+        ]
+    },
+    "roster": [
+        {
+            "unit_id": "sdf_tremor_cannon",
+            "max_cards": 6
+        },
+        {
+            "unit_id": "sdf_barrage_launcher",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_vortex_missile",
+            "max_cards": 1
+        },
+        {
+            "unit_id": "sdf_field_gun_bombast",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_field_gun_heavy_lascannon",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_mortar_team",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "sdf_militia",
+            "max_cards": 5
+        },
+        {
+            "unit_id": "sdf_trooper",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "sdf_hwt_lascannon",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_hwt_heavy_bolter",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_bastion_mbt_siege",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_bastion_mbt",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_sniper_team",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_scout_walker",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_skysweeper",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_orbital_lance_strike",
+            "max_cards": 1
+        }
+    ]
+}

@@ -1,0 +1,19 @@
+{
+    "name": "Astartes Saw-Blade",
+    "range": {
+        "ground": 10,
+        "air": null
+    },
+    "penetration": 15,
+    "damage": "5 Kinetic",
+    "suppression": 20,
+    "rate_of_fire": 60,
+    "accuracy": {
+        "static": 90,
+        "moving": 90
+    },
+    "aim_time": 0.1,
+    "reload_time": 0.0,
+    "salvo_length": 1,
+    "supply_cost": 0
+}

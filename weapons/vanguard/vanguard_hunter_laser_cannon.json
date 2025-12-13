@@ -1,0 +1,19 @@
+{
+    "name": "Twin-Linked Heavy Laser Cannon",
+    "range": {
+        "ground": 2500,
+        "air": null
+    },
+    "penetration": 250,
+    "damage": "60 HE",
+    "suppression": 200,
+    "rate_of_fire": 10,
+    "accuracy": {
+        "static": 70,
+        "moving": 50
+    },
+    "aim_time": 2.5,
+    "reload_time": 5.0,
+    "salvo_length": 2,
+    "supply_cost": 25
+}

@@ -1,0 +1,34 @@
+{
+    "cost": 140,
+    "health": 160,
+    "speed": {
+        "road": 30,
+        "off_road": 20
+    },
+    "armor": {
+        "front": 200,
+        "side": 160,
+        "rear": 100,
+        "top": 40
+    },
+    "fuel": 600,
+    "autonomy": {
+        "road": 280,
+        "off_road": 160
+    },
+    "optics": "Normal",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_siege_mortar",
+            "count": 1,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 600
+        }
+    ]
+}

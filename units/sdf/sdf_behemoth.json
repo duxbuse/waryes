@@ -1,0 +1,49 @@
+{
+    "cost": 450,
+    "health": 600,
+    "speed": {
+        "road": 25,
+        "off_road": 20
+    },
+    "armor": {
+        "front": 300,
+        "side": 250,
+        "rear": 200,
+        "top": 100
+    },
+    "fuel": 1500,
+    "autonomy": {
+        "road": 200,
+        "off_road": 150
+    },
+    "optics": "Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_behemoth_cannon",
+            "count": 1,
+            "max_ammo": 30
+        },
+        {
+            "weapon_id": "sdf_siege_mortar",
+            "count": 1,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 1,
+            "max_ammo": 200
+        },
+        {
+            "weapon_id": "sdf_heavy_laser_cannon_tripod",
+            "count": 2,
+            "max_ammo": 40
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 3,
+            "max_ammo": 1000
+        }
+    ]
+}

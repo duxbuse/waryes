@@ -1,0 +1,19 @@
+{
+    "name": "Shock Hammer",
+    "range": {
+        "ground": 10,
+        "air": null
+    },
+    "penetration": 300,
+    "damage": "200 Shock",
+    "suppression": 100,
+    "rate_of_fire": 6,
+    "accuracy": {
+        "static": 80,
+        "moving": 80
+    },
+    "aim_time": 0.0,
+    "reload_time": 2.0,
+    "salvo_length": 1,
+    "supply_cost": 0
+}

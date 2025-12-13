@@ -1,0 +1,24 @@
+{
+    "cost": 50,
+    "health": 15,
+    "speed": {
+        "road": 5,
+        "off_road": 3
+    },
+    "armor": {
+        "front": 5,
+        "side": 0,
+        "rear": 0,
+        "top": 0
+    },
+    "optics": "Very Good",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_heavy_laser_cannon_tripod",
+            "count": 2,
+            "max_ammo": 50
+        }
+    ]
+}

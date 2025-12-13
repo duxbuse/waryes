@@ -1,0 +1,19 @@
+{
+    "name": "Twin Heavy Kinetic Rifle (Ground)",
+    "range": {
+        "ground": 1000,
+        "air": 800
+    },
+    "penetration": 20,
+    "damage": "10 HE",
+    "suppression": 60,
+    "rate_of_fire": 600,
+    "accuracy": {
+        "static": 50,
+        "moving": 40
+    },
+    "aim_time": 0.5,
+    "reload_time": 4.0,
+    "salvo_length": 20,
+    "supply_cost": 10
+}

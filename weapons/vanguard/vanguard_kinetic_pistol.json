@@ -1,0 +1,19 @@
+{
+    "name": "Kinetic Pistol",
+    "range": {
+        "ground": 250,
+        "air": null
+    },
+    "penetration": 10,
+    "damage": "2 HE",
+    "suppression": 8,
+    "rate_of_fire": 40,
+    "accuracy": {
+        "static": 50,
+        "moving": 40
+    },
+    "aim_time": 0.3,
+    "reload_time": 1.5,
+    "salvo_length": 3,
+    "supply_cost": 1
+}

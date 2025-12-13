@@ -1,0 +1,19 @@
+{
+    "name": "Skystrike Missile",
+    "range": {
+        "ground": null,
+        "air": 3500
+    },
+    "penetration": 100,
+    "damage": "60 HE",
+    "suppression": 50,
+    "rate_of_fire": 6,
+    "accuracy": {
+        "static": 60,
+        "moving": 60
+    },
+    "aim_time": 2.0,
+    "reload_time": 8.0,
+    "salvo_length": 1,
+    "supply_cost": 20
+}

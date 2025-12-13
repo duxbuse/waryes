@@ -1,0 +1,34 @@
+{
+    "cost": 130,
+    "health": 60,
+    "speed": {
+        "road": 850,
+        "off_road": 850
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "fuel": 2000,
+    "autonomy": {
+        "road": 2000,
+        "off_road": 2000
+    },
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 2,
+            "max_ammo": 600
+        },
+        {
+            "weapon_id": "pdf_aa_rocket",
+            "count": 3,
+            "max_ammo": 6
+        }
+    ]
+}

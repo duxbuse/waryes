@@ -1,0 +1,29 @@
+{
+    "cost": 550,
+    "health": 800,
+    "speed": {
+        "road": 300,
+        "off_road": 300
+    },
+    "armor": {
+        "front": 100,
+        "side": 80,
+        "rear": 60,
+        "top": 60
+    },
+    "fuel": 10000,
+    "autonomy": {
+        "road": 5000,
+        "off_road": 5000
+    },
+    "optics": "Very Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_hellstorm_bomb",
+            "count": 2,
+            "max_ammo": 4
+        }
+    ]
+}

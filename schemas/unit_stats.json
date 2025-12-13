@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Unit Stats Schema",
+  "type": "object",
+  "properties": {
+    "cost": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Resource cost to deploy the unit."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Path to the unit icon."
+    },
+    "health": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Model count for infantry, Integrity points for vehicles."
+    },
+    "speed": {
+      "type": "object",
+      "properties": {
+        "road": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "off_road": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "road",
+        "off_road"
+      ],
+      "description": "Maximum speed in km/h."
+    },
+    "armor": {
+      "type": "object",
+      "properties": {
+        "front": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "side": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rear": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "front",
+        "side",
+        "rear",
+        "top"
+      ],
+      "description": "Armor thickness in mm RHAe."
+    },
+    "fuel": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Fuel capacity in Liters. Optional for infantry."
+    },
+    "autonomy": {
+      "type": "object",
+      "properties": {
+        "road": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "off_road": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "Operational range in km based on fuel."
+    },
+    "optics": {
+      "type": "string",
+      "enum": [
+        "Poor",
+        "Normal",
+        "Good",
+        "Very Good",
+        "Exceptional"
+      ],
+      "description": "Spotting capability tier."
+    },
+    "stealth": {
+      "type": "string",
+      "enum": [
+        "None",
+        "Poor",
+        "Medium",
+        "Good",
+        "Exceptional"
+      ],
+      "description": "Visibility reduction tier."
+    },
+    "forward_deploy": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Max deployment distance outside zone in meters."
+    },
+    "weapons": {
+      "type": "array",
+      "description": "List of weapons equipped on the unit.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "weapon_id": {
+            "type": "string",
+            "description": "Unique identifier of the weapon."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Number of instances of this weapon."
+          },
+          "max_ammo": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum ammunition capacity for this weapon."
+          }
+        },
+        "required": [
+          "weapon_id",
+          "max_ammo"
+        ]
+      }
+    }
+  },
+  "required": [
+    "cost",
+    "health",
+    "speed",
+    "armor",
+    "optics",
+    "stealth"
+  ]
+}

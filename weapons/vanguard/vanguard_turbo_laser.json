@@ -1,0 +1,19 @@
+{
+    "name": "Turbo-laser Destructor",
+    "range": {
+        "ground": 2500,
+        "air": 2500
+    },
+    "penetration": 400,
+    "damage": "500 Thermal",
+    "suppression": 200,
+    "rate_of_fire": 4,
+    "accuracy": {
+        "static": 80,
+        "moving": 60
+    },
+    "aim_time": 2.0,
+    "reload_time": 8.0,
+    "salvo_length": 2,
+    "supply_cost": 100
+}

@@ -1,0 +1,19 @@
+{
+    "name": "Storm Kinetic Rifle (Pintle)",
+    "range": {
+        "ground": 600,
+        "air": 400
+    },
+    "penetration": 10,
+    "damage": "2 HE",
+    "suppression": 15,
+    "rate_of_fire": 120,
+    "accuracy": {
+        "static": 50,
+        "moving": 30
+    },
+    "aim_time": 0.5,
+    "reload_time": 2.0,
+    "salvo_length": 6,
+    "supply_cost": 4
+}

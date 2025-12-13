@@ -1,0 +1,19 @@
+{
+    "name": "Demolisher Cannon",
+    "range": {
+        "ground": 800,
+        "air": null
+    },
+    "penetration": 180,
+    "damage": "100 HE",
+    "suppression": 500,
+    "rate_of_fire": 2,
+    "accuracy": {
+        "static": 40,
+        "moving": 10
+    },
+    "aim_time": 3.0,
+    "reload_time": 10.0,
+    "salvo_length": 1,
+    "supply_cost": 50
+}

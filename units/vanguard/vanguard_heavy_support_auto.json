@@ -1,0 +1,29 @@
+{
+    "cost": 50,
+    "health": 10,
+    "speed": {
+        "road": 15,
+        "off_road": 12
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "optics": "Very Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_heavy_auto_cannon",
+            "count": 4,
+            "max_ammo": 800
+        },
+        {
+            "weapon_id": "vanguard_kinetic_rifle",
+            "count": 1,
+            "max_ammo": 100
+        }
+    ]
+}

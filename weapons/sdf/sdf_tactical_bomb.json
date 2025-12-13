@@ -1,0 +1,19 @@
+{
+    "name": "Tactical Bomb",
+    "range": {
+        "ground": 500,
+        "air": null
+    },
+    "penetration": 80,
+    "damage": "100 HE",
+    "suppression": 200,
+    "rate_of_fire": 0,
+    "accuracy": {
+        "static": 40,
+        "moving": 40
+    },
+    "aim_time": 0.5,
+    "reload_time": 15.0,
+    "salvo_length": 1,
+    "supply_cost": 30
+}

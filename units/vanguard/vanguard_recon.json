@@ -1,0 +1,24 @@
+{
+    "cost": 30,
+    "health": 5,
+    "speed": {
+        "road": 18,
+        "off_road": 15
+    },
+    "armor": {
+        "front": 10,
+        "side": 10,
+        "rear": 10,
+        "top": 10
+    },
+    "optics": "Very Good",
+    "stealth": "Good",
+    "forward_deploy": 500,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_kinetic_carbine",
+            "count": 5,
+            "max_ammo": 200
+        }
+    ]
+}

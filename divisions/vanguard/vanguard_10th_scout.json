@@ -1,0 +1,99 @@
+{
+    "id": "vanguard_10th_scout",
+    "name": "10th Scout Company (Infiltration)",
+    "faction_id": "vanguard",
+    "description": "Stealth, Snipers, Light Infantry. Map control, ambushes, and precision strikes.",
+    "playstyle": "Weak in a straight-up fight.",
+    "slot_costs": {
+        "logistics": [
+            1,
+            2,
+            3
+        ],
+        "infantry": [
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            3
+        ],
+        "tanks": [
+            2,
+            3,
+            4
+        ],
+        "recon": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2
+        ],
+        "anti_air": [
+            1,
+            2,
+            3
+        ],
+        "artillery": [
+            1,
+            2,
+            3
+        ],
+        "air": [
+            1,
+            2,
+            3
+        ],
+        "vtol": [
+            1,
+            2,
+            3
+        ]
+    },
+    "roster": [
+        {
+            "unit_id": "vanguard_recon",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "vanguard_recon_sniper",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "vanguard_infantry",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "vanguard_swift_skimmer_auto",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "vanguard_swift_skimmer_missile",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "vanguard_outrider",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "vanguard_recon_bike",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "vanguard_talon_interceptor",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "vanguard_talon_strike",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "vanguard_hunter_tank",
+            "max_cards": 2
+        }
+    ]
+}

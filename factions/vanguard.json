@@ -1,0 +1,30 @@
+{
+    "id": "vanguard",
+    "name": "Iron Vanguard",
+    "short_name": "IVG",
+    "description": "Elite, low model count, shock assault. Theme: Vanguard Troopers / Astartes.",
+    "mechanics": [
+        {
+            "name": "Autonomous Elite",
+            "effect": "No Command Delay. Units are highly disciplined and autonomous."
+        },
+        {
+            "name": "Brotherhood",
+            "effect": "Units gain passive buffs when fighting near other squad types."
+        },
+        {
+            "name": "And They Shall Know No Fear",
+            "effect": "Immune to suppression shocks that would break lesser units."
+        }
+    ],
+    "divisions": [
+        "vanguard_2nd_battle",
+        "vanguard_1st_veteran",
+        "vanguard_10th_scout",
+        "vanguard_8th_assault"
+    ],
+    "assets": {
+        "flag_icon": "assets/icons/factions/vanguard_flag.png",
+        "anthem_audio": "assets/audio/factions/vanguard_anthem.wav"
+    }
+}

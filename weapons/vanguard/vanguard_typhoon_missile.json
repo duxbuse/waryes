@@ -1,0 +1,19 @@
+{
+    "name": "Typhoon Missile Launcher",
+    "range": {
+        "ground": 1800,
+        "air": 1000
+    },
+    "penetration": 120,
+    "damage": "70 HE",
+    "suppression": 60,
+    "rate_of_fire": 4,
+    "accuracy": {
+        "static": 60,
+        "moving": 40
+    },
+    "aim_time": 1.2,
+    "reload_time": 5.0,
+    "salvo_length": 2,
+    "supply_cost": 12
+}

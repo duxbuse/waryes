@@ -3,7 +3,7 @@
 ## 1. Overview
 **Stellar Siege** is a Real-Time Strategy (RTS) game that blends the tactical depth and deck-building mechanics of *WARNO* with the grim, gothic sci-fi aesthetic and melee intensity of *Warhammer 40k*.
 
-The game focuses on asymmetric planetary warfare. Matches typically revolve around a **Siege Scenario**: one player (or team) acts as the **Defender** (protecting a Hive City or strategic planet), while the other acts as the **Attacker** (an invading alien force).
+The game focuses on asymmetric planetary warfare. Matches typically revolve around a **Siege Scenario**: one player (or team) acts as the **Defender** (protecting a Hive City or strategic planet), while the other acts as the **Attacker** (an invading force).
 
 ### Visual Theme & Atmosphere
 *   **Aesthetic:** Grim dark, brooding, and industrial. The world is war-torn, polluted, and hostile.
@@ -13,58 +13,34 @@ The game focuses on asymmetric planetary warfare. Matches typically revolve arou
     *   **Match Duration:** Typical matches last **30-60 minutes** (fast games ~15 mins).
     *   **Impact:** Purely visual. Lighting conditions change to enhance atmosphere but do **not** affect unit stats or vision ranges.
 
-## 2. Factions & Unique Mechanics
-The game features highly asymmetrical factions, each with unique command and economy mechanics.
+## 2. Factions
+The game features highly asymmetrical factions, each with unique command available in their respective faction documentss.
 
-### Defenders (Humanity)
-**Theme:** Industrial, militaristic, disciplined.
+*   **[Sector Defense Force](./factions/sector_defense_force.md):** Industrial, militaristic, disciplined. The Hammer of the Emperor.
+*   **[Iron Vanguard](./factions/iron_vanguard.md):** Elite, low model count, shock assault. The Angels of Death.
 
-#### 1. The Planetary Defense Force (Imperial Guard Inspired)
-*   **Playstyle:** Massive numbers, artillery, defensive lines.
-*   **Unique Mechanic: Chain of Command.**
-    *   Players primarily issue orders to **Officer Units** (Commissars, Lieutenants).
-    *   Officers relay orders to units within their **Command Radius**.
-    *   Units outside of command radius suffer from "Command Delay" or revert to basic tactical AI (e.g., Hold Ground, Return Fire, Retreat if suppressed).
-    *   *Strategic Goal:* Protect your officers to maintain cohesion.
+For full faction details, mechanics, and division breakdowns, please refer to the specific faction documents.
 
-#### 2. The Vanguard Legions (Space Marine Inspired)
-*   **Playstyle:** Elite, low model count, shock assault.
-*   **Unique Mechanic: Autonomous Elite.**
-    *   Standard RTS control (direct control of every unit).
-    *   **Brotherhood:** Units gain buffs when fighting in close proximity to other squad types (e.g., Tactical squads buff Devastators).
-    *   Immune to suppression/morale shocks that would break lesser units.
 
-### Attackers (Xenos)
-**Theme:** Biological, horde-based, aggressive.
-
-#### 3. The Marauder Hordes (Ork Inspired)
-*   **Playstyle:** Chaotic, ramshackle vehicles, overwhelming melee.
-*   **Unique Mechanic: The Cacophony (Fog of War).**
-    *   Fog of War is dense and restrictive for Marauders.
-    *   **Noise Mechanic:** Combat, explosions, and engine noise generate "Hype".
-    *   High Hype levels attract uncontrollable **Freebooter Reinforcements** from map edges and allow the player to rally retreating units instantly.
-    *   *Strategic Goal:* Keep the battle loud and chaotic to snowball your force.
-
-#### 4. The Xeno Swarm (Tyranid Inspired)
-*   **Playstyle:** Biological horrors, subterranean movement, attrition.
-*   **Unique Mechanic: Biomass Economy.**
-    *   Instead of traditional supply points, Swarms use **Biomass**.
-    *   Biomass is harvested from the map but also gained by **Consuming** enemy units and even friendly casualties.
-    *   **Digestion Pools:** Special structures or units that convert corpses into resources to spawn new units directly on the front line.
 
 ## 3. Deck Building & Divisions
 Before a match, players build a **Battlegroup** (Deck) from their chosen faction and division.
 
 ### The Deck System
-Deck building involves three steps:
-1.  **Faction & Subfaction:** Choose a primary faction (e.g., Defenders) and a specific Division (e.g., Armored Division).
-2.  **Category Allocation:** Each Division has distinct slot allocations. For example, an Armored Division might have 8 Tank slots but only 2 Air slots.
-3.  **Card Selection:** Players fill slots with Unit Cards.
-    *   **Economy Cost:** Each unit has a **Deploy Cost** (e.g., Heavy Tank = 500 Credits).
-    *   **Card Availability:** The number of cards you can take for a specific unit type depends on your Division (e.g., Tank Division = 4 cards of Heavy Tanks; Infantry Division = 1 card).
-    *   **Finite Unit Pool:** Each card provides a specific **Quantity** of units (e.g., a "Veteran Tank" card might provide 3 tanks).
-    *   **Veterancy Trade-off:** Increasing a unit's experience level boosts combat performance but reduces the total quantity available per card.
-    *   **Attrition:** Once these units are exhausted/destroyed in a match, they cannot be replaced. Managing your limited pool of assets is a key skill.
+Deck building revolves around a **Deck Point System**.
+1.  **Deck Capacity:** Each deck has a maximum of **50 Activation Points**.
+2.  **Slot Activation:** Adding unit cards to your deck consumes Activation Points.
+3.  **Progressive Cost:** The cost to unlock slots within a specific category increases as you unlock more slots.
+    *   *Example:* An Infantry Division might have cheap Infantry slots (1, 1, 1, 1, 1, 2, 2, 2, 3, 3) but expensive Tank slots (2, 3, 4).
+    *   *Impact:* This forces specialization. You can take a few off-meta units cheaply, but heavily investing in a category outside your division's focus becomes prohibitively expensive.
+
+### Deck Building Process
+1.  **Choose Faction:** Select Sector Defense Force or Iron Vanguard.
+2.  **Choose Division:** Select a specific specialized division (e.g., Armored, Infantry).
+3.  **Fill Slots:** Select unit cards to fill your available slots, managing your **50 Point** budget.
+    *   **Unit Cost:** In-game deployment cost (Credits).
+    *   **Card Availability:** Number of units per card.
+    *   **Veterancy:** Higher veterancy reduces unit count per card.
 
 ### The Division System
 Divisions represent specialized corps with distinct strengths and weaknesses, designed to encourage **5-player Team Coordination**.
@@ -101,7 +77,7 @@ The deck is composed of unit cards divided into the following categories.
     *   **Infantry Commanders:** Command squads that inspire nearby troops.
     *   **Squad Mechanics:** Each infantry unit card represents a full squad of **4 to 20 troops**.
         *   *Small Squads (4-6):* Elite commandos, heavy weapon teams.
-        *   *Large Squads (10-20):* Conscript waves, Ork mobs, Tyranid gaunt swarms.
+        *   *Large Squads (10-20):* Militia waves.
     *   *Line Infantry:* Standard riflemen.
     *   *Shock Troops:* Close-quarters specialists.
     *   *Heavy Weapons:* Anti-tank or heavy bolter teams.
@@ -128,8 +104,8 @@ The deck is composed of unit cards divided into the following categories.
     *   **Altitude Mechanics:**
         *   *Dive Bombers:* Travel at **Soar**, dive to **Hover/Fly** for attack.
         *   *High Altitude Bombers:* Stay at **Soar**. Safe from short-range AA.
-6.  **Anti-Air:** Flak tanks, SAM sites, bio-plasma artillery.
-7.  **Artillery:** Long-range indirect fire units (Basilisks, Biovores). Critical for breaking static defenses and punishing clustered enemies.
+6.  **Anti-Air:** Flak tanks, SAM sites.
+7.  **Artillery:** Long-range indirect fire units (Basilisks). Critical for breaking static defenses and punishing clustered enemies.
 
 ## 4. Combat Mechanics
 
@@ -359,22 +335,17 @@ Traits that apply passively to specific units across all factions:
     *   *Warp Storm:* Area denial that slows and damages units.
     *   *Precognition:* Briefly reveals a sector of the map.
 *   **Deep Strike / Subterranean Assault:**
-    *   Elite units (Terminators, Lictors) can deploy mid-match deep behind enemy lines via drop pods or tunneling, bypassing the standard reinforcement lanes.
-*   **Synapse Control (Swarm):** Large creatures can force smaller creatures to ignore suppression.
+    *   Elite units (Exo-Armors) can deploy mid-match deep behind enemy lines via drop pods, bypassing the standard reinforcement lanes.
+
 
 ## 6. Economy & Logistics
 
 ### Resource Generation
-*   **Standard Economy (Defenders/Orks):**
+*   **Standard Economy (Defenders):**
     *   **Starting Budget:** Players begin the match with **1500 Credits** to spend on initial deployment.
     *   **Income:** Players receive a steady passive stream of Credits per tick (Tick Rate).
     *   **Usage:** Credits are used to call in reinforcements from your Deck. Once your credit bank is empty, you must wait for the next tick.
-*   **Biomass Economy (Tyranids):**
-    *   Receive a smaller passive trickle of resources.
-    *   **Consumption:** Must actively consume corpses (friend or foe) and wreckage to generate **Biomass**.
-    *   **Mid-Battle Spawning:** Unlike other factions that rely on supply lines, Tyranids can spawn reinforcements directly from "Digestion Pools" or "Tervigons" on the front line using banked Biomass.
-    *   > [!NOTE]
-    *   > **Design Risk:** This economy model risks "Snowballing" (winning makes you win harder) or "Starving" (losing makes recovery impossible). *To be revisited during balance testing.*
+
 
 ### Resupply & Logistics
 *   **Universal Resupply:** Supply units (trucks, helicopters) can service **all** unit types:
@@ -443,6 +414,7 @@ All units possess a Veterancy Level that significantly impacts performance.
     *   Players choose the base veterancy of cards in their deck.
     *   **Higher Veterancy = Lower Availability.** (e.g., You might get 8 Rookies per card, but only 4 Veterans).
     *   **Unit Restrictions:** Not all units have access to all ranks.
-        *   *Reservists/Conscripts:* Locked to lower ranks (e.g., Green/Rookie only).
+        *   *Reservists/Militias:* Locked to lower ranks (e.g., Green/Rookie only).
         *   *Standard Troops:* Access to mid-range ranks (e.g., 1-3).
         *   *Special Forces:* Locked to high ranks (e.g., Elite only).
+

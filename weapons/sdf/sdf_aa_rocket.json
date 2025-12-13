@@ -1,0 +1,19 @@
+{
+    "name": "AA Rocket Pod",
+    "range": {
+        "ground": null,
+        "air": 1500
+    },
+    "penetration": 30,
+    "damage": "25 HE",
+    "suppression": 40,
+    "rate_of_fire": 0,
+    "accuracy": {
+        "static": 45,
+        "moving": 45
+    },
+    "aim_time": 0.5,
+    "reload_time": 6.0,
+    "salvo_length": 2,
+    "supply_cost": 10
+}

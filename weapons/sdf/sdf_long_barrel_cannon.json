@@ -1,0 +1,19 @@
+{
+    "name": "Vanquisher Cannon",
+    "range": {
+        "ground": 2500,
+        "air": null
+    },
+    "penetration": 220,
+    "damage": "45 Kinetic",
+    "suppression": 200,
+    "rate_of_fire": 6,
+    "accuracy": {
+        "static": 60,
+        "moving": 30
+    },
+    "aim_time": 2.5,
+    "reload_time": 7.0,
+    "salvo_length": 1,
+    "supply_cost": 25
+}

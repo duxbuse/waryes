@@ -1,0 +1,34 @@
+{
+    "cost": 110,
+    "health": 60,
+    "speed": {
+        "road": 30,
+        "off_road": 25
+    },
+    "armor": {
+        "front": 100,
+        "side": 80,
+        "rear": 60,
+        "top": 40
+    },
+    "fuel": 300,
+    "autonomy": {
+        "road": 150,
+        "off_road": 100
+    },
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_heavy_fusion_cannon",
+            "count": 1,
+            "max_ammo": 30
+        },
+        {
+            "weapon_id": "vanguard_walker_fist",
+            "count": 1,
+            "max_ammo": 0
+        }
+    ]
+}

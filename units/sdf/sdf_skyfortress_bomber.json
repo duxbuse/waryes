@@ -1,0 +1,39 @@
+{
+    "cost": 250,
+    "health": 150,
+    "speed": {
+        "road": 500,
+        "off_road": 500
+    },
+    "armor": {
+        "front": 40,
+        "side": 40,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 5000,
+    "autonomy": {
+        "road": 4000,
+        "off_road": 4000
+    },
+    "optics": "Normal",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "pdf_heavy_bomb_payload",
+            "count": 1,
+            "max_ammo": 4
+        },
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 1,
+            "max_ammo": 400
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 2,
+            "max_ammo": 800
+        }
+    ]
+}

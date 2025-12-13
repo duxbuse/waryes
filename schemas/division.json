@@ -1,0 +1,132 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Division Schema",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Unique identifier for the division."
+        },
+        "name": {
+            "type": "string",
+            "description": "Display name of the division."
+        },
+        "faction_id": {
+            "type": "string",
+            "description": "ID of the parent faction."
+        },
+        "description": {
+            "type": "string",
+            "description": "Flavor text describing the division."
+        },
+        "icon": {
+            "type": "string",
+            "description": "Path to the division insignia icon."
+        },
+        "playstyle": {
+            "type": "string",
+            "description": "Description of the recommended playstyle."
+        },
+        "slot_costs": {
+            "type": "object",
+            "description": "Deck point costs for each slot in a category.",
+            "properties": {
+                "logistics": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "infantry": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "tanks": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "recon": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "anti_air": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "artillery": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "air": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "description": "High speed fixed-wing assets (Interceptors, Bombers)."
+                },
+                "vtol": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "description": "Assets that can land (Helicopters, Dropships, VTOLs)."
+                }
+            },
+            "additionalProperties": false
+        },
+        "roster": {
+            "type": "array",
+            "description": "List of units available in this division.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "unit_id": {
+                        "type": "string",
+                        "description": "Reference to a unit JSON file ID."
+                    },
+                    "max_cards": {
+                        "type": "integer",
+                        "description": "Maximum number of cards of this unit allowed in the deck."
+                    },
+                    "transport_options": {
+                        "type": "array",
+                        "description": "List of allowed transport unit IDs for this unit.",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "veterancy_bonuses": {
+                        "type": "object",
+                        "description": "Optional veterancy rules.",
+                        "additionalProperties": true
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Internal notes or display notes."
+                    }
+                },
+                "required": [
+                    "unit_id",
+                    "max_cards"
+                ]
+            }
+        }
+    },
+    "required": [
+        "id",
+        "name",
+        "faction_id",
+        "slot_costs",
+        "roster"
+    ]
+}

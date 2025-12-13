@@ -1,0 +1,34 @@
+{
+    "cost": 160,
+    "health": 60,
+    "speed": {
+        "road": 700,
+        "off_road": 700
+    },
+    "armor": {
+        "front": 30,
+        "side": 30,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 1500,
+    "autonomy": {
+        "road": 1500,
+        "off_road": 1500
+    },
+    "optics": "Very Good",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_rotary_assault_cannon",
+            "count": 1,
+            "max_ammo": 1200
+        },
+        {
+            "weapon_id": "vanguard_skyhammer_missile",
+            "count": 1,
+            "max_ammo": 12
+        }
+    ]
+}

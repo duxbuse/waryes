@@ -1,0 +1,19 @@
+{
+    "name": "Boltgun (Scout)",
+    "range": {
+        "ground": 600,
+        "air": null
+    },
+    "penetration": 10,
+    "damage": "2 HE",
+    "suppression": 10,
+    "rate_of_fire": 60,
+    "accuracy": {
+        "static": 50,
+        "moving": 30
+    },
+    "aim_time": 0.8,
+    "reload_time": 2.0,
+    "salvo_length": 3,
+    "supply_cost": 3
+}

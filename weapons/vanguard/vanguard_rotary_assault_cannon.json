@@ -1,0 +1,19 @@
+{
+    "name": "Twin Assault Cannon",
+    "range": {
+        "ground": 600,
+        "air": 800
+    },
+    "penetration": 30,
+    "damage": "10 Kinetic",
+    "suppression": 30,
+    "rate_of_fire": 600,
+    "accuracy": {
+        "static": 60,
+        "moving": 40
+    },
+    "aim_time": 0.5,
+    "reload_time": 3.0,
+    "salvo_length": 15,
+    "supply_cost": 8
+}

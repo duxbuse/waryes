@@ -1,0 +1,24 @@
+{
+    "cost": 15,
+    "health": 20,
+    "speed": {
+        "road": 12,
+        "off_road": 10
+    },
+    "armor": {
+        "front": 0,
+        "side": 0,
+        "rear": 0,
+        "top": 0
+    },
+    "optics": "Poor",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_laser_rifle_militia",
+            "count": 20,
+            "max_ammo": 100
+        }
+    ]
+}

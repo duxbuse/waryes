@@ -1,0 +1,19 @@
+{
+    "name": "Twin 30mm Auto-Cannon (Air)",
+    "range": {
+        "ground": 1500,
+        "air": 1500
+    },
+    "penetration": 40,
+    "damage": "20 Kinetic",
+    "suppression": 25,
+    "rate_of_fire": 240,
+    "accuracy": {
+        "static": 50,
+        "moving": 40
+    },
+    "aim_time": 0.5,
+    "reload_time": 4.0,
+    "salvo_length": 6,
+    "supply_cost": 5
+}

@@ -1,0 +1,19 @@
+{
+    "name": "Heavy Laser Cannon (Ground)",
+    "range": {
+        "ground": 2000,
+        "air": null
+    },
+    "penetration": 220,
+    "damage": "60 HE",
+    "suppression": 30,
+    "rate_of_fire": 6,
+    "accuracy": {
+        "static": 65,
+        "moving": 10
+    },
+    "aim_time": 2.0,
+    "reload_time": 5.0,
+    "salvo_length": 1,
+    "supply_cost": 12
+}

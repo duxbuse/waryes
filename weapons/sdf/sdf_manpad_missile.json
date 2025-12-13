@@ -1,0 +1,19 @@
+{
+    "name": "Man-Portable AA Missile",
+    "range": {
+        "ground": null,
+        "air": 1800
+    },
+    "penetration": 30,
+    "damage": "25 HE",
+    "suppression": 30,
+    "rate_of_fire": 4,
+    "accuracy": {
+        "static": 50,
+        "moving": 25
+    },
+    "aim_time": 2.0,
+    "reload_time": 6.0,
+    "salvo_length": 1,
+    "supply_cost": 10
+}

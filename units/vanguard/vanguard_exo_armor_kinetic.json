@@ -1,0 +1,24 @@
+{
+    "cost": 80,
+    "health": 10,
+    "speed": {
+        "road": 12,
+        "off_road": 12
+    },
+    "armor": {
+        "front": 40,
+        "side": 40,
+        "rear": 40,
+        "top": 40
+    },
+    "optics": "Very Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_twin_kinetic_rifle",
+            "count": 5,
+            "max_ammo": 500
+        }
+    ]
+}

@@ -1,0 +1,34 @@
+{
+    "cost": 145,
+    "health": 150,
+    "speed": {
+        "road": 35,
+        "off_road": 25
+    },
+    "armor": {
+        "front": 180,
+        "side": 150,
+        "rear": 100,
+        "top": 30
+    },
+    "fuel": 600,
+    "autonomy": {
+        "road": 300,
+        "off_road": 180
+    },
+    "optics": "Very Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_long_barrel_cannon",
+            "count": 1,
+            "max_ammo": 30
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 600
+        }
+    ]
+}

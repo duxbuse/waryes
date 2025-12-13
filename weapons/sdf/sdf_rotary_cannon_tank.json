@@ -1,0 +1,19 @@
+{
+    "name": "Punisher Gatling Cannon",
+    "range": {
+        "ground": 600,
+        "air": 300
+    },
+    "penetration": 15,
+    "damage": "5 Kinetic",
+    "suppression": 80,
+    "rate_of_fire": 1200,
+    "accuracy": {
+        "static": 45,
+        "moving": 30
+    },
+    "aim_time": 0.5,
+    "reload_time": 4.0,
+    "salvo_length": 40,
+    "supply_cost": 15
+}

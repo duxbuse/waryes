@@ -1,0 +1,19 @@
+{
+    "name": "Earthshaker Cannon",
+    "range": {
+        "ground": 12000,
+        "air": null
+    },
+    "penetration": 100,
+    "damage": "80 HE",
+    "suppression": 400,
+    "rate_of_fire": 3,
+    "accuracy": {
+        "static": 30,
+        "moving": 0
+    },
+    "aim_time": 8.0,
+    "reload_time": 12.0,
+    "salvo_length": 1,
+    "supply_cost": 40
+}

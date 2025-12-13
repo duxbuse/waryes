@@ -1,0 +1,113 @@
+{
+    "id": "sdf_212th_heavy_armor",
+    "name": "212th Heavy Armored Regiment",
+    "faction_id": "sdf",
+    "description": "The Steamroller. Slow, methodical, and incredibly durable. Lacks subtlety.",
+    "playstyle": "Focus on Main Battle Tanks and Heavy Armor.",
+    "slot_costs": {
+        "logistics": [
+            1,
+            1,
+            2,
+            2
+        ],
+        "infantry": [
+            1,
+            2,
+            2,
+            3,
+            3
+        ],
+        "tanks": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+        ],
+        "recon": [
+            1,
+            2,
+            3
+        ],
+        "anti_air": [
+            1,
+            2,
+            2,
+            3
+        ],
+        "artillery": [
+            1,
+            2,
+            3
+        ],
+        "air": [
+            2,
+            3,
+            4
+        ],
+        "vtol": [
+            2,
+            3,
+            4
+        ]
+    },
+    "roster": [
+        {
+            "unit_id": "sdf_bastion_mbt",
+            "max_cards": 5
+        },
+        {
+            "unit_id": "sdf_bastion_mbt_hunter",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_bastion_mbt_siege",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_behemoth",
+            "max_cards": 1
+        },
+        {
+            "unit_id": "sdf_trooper",
+            "max_cards": 4
+        },
+        {
+            "unit_id": "sdf_engineer",
+            "max_cards": 2,
+            "notes": "Repair crew"
+        },
+        {
+            "unit_id": "sdf_skysweeper",
+            "max_cards": 3
+        },
+        {
+            "unit_id": "sdf_tremor_cannon",
+            "max_cards": 1
+        },
+        {
+            "unit_id": "sdf_scout_walker",
+            "max_cards": 3,
+            "notes": "Ion variant"
+        },
+        {
+            "unit_id": "sdf_scout_walker",
+            "max_cards": 2,
+            "notes": "Multilaser variant"
+        },
+        {
+            "unit_id": "sdf_nova_fighter_strike",
+            "max_cards": 2
+        },
+        {
+            "unit_id": "sdf_nova_fighter_asf",
+            "max_cards": 2
+        }
+    ]
+}
