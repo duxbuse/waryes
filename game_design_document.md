@@ -16,8 +16,8 @@ The game focuses on asymmetric planetary warfare. Matches typically revolve arou
 ## 2. Factions
 The game features highly asymmetrical factions, each with unique command available in their respective faction documentss.
 
-*   **[Sector Defense Force](./factions/sector_defense_force.md):** Industrial, militaristic, disciplined. The Hammer of the Emperor.
-*   **[Iron Vanguard](./factions/iron_vanguard.md):** Elite, low model count, shock assault. The Angels of Death.
+*   **[Planetary Defense Force](./factions/planetary_defense_force.md):** Industrial, militaristic, disciplined. The Hammer of the Emperor.
+*   **[Vanguard Legions](./factions/vanguard_legions.md):** Elite, low model count, shock assault. The Angels of Death.
 
 For full faction details, mechanics, and division breakdowns, please refer to the specific faction documents.
 
@@ -35,7 +35,7 @@ Deck building revolves around a **Deck Point System**.
     *   *Impact:* This forces specialization. You can take a few off-meta units cheaply, but heavily investing in a category outside your division's focus becomes prohibitively expensive.
 
 ### Deck Building Process
-1.  **Choose Faction:** Select Sector Defense Force or Iron Vanguard.
+1.  **Choose Faction:** Select Planetary Defense Force or Vanguard Legions.
 2.  **Choose Division:** Select a specific specialized division (e.g., Armored, Infantry).
 3.  **Fill Slots:** Select unit cards to fill your available slots, managing your **50 Point** budget.
     *   **Unit Cost:** In-game deployment cost (Credits).
@@ -77,7 +77,7 @@ The deck is composed of unit cards divided into the following categories.
     *   **Infantry Commanders:** Command squads that inspire nearby troops.
     *   **Squad Mechanics:** Each infantry unit card represents a full squad of **4 to 20 troops**.
         *   *Small Squads (4-6):* Elite commandos, heavy weapon teams.
-        *   *Large Squads (10-20):* Militia waves.
+        *   *Large Squads (10-20):* Conscript waves.
     *   *Line Infantry:* Standard riflemen.
     *   *Shock Troops:* Close-quarters specialists.
     *   *Heavy Weapons:* Anti-tank or heavy bolter teams.
@@ -120,7 +120,7 @@ The deck is composed of unit cards divided into the following categories.
 ### Weapon Stats
 All weapons have multiple stat values:
 *   **Damage:** The raw damage dealt on a successful hit.
-*   **Armor Penetration (AP):** The ability to pierce armor. Must exceed the target's armor value to deal full damage.
+*   **Armor Penetration (AP):** The ability to pierce armor. Must exceed the target's armor value to deal any damage.
     *   **Kinetic Scaling:** Kinetic weapons gain penetration at close range. This is dramatic for main cannons (a flanking light tank can destroy a heavy tank in close quarters) but negligible for small arms due to their limited range.
 *   **Suppression:** The morale shock inflicted, **even on near-misses**. High suppression weapons (artillery, heavy machine guns) affect all units in the blast/impact area, degrading their combat effectiveness.
 
@@ -335,7 +335,7 @@ Traits that apply passively to specific units across all factions:
     *   *Warp Storm:* Area denial that slows and damages units.
     *   *Precognition:* Briefly reveals a sector of the map.
 *   **Deep Strike / Subterranean Assault:**
-    *   Elite units (Exo-Armors) can deploy mid-match deep behind enemy lines via drop pods, bypassing the standard reinforcement lanes.
+    *   Elite units (Terminators) can deploy mid-match deep behind enemy lines via drop pods, bypassing the standard reinforcement lanes.
 
 
 ## 6. Economy & Logistics
@@ -414,7 +414,6 @@ All units possess a Veterancy Level that significantly impacts performance.
     *   Players choose the base veterancy of cards in their deck.
     *   **Higher Veterancy = Lower Availability.** (e.g., You might get 8 Rookies per card, but only 4 Veterans).
     *   **Unit Restrictions:** Not all units have access to all ranks.
-        *   *Reservists/Militias:* Locked to lower ranks (e.g., Green/Rookie only).
+        *   *Reservists/Conscripts:* Locked to lower ranks (e.g., Green/Rookie only).
         *   *Standard Troops:* Access to mid-range ranks (e.g., 1-3).
         *   *Special Forces:* Locked to high ranks (e.g., Elite only).
-
