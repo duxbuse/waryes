@@ -34,7 +34,27 @@ public partial class RTSCamera : Camera3D
     public override void _Process(double delta)
     {
         ProcessMovement((float)delta);
-        ProcessZoom((float)delta);
+        
+        // Smoothly interpolate to target height
+        Vector3 pos = Position;
+        pos.Y = Mathf.Lerp(pos.Y, _targetHeight, 5.0f * (float)delta);
+        Position = pos;
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+         if (@event is InputEventMouseButton mb) 
+         {
+             if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed)
+             {
+                 _targetHeight -= ZoomSpeed;
+             }
+             else if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed)
+             {
+                 _targetHeight += ZoomSpeed;
+             }
+             _targetHeight = Mathf.Clamp(_targetHeight, MinHeight, MaxHeight);
+         }
     }
 
     private void ProcessMovement(float delta)
@@ -70,24 +90,5 @@ public partial class RTSCamera : Camera3D
 
             Position += globalMove * PanSpeed * delta;
         }
-    }
-
-    private void ProcessZoom(float delta)
-    {
-        // Simple height adjustment for zoom
-        if (Input.IsMouseButtonPressed(MouseButton.WheelUp))
-        {
-            _targetHeight -= ZoomSpeed;
-        }
-        if (Input.IsMouseButtonPressed(MouseButton.WheelDown))
-        {
-            _targetHeight += ZoomSpeed;
-        }
-
-        _targetHeight = Mathf.Clamp(_targetHeight, MinHeight, MaxHeight);
-        
-        Vector3 pos = Position;
-        pos.Y = Mathf.Lerp(pos.Y, _targetHeight, 5.0f * delta);
-        Position = pos;
     }
 }

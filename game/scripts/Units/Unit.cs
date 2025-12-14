@@ -9,6 +9,8 @@ public partial class Unit : CharacterBody3D
     private NavigationAgent3D _navAgent;
     private MeshInstance3D _visuals;
     private CollisionShape3D _collisionShape;
+    private MeshInstance3D _selectionData;
+    private Node3D _visualRoot; // Visual pivot for altitude
 
     public override void _Ready()
     {
@@ -28,7 +30,6 @@ public partial class Unit : CharacterBody3D
 
     public void Initialize(UnitData data)
     {
-        GD.Print($"Unit.Initialize called for {data.Id}");
         Data = data;
         Name = data.Id;
         
@@ -36,22 +37,65 @@ public partial class Unit : CharacterBody3D
         float speedMs = speedKmh / 3.6f;
         _navAgent.MaxSpeed = speedMs;
         
-        // Create Visuals - Moved here to force creation
-        if (GetNodeOrNull("Visuals") == null)
+        CreateVisuals();
+    }
+    
+    private void CreateVisuals()
+    {
+        // Create Visual Root (Visual Pivot)
+        if (GetNodeOrNull("VisualRoot") == null)
         {
-            _visuals = new MeshInstance3D();
-            _visuals.Name = "Visuals";
-            var mesh = new BoxMesh();
-            mesh.Size = new Vector3(2, 2, 2); // Make it BIG
-            var material = new StandardMaterial3D();
-            material.AlbedoColor = new Color(1, 0, 0); // Red
-            mesh.Material = material;
-            _visuals.Mesh = mesh;
-            AddChild(_visuals);
-            GD.Print($"Unit {_visuals.Name} visuals created explicitly in Initialize");
+            _visualRoot = new Node3D();
+            _visualRoot.Name = "VisualRoot";
+            AddChild(_visualRoot);
+        }
+        else
+        {
+            _visualRoot = GetNode<Node3D>("VisualRoot");
         }
         
-        // Physics Collision
+        // Create Mesh
+        if (_visualRoot.GetNodeOrNull("Mesh") == null)
+        {
+            _visuals = new MeshInstance3D();
+            _visuals.Name = "Mesh";
+            var mesh = new BoxMesh();
+            mesh.Size = new Vector3(2, 2, 2); 
+            _visuals.Mesh = mesh;
+            _visualRoot.AddChild(_visuals);
+        }
+        else
+        {
+             _visuals = _visualRoot.GetNode<MeshInstance3D>("Mesh");
+        }
+        
+        // Coloring Logic
+        var material = new StandardMaterial3D();
+        
+        bool isVehicle = Data.Fuel.HasValue;
+        bool isAir = speedMsFromKmh(Data.Speed.Road) > 300.0f / 3.6f; // Heuristic for air
+        
+        if (isAir)
+        {
+             // Orange for Air
+             material.AlbedoColor = new Color(1, 0.5f, 0); 
+             // Visual Offset for Altitude
+             _visualRoot.Position = new Vector3(0, 15, 0); 
+        }
+        else if (isVehicle)
+        {
+             // Green for Vehicles
+             material.AlbedoColor = new Color(0, 1, 0);
+        }
+        else
+        {
+             // Blue for Infantry
+             material.AlbedoColor = new Color(0, 0, 1);
+        }
+        
+        _visuals.MaterialOverride = material;
+
+        // Collision Logic
         if (GetNodeOrNull("CollisionShape3D") == null)
         {
             _collisionShape = new CollisionShape3D();
@@ -61,13 +105,52 @@ public partial class Unit : CharacterBody3D
             _collisionShape.Shape = shape;
             AddChild(_collisionShape);
         }
+        
+        // Selection Ring
+        CreateSelectionRing();
     }
+    
+    private void CreateSelectionRing()
+    {
+        if (_visualRoot.GetNodeOrNull("SelectionRing") != null)
+        {
+            _selectionData = _visualRoot.GetNode<MeshInstance3D>("SelectionRing");
+            _selectionData.Visible = false;
+            return;
+        }
+
+        _selectionData = new MeshInstance3D();
+        _selectionData.Name = "SelectionRing";
+        
+        // Torus mesh for ring
+        var torus = new TorusMesh();
+        torus.InnerRadius = 1.5f;
+        torus.OuterRadius = 1.7f;
+        _selectionData.Mesh = torus;
+        
+        var mat = new StandardMaterial3D();
+        mat.AlbedoColor = new Color(1, 1, 1); // White
+        mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
+        _selectionData.MaterialOverride = mat;
+        
+        _selectionData.Visible = false;
+        _visualRoot.AddChild(_selectionData);
+    }
+    
+    public void SetSelected(bool selected)
+    {
+        if (_selectionData != null)
+        {
+            _selectionData.Visible = selected;
+        }
+    }
+    
+    private float speedMsFromKmh(float kmh) => kmh / 3.6f;
 
     public void MoveTo(Vector3 position)
     {
         _navAgent.TargetPosition = position;
         IsMoving = true;
-        GD.Print($"Unit {Name} moving to {position}");
     }
 
     public override void _PhysicsProcess(double delta)
@@ -96,15 +179,11 @@ public partial class Unit : CharacterBody3D
     {
         // This is called by the NavigationAgent after calculating avoidance
         Velocity = safeVelocity;
-        
-        // Debug position occasionally
-        // GD.Print($"{Name} SafeVel: {safeVelocity} Pos: {GlobalPosition}");
 
         // Face direction of movement
         if (Velocity.LengthSquared() > 0.1f)
         {
-            // Smooth look at could go here, for now instantaneous
-            // Using a safe look-at to avoid errors when velocity is zero or up
+             // We rotate the BODY, so the visual root rotates with it
              Vector3 lookTarget = GlobalPosition + Velocity;
              if (GlobalPosition.DistanceSquaredTo(lookTarget) > 0.001f)
              {

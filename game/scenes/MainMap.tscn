@@ -1,7 +1,9 @@
-[gd_scene load_steps=6 format=3 uid="uid://b8j4k5l6m7n8o"]
+[gd_scene load_steps=8 format=3 uid="uid://b8j4k5l6m7n8o"]
 
 [ext_resource type="Script" path="res://scripts/Input/RTSCamera.cs" id="1_camera"]
 [ext_resource type="Script" path="res://scripts/Core/GameManager.cs" id="2_game_manager"]
+[ext_resource type="Script" path="res://scripts/Managers/SelectionManager.cs" id="3_selection_manager"]
+[ext_resource type="Script" path="res://scripts/World/MapBuilder.cs" id="4_map_builder"]
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_1"]
 vertices = PackedVector3Array(-50, 0.5, -50, -50, 0.5, 50, 50, 0.5, 50, 50, 0.5, -50)
@@ -42,3 +44,9 @@ script = ExtResource("1_camera")
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("2_game_manager")
+
+[node name="SelectionManager" type="Node2D" parent="."]
+script = ExtResource("3_selection_manager")
+
+[node name="MapBuilder" type="Node3D" parent="."]
+script = ExtResource("4_map_builder")

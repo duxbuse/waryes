@@ -51,7 +51,11 @@ public partial class GameManager : Node
             if (intersection.HasValue)
             {
                 GD.Print($"Commanding move to: {intersection.Value}");
-                foreach (var unit in UnitManager.GetActiveUnits())
+                
+                var selectedUnits = SelectionManager.Instance.SelectedUnits;
+                if (selectedUnits.Count == 0) return;
+
+                foreach (var unit in selectedUnits)
                 {
                     // Adding small random offset so they don't stack perfectly
                     Vector3 offset = new Vector3(GD.Randf() * 2 - 1, 0, GD.Randf() * 2 - 1);
