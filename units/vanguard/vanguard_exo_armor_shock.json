@@ -1,24 +1,29 @@
 {
-    "cost": 90,
-    "health": 15,
-    "speed": {
-        "road": 12,
-        "off_road": 12
-    },
-    "armor": {
-        "front": 50,
-        "side": 50,
-        "rear": 50,
-        "top": 50
-    },
-    "optics": "Very Good",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "vanguard_shock_hammer",
-            "count": 5,
-            "max_ammo": 0
-        }
-    ]
+    "id":  "vanguard_exo_armor_shock",
+    "name":  "Exo Armor Shock",
+    "cost":  90,
+    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health":  15,
+    "speed":  {
+                  "road":  70,
+                  "off_road":  50
+              },
+    "armor":  {
+                  "front":  50,
+                  "side":  50,
+                  "rear":  50,
+                  "top":  50
+              },
+    "fuel":  null,
+    "autonomy":  null,
+    "optics":  "Very Good",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "vanguard_shock_hammer",
+                        "count":  5,
+                        "max_ammo":  0
+                    }
+                ]
 }

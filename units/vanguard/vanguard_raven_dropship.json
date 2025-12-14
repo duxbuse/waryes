@@ -1,39 +1,42 @@
 {
-    "cost": 220,
-    "health": 120,
-    "speed": {
-        "road": 400,
-        "off_road": 400
-    },
-    "armor": {
-        "front": 60,
-        "side": 60,
-        "rear": 50,
-        "top": 50
-    },
-    "fuel": 2000,
-    "autonomy": {
-        "road": 2000,
-        "off_road": 2000
-    },
-    "optics": "Good",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "vanguard_rotary_assault_cannon",
-            "count": 1,
-            "max_ammo": 1200
-        },
-        {
-            "weapon_id": "vanguard_hurricane_kinetic_array",
-            "count": 2,
-            "max_ammo": 2400
-        },
-        {
-            "weapon_id": "vanguard_heavy_fusion_cannon",
-            "count": 1,
-            "max_ammo": 40
-        }
-    ]
+    "id":  "vanguard_raven_dropship",
+    "name":  "Raven Dropship",
+    "cost":  220,
+    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health":  10,
+    "speed":  {
+                  "road":  400,
+                  "off_road":  400
+              },
+    "armor":  {
+                  "front":  60,
+                  "side":  60,
+                  "rear":  50,
+                  "top":  50
+              },
+    "fuel":  2000,
+    "autonomy":  {
+                     "road":  2000,
+                     "off_road":  2000
+                 },
+    "optics":  "Good",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "vanguard_rotary_assault_cannon",
+                        "count":  1,
+                        "max_ammo":  1200
+                    },
+                    {
+                        "weapon_id":  "vanguard_hurricane_kinetic_array",
+                        "count":  2,
+                        "max_ammo":  2400
+                    },
+                    {
+                        "weapon_id":  "vanguard_heavy_fusion_cannon",
+                        "count":  1,
+                        "max_ammo":  40
+                    }
+                ]
 }

@@ -1,29 +1,32 @@
 {
-    "cost": 30,
-    "health": 40,
-    "speed": {
-        "road": 65,
-        "off_road": 55
-    },
-    "armor": {
-        "front": 20,
-        "side": 10,
-        "rear": 10,
-        "top": 0
-    },
-    "fuel": 200,
-    "autonomy": {
-        "road": 300,
-        "off_road": 250
-    },
-    "optics": "Very Good",
-    "stealth": "Medium",
-    "forward_deploy": 500,
-    "weapons": [
-        {
-            "weapon_id": "sdf_rapid_laser_cannon",
-            "count": 1,
-            "max_ammo": 300
-        }
-    ]
+    "id":  "sdf_scout_walker",
+    "name":  "Scout Walker",
+    "cost":  30,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  5,
+    "speed":  {
+                  "road":  65,
+                  "off_road":  55
+              },
+    "armor":  {
+                  "front":  20,
+                  "side":  10,
+                  "rear":  10,
+                  "top":  0
+              },
+    "fuel":  200,
+    "autonomy":  {
+                     "road":  300,
+                     "off_road":  250
+                 },
+    "optics":  "Very Good",
+    "stealth":  "Medium",
+    "forward_deploy":  500,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_rapid_laser_cannon",
+                        "count":  1,
+                        "max_ammo":  300
+                    }
+                ]
 }

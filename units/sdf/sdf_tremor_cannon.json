@@ -1,34 +1,37 @@
 {
-    "cost": 100,
-    "health": 80,
-    "speed": {
-        "road": 45,
-        "off_road": 30
-    },
-    "armor": {
-        "front": 40,
-        "side": 30,
-        "rear": 15,
-        "top": 10
-    },
-    "fuel": 400,
-    "autonomy": {
-        "road": 400,
-        "off_road": 250
-    },
-    "optics": "Normal",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_howitzer_155mm",
-            "count": 1,
-            "max_ammo": 20
-        },
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_hull",
-            "count": 1,
-            "max_ammo": 300
-        }
-    ]
+    "id":  "sdf_tremor_cannon",
+    "name":  "Tremor Cannon",
+    "cost":  100,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  7,
+    "speed":  {
+                  "road":  70,
+                  "off_road":  50
+              },
+    "armor":  {
+                  "front":  40,
+                  "side":  30,
+                  "rear":  15,
+                  "top":  10
+              },
+    "fuel":  400,
+    "autonomy":  {
+                     "road":  400,
+                     "off_road":  250
+                 },
+    "optics":  "Normal",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_howitzer_155mm",
+                        "count":  1,
+                        "max_ammo":  20
+                    },
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
+                        "count":  1,
+                        "max_ammo":  300
+                    }
+                ]
 }

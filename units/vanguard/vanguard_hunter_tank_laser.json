@@ -1,29 +1,32 @@
 {
-    "cost": 140,
-    "health": 120,
-    "speed": {
-        "road": 45,
-        "off_road": 35
-    },
-    "armor": {
-        "front": 160,
-        "side": 120,
-        "rear": 80,
-        "top": 40
-    },
-    "fuel": 500,
-    "autonomy": {
-        "road": 400,
-        "off_road": 250
-    },
-    "optics": "Very Good",
-    "stealth": "None",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "vanguard_hunter_laser_cannon",
-            "count": 1,
-            "max_ammo": 40
-        }
-    ]
+    "id":  "vanguard_hunter_tank_laser",
+    "name":  "Hunter Tank Laser",
+    "cost":  140,
+    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health":  10,
+    "speed":  {
+                  "road":  70,
+                  "off_road":  50
+              },
+    "armor":  {
+                  "front":  160,
+                  "side":  120,
+                  "rear":  80,
+                  "top":  40
+              },
+    "fuel":  500,
+    "autonomy":  {
+                     "road":  400,
+                     "off_road":  250
+                 },
+    "optics":  "Very Good",
+    "stealth":  "None",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "vanguard_hunter_laser_cannon",
+                        "count":  1,
+                        "max_ammo":  40
+                    }
+                ]
 }

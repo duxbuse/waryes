@@ -1,34 +1,37 @@
 {
-    "cost": 70,
-    "health": 80,
-    "speed": {
-        "road": 55,
-        "off_road": 40
-    },
-    "armor": {
-        "front": 60,
-        "side": 40,
-        "rear": 20,
-        "top": 15
-    },
-    "fuel": 400,
-    "autonomy": {
-        "road": 500,
-        "off_road": 350
-    },
-    "optics": "Good",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_skysweeper_autocannon",
-            "count": 2,
-            "max_ammo": 800
-        },
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_hull",
-            "count": 1,
-            "max_ammo": 400
-        }
-    ]
+    "id":  "sdf_skysweeper",
+    "name":  "Skysweeper",
+    "cost":  70,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  7,
+    "speed":  {
+                  "road":  55,
+                  "off_road":  40
+              },
+    "armor":  {
+                  "front":  60,
+                  "side":  40,
+                  "rear":  20,
+                  "top":  15
+              },
+    "fuel":  400,
+    "autonomy":  {
+                     "road":  500,
+                     "off_road":  350
+                 },
+    "optics":  "Good",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_skysweeper_autocannon",
+                        "count":  2,
+                        "max_ammo":  800
+                    },
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
+                        "count":  1,
+                        "max_ammo":  400
+                    }
+                ]
 }

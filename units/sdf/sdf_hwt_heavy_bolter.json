@@ -1,24 +1,29 @@
 {
-    "cost": 25,
-    "health": 6,
-    "speed": {
-        "road": 8,
-        "off_road": 6
-    },
-    "armor": {
-        "front": 0,
-        "side": 0,
-        "rear": 0,
-        "top": 0
-    },
-    "optics": "Good",
-    "stealth": "Medium",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_tripod",
-            "count": 1,
-            "max_ammo": 1000
-        }
-    ]
+    "id":  "sdf_hwt_heavy_bolter",
+    "name":  "Hwt Heavy Bolter",
+    "cost":  25,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  6,
+    "speed":  {
+                  "road":  8,
+                  "off_road":  6
+              },
+    "armor":  {
+                  "front":  0,
+                  "side":  0,
+                  "rear":  0,
+                  "top":  0
+              },
+    "fuel":  null,
+    "autonomy":  null,
+    "optics":  "Good",
+    "stealth":  "Medium",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_tripod",
+                        "count":  1,
+                        "max_ammo":  1000
+                    }
+                ]
 }

@@ -1,24 +1,29 @@
 {
-    "cost": 20,
-    "health": 10,
-    "speed": {
-        "road": 15,
-        "off_road": 12
-    },
-    "armor": {
-        "front": 0,
-        "side": 0,
-        "rear": 0,
-        "top": 0
-    },
-    "optics": "Normal",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_laser_rifle",
-            "count": 9,
-            "max_ammo": 200
-        }
-    ]
+    "id":  "sdf_trooper",
+    "name":  "Trooper",
+    "cost":  20,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  10,
+    "speed":  {
+                  "road":  15,
+                  "off_road":  12
+              },
+    "armor":  {
+                  "front":  0,
+                  "side":  0,
+                  "rear":  0,
+                  "top":  0
+              },
+    "fuel":  null,
+    "autonomy":  null,
+    "optics":  "Normal",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_laser_rifle",
+                        "count":  9,
+                        "max_ammo":  200
+                    }
+                ]
 }

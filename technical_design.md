@@ -15,34 +15,29 @@ This document outlines the technical architecture for **Stellar Siege**, a sci-f
 ## 2. Technology Stack
 
 ### 2.1 Game Engine
-**Recommendation: Godot 4.x**
+**Recommendation: Godot 4.x (.NET Version)**
 
 **Rationale:**
-- **Free and Open Source:** No licensing costs or revenue sharing
-- **Native C# and GDScript Support:** Flexible scripting options
-- **Excellent 2D/3D Support:** Strong for RTS-style top-down cameras
-- **Built-in Networking:** Deterministic lockstep networking support for RTS
-- **Lightweight:** Fast iteration times, low overhead
-- **Strong RTS Community:** Projects like C&C Remastered mods, Spring Engine alternatives
-
-**Alternative:** Unity (if more familiar, but licensing concerns for solo indie)
+- **C# Performance:** Essential for the 1000+ unit simulation ticks.
+- **Lightweight:** Fast iteration compared to Unreal.
+- **Customizable:** Source access allows fixing engine-level determinism issues if they arise.
 
 ### 2.2 Programming Language
-**Primary: GDScript** (Godot's Python-like language)
-- Tightly integrated with engine
-- Fast iteration
-- Easy to learn
+**Primary: C# (.NET 6+)**
+- **Mandatory** for: Simulation, Pathfinding, Combat, Vision, Networking.
+- **Performance:** Orders of magnitude faster than GDScript for tight loops.
 
-**Secondary: C#** (for performance-critical systems if needed)
-- Pathfinding algorithms
-- Large-scale unit management
-- Combat simulation
-- AI decision-making
+**Secondary: GDScript**
+- **UI Logic:** HUD, Menus.
+- **High-level Glue:** Scene composition, signals.
 
 ### 2.3 Data Formats
-- **YAML/JSON:** Unit stats, faction data, deck definitions
-- **CSV:** Balance spreadsheets (easy to edit in Excel/Sheets)
-- **SQLite:** Player progression, deck storage, settings (if needed)
+- **JSON:** Strictly schema-validated (see `schemas/`).
+    - `units/*.json`
+    - `weapons/*.json`
+    - `factions/*.json`
+    - `divisions/*.json`
+- **CSV:** Strings/Localization.
 
 ### 2.4 Art Pipeline
 - **3D Modeling:** Blender (free, open-source)
@@ -90,25 +85,25 @@ GameManager (Singleton)
 ### 3.2 Core Systems
 
 #### 3.2.1 Unit Management System
-**Design:** Object pooling for performance
-- Preallocate unit instances at match start
-- Recycle destroyed units instead of destroying/creating
-- Maximum ~500 units per match (5v5 × 100 units max per player)
+**Design:** C# Server-based Architecture
+- **Performance:** GDScript is too slow for 1000+ units with complex logic. **All Core Systems (Movement, Combat, Vision) must be C#.**
+- **Rendering:** Use `MultiMeshInstance3D` for unit rendering (GPU Instancing) to handle 1000+ counts.
+- **Pooling:** Aggressive object pooling.
+- **Scale Target:** ~1000 units per match (5v5 × 100 units hard cap).
 
-**Unit Data Structure:**
-```gdscript
-class_name Unit extends Node3D
-var unit_id: int
-var faction: Faction
-var health: int
-var max_health: int
-var veterancy: int
-var weapons: Array[Weapon]
-var current_order: Order
-var suppression: float
-var morale: float
-var stealth_value: float
-var optics_range: float
+**Unit Data Structure (JSON):**
+Derived from `schemas/unit_stats.json`:
+```csharp
+public struct UnitData {
+    public string id;
+    public int health;
+    public float roadSpeed;
+    public float offRoadSpeed;
+    public ArmorData armor; // Front/Side/Rear/Top
+    public OpticsLevel optics;
+    public StealthLevel stealth;
+    public WeaponData[] weapons;
+}
 ```
 
 #### 3.2.2 Pathfinding System
@@ -345,11 +340,11 @@ movement:
 - Resolution: 2560×1440 @ 60+ FPS
 
 ### 6.2 Performance Budget
-- **Unit Count:** 500 active units
-- **Draw Calls:** <1000 (with batching/instancing)
-- **Physics Updates:** Only for projectiles (missiles, rockets)
-- **Tick Rate:** 10Hz simulation, 60Hz rendering
-- **AI Budget:** Max 10ms per frame for all AI players combined
+- **Unit Count:** 1000+ active units (Benchmark target)
+- **Draw Calls:** <1500 (Heavy use of GPU Instancing required)
+- **Physics:** Custom deterministic collision (Simulating 1000+ raycasts/frame). **Do not use Godot Physics for gameplay logic.**
+- **Tick Rate:** 10Hz-30Hz Simulation.
+- **AI Budget:** 5ms budget per frame (must be widely threaded).
 
 ---
 

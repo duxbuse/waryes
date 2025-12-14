@@ -1,39 +1,42 @@
 {
-    "cost": 240,
-    "health": 120,
-    "speed": {
-        "road": 400,
-        "off_road": 400
-    },
-    "armor": {
-        "front": 60,
-        "side": 60,
-        "rear": 50,
-        "top": 50
-    },
-    "fuel": 2000,
-    "autonomy": {
-        "road": 2000,
-        "off_road": 2000
-    },
-    "optics": "Very Good",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "vanguard_air_laser_cannon",
-            "count": 1,
-            "max_ammo": 80
-        },
-        {
-            "weapon_id": "vanguard_ion_cannon",
-            "count": 2,
-            "max_ammo": 120
-        },
-        {
-            "weapon_id": "vanguard_skystrike_missile",
-            "count": 4,
-            "max_ammo": 4
-        }
-    ]
+    "id":  "vanguard_raven_hunter",
+    "name":  "Raven Hunter",
+    "cost":  240,
+    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health":  10,
+    "speed":  {
+                  "road":  400,
+                  "off_road":  400
+              },
+    "armor":  {
+                  "front":  60,
+                  "side":  60,
+                  "rear":  50,
+                  "top":  50
+              },
+    "fuel":  2000,
+    "autonomy":  {
+                     "road":  2000,
+                     "off_road":  2000
+                 },
+    "optics":  "Very Good",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "vanguard_air_laser_cannon",
+                        "count":  1,
+                        "max_ammo":  80
+                    },
+                    {
+                        "weapon_id":  "vanguard_ion_cannon",
+                        "count":  2,
+                        "max_ammo":  120
+                    },
+                    {
+                        "weapon_id":  "vanguard_skystrike_missile",
+                        "count":  4,
+                        "max_ammo":  4
+                    }
+                ]
 }

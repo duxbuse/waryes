@@ -1,29 +1,34 @@
 {
-    "cost": 25,
-    "health": 6,
-    "speed": {
-        "road": 12,
-        "off_road": 10
-    },
-    "armor": {
-        "front": 0,
-        "side": 0,
-        "rear": 0,
-        "top": 0
-    },
-    "optics": "Good",
-    "stealth": "Good",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "pdf_manpad_missile",
-            "count": 3,
-            "max_ammo": 9
-        },
-        {
-            "weapon_id": "sdf_laser_rifle",
-            "count": 3,
-            "max_ammo": 100
-        }
-    ]
+    "id":  "sdf_rocket_team",
+    "name":  "Rocket Team",
+    "cost":  25,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  6,
+    "speed":  {
+                  "road":  12,
+                  "off_road":  10
+              },
+    "armor":  {
+                  "front":  0,
+                  "side":  0,
+                  "rear":  0,
+                  "top":  0
+              },
+    "fuel":  null,
+    "autonomy":  null,
+    "optics":  "Good",
+    "stealth":  "Good",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "pdf_manpad_missile",
+                        "count":  3,
+                        "max_ammo":  9
+                    },
+                    {
+                        "weapon_id":  "sdf_laser_rifle",
+                        "count":  3,
+                        "max_ammo":  100
+                    }
+                ]
 }

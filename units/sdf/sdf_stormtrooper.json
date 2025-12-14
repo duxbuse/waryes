@@ -1,24 +1,29 @@
 {
-    "cost": 35,
-    "health": 10,
-    "speed": {
-        "road": 15,
-        "off_road": 12
-    },
-    "armor": {
-        "front": 5,
-        "side": 5,
-        "rear": 5,
-        "top": 5
-    },
-    "optics": "Good",
-    "stealth": "Medium",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_heavy_laser_rifle",
-            "count": 10,
-            "max_ammo": 300
-        }
-    ]
+    "id":  "sdf_stormtrooper",
+    "name":  "Stormtrooper",
+    "cost":  35,
+    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "health":  10,
+    "speed":  {
+                  "road":  15,
+                  "off_road":  12
+              },
+    "armor":  {
+                  "front":  5,
+                  "side":  5,
+                  "rear":  5,
+                  "top":  5
+              },
+    "fuel":  null,
+    "autonomy":  null,
+    "optics":  "Good",
+    "stealth":  "Medium",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_heavy_laser_rifle",
+                        "count":  10,
+                        "max_ammo":  300
+                    }
+                ]
 }
