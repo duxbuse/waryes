@@ -60,54 +60,138 @@
     "roster": [
         {
             "unit_id": "sdf_bastion_mbt",
-            "max_cards": 5
+            "max_cards": 5,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
         },
         {
             "unit_id": "sdf_bastion_mbt_hunter",
-            "max_cards": 3
+            "max_cards": 3,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 0,
+                "elite": 1,
+                "veteran": 2
+            }
         },
         {
             "unit_id": "sdf_bastion_mbt_siege",
-            "max_cards": 3
+            "max_cards": 3,
+            "availability": {
+                "trained": 6,
+                "legend": 0,
+                "rookie": 8,
+                "elite": 3,
+                "veteran": 4
+            }
         },
         {
             "unit_id": "sdf_behemoth",
-            "max_cards": 1
+            "max_cards": 1,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 0,
+                "elite": 1,
+                "veteran": 2
+            }
         },
         {
             "unit_id": "sdf_trooper",
-            "max_cards": 4
+            "max_cards": 4,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
         },
         {
             "unit_id": "sdf_engineer",
             "max_cards": 2,
-            "notes": "Repair crew"
+            "notes": "Repair crew",
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
         },
         {
             "unit_id": "sdf_skysweeper",
-            "max_cards": 3
+            "max_cards": 3,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
         },
         {
             "unit_id": "sdf_tremor_cannon",
-            "max_cards": 1
+            "max_cards": 1,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
         },
         {
             "unit_id": "sdf_scout_walker",
             "max_cards": 3,
-            "notes": "Ion variant"
+            "notes": "Ion variant",
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 6,
+                "elite": 2,
+                "veteran": 3
+            }
         },
         {
             "unit_id": "sdf_scout_walker",
             "max_cards": 2,
-            "notes": "Multilaser variant"
+            "notes": "Multilaser variant",
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 6,
+                "elite": 2,
+                "veteran": 3
+            }
         },
         {
             "unit_id": "sdf_nova_fighter_strike",
-            "max_cards": 2
+            "max_cards": 2,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
         },
         {
             "unit_id": "sdf_nova_fighter_asf",
-            "max_cards": 2
+            "max_cards": 2,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
         }
     ]
 }

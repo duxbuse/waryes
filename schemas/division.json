@@ -98,6 +98,33 @@
                         "type": "integer",
                         "description": "Maximum number of cards of this unit allowed in the deck."
                     },
+                    "availability": {
+                        "type": "object",
+                        "description": "Units per card at each veterancy level. 0 or missing means unavailable.",
+                        "properties": {
+                            "rookie": {
+                                "type": "integer",
+                                "description": "Rank 0 (Green/Conscript)"
+                            },
+                            "trained": {
+                                "type": "integer",
+                                "description": "Rank 1 (Standard)"
+                            },
+                            "veteran": {
+                                "type": "integer",
+                                "description": "Rank 2 (Experienced)"
+                            },
+                            "elite": {
+                                "type": "integer",
+                                "description": "Rank 3 (Special Forces)"
+                            },
+                            "legend": {
+                                "type": "integer",
+                                "description": "Rank 4 (Hero)"
+                            }
+                        },
+                        "additionalProperties": false
+                    },
                     "transport_options": {
                         "type": "array",
                         "description": "List of allowed transport unit IDs for this unit.",

@@ -1,97 +1,174 @@
 {
-    "id": "vanguard_1st_veteran",
-    "name": "1st Veteran Company (Elite)",
-    "faction_id": "vanguard",
-    "description": "Exo-Armors, Veterans, Iron Walkers. Extremely low unit count.",
-    "playstyle": "High durability and firepower. Every loss is painful.",
-    "slot_costs": {
-        "logistics": [
-            1,
-            2,
-            3
-        ],
-        "infantry": [
-            1,
-            1,
-            1,
-            2,
-            2,
-            3,
-            3
-        ],
-        "tanks": [
-            1,
-            1,
-            2,
-            2,
-            3
-        ],
-        "recon": [
-            2,
-            3,
-            4
-        ],
-        "anti_air": [
-            2,
-            3
-        ],
-        "artillery": [
-            3,
-            4
-        ],
-        "air": [
-            2,
-            3
-        ],
-        "vtol": [
-            2,
-            3
-        ]
-    },
-    "roster": [
-        {
-            "unit_id": "vanguard_exo_armor_kinetic",
-            "max_cards": 2
-        },
-        {
-            "unit_id": "vanguard_exo_armor_shock",
-            "max_cards": 2
-        },
-        {
-            "unit_id": "vanguard_infantry",
-            "max_cards": 2
-        },
-        {
-            "unit_id": "vanguard_recon",
-            "max_cards": 1
-        },
-        {
-            "unit_id": "vanguard_fortress_tank",
-            "max_cards": 3
-        },
-        {
-            "unit_id": "vanguard_iron_walker_fusion",
-            "max_cards": 2
-        },
-        {
-            "unit_id": "vanguard_iron_walker_assault",
-            "max_cards": 1
-        },
-        {
-            "unit_id": "vanguard_hunter_tank",
-            "max_cards": 1
-        },
-        {
-            "unit_id": "vanguard_raven_hunter",
-            "max_cards": 2
-        },
-        {
-            "unit_id": "vanguard_titan_dropship",
-            "max_cards": 1
-        },
-        {
-            "unit_id": "vanguard_heavy_support_auto",
-            "max_cards": 1
-        }
-    ]
+    "id":  "vanguard_1st_veteran",
+    "name":  "1st Veteran Company (Elite)",
+    "faction_id":  "vanguard",
+    "description":  "Exo-Armors, Veterans, Iron Walkers. Extremely low unit count.",
+    "playstyle":  "High durability and firepower. Every loss is painful.",
+    "slot_costs":  {
+                       "logistics":  [
+                                         1,
+                                         2,
+                                         3
+                                     ],
+                       "infantry":  [
+                                        1,
+                                        1,
+                                        1,
+                                        2,
+                                        2,
+                                        3,
+                                        3
+                                    ],
+                       "tanks":  [
+                                     1,
+                                     1,
+                                     2,
+                                     2,
+                                     3
+                                 ],
+                       "recon":  [
+                                     2,
+                                     3,
+                                     4
+                                 ],
+                       "anti_air":  [
+                                        2,
+                                        3
+                                    ],
+                       "artillery":  [
+                                         3,
+                                         4
+                                     ],
+                       "air":  [
+                                   2,
+                                   3
+                               ],
+                       "vtol":  [
+                                    2,
+                                    3
+                                ]
+                   },
+    "roster":  [
+                   {
+                       "unit_id":  "vanguard_exo_armor_kinetic",
+                       "max_cards":  2,
+                       "availability":  {
+                                            "trained":  8,
+                                            "legend":  0,
+                                            "rookie":  0,
+                                            "elite":  4,
+                                            "veteran":  6
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_exo_armor_shock",
+                       "max_cards":  2,
+                       "availability":  {
+                                            "trained":  8,
+                                            "legend":  0,
+                                            "rookie":  0,
+                                            "elite":  4,
+                                            "veteran":  6
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_infantry",
+                       "max_cards":  2,
+                       "availability":  {
+                                            "trained":  12,
+                                            "legend":  0,
+                                            "rookie":  16,
+                                            "elite":  0,
+                                            "veteran":  8
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_recon",
+                       "max_cards":  1,
+                       "availability":  {
+                                            "trained":  4,
+                                            "legend":  0,
+                                            "rookie":  6,
+                                            "elite":  2,
+                                            "veteran":  3
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_fortress_tank",
+                       "max_cards":  3,
+                       "availability":  {
+                                            "trained":  3,
+                                            "legend":  0,
+                                            "rookie":  0,
+                                            "elite":  1,
+                                            "veteran":  2
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_iron_walker_fusion",
+                       "max_cards":  2,
+                       "availability":  {
+                                            "trained":  12,
+                                            "legend":  0,
+                                            "rookie":  16,
+                                            "elite":  0,
+                                            "veteran":  8
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_iron_walker_assault",
+                       "max_cards":  1,
+                       "availability":  {
+                                            "trained":  12,
+                                            "legend":  0,
+                                            "rookie":  16,
+                                            "elite":  0,
+                                            "veteran":  8
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_hunter_tank",
+                       "max_cards":  1,
+                       "availability":  {
+                                            "trained":  6,
+                                            "legend":  0,
+                                            "rookie":  8,
+                                            "elite":  3,
+                                            "veteran":  4
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_raven_hunter",
+                       "max_cards":  2,
+                       "availability":  {
+                                            "trained":  2,
+                                            "legend":  0,
+                                            "rookie":  3,
+                                            "elite":  0,
+                                            "veteran":  1
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_titan_dropship",
+                       "max_cards":  1,
+                       "availability":  {
+                                            "trained":  12,
+                                            "legend":  0,
+                                            "rookie":  16,
+                                            "elite":  0,
+                                            "veteran":  8
+                                        }
+                   },
+                   {
+                       "unit_id":  "vanguard_heavy_support_auto",
+                       "max_cards":  1,
+                       "availability":  {
+                                            "trained":  12,
+                                            "legend":  0,
+                                            "rookie":  16,
+                                            "elite":  0,
+                                            "veteran":  8
+                                        }
+                   }
+               ]
 }
