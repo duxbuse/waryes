@@ -25,14 +25,18 @@ public partial class GameManager : Node
         // IDs taken from file list earlier
         UnitManager.SpawnUnit("sdf_bastion_mbt", new Vector3(0, 0, 0));
         UnitManager.SpawnUnit("sdf_trooper", new Vector3(5, 0, 2));
-        UnitManager.SpawnUnit("sdf_scout_walker", new Vector3(-5, 0, -2)); // Guessing ID or valid one
+        UnitManager.SpawnUnit("sdf_scout_walker", new Vector3(-5, 0, -2)); 
+        UnitManager.SpawnUnit("sdf_osprey_gunship", new Vector3(0, 0, 5)); // Air unit test
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        // Right click to move all units
+        // Right click to move selected units
         if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right)
         {
+            var selectedUnits = SelectionManager.Instance?.SelectedUnits;
+            if (selectedUnits == null || selectedUnits.Count == 0) return;
+            
             var camera = GetViewport().GetCamera3D();
             if (camera == null) return;
             
@@ -40,20 +44,12 @@ public partial class GameManager : Node
             var origin = camera.ProjectRayOrigin(mb.Position);
             var dir = camera.ProjectRayNormal(mb.Position);
             
-            // Plane point-normal form: (p - p0) . n = 0
-            // We want intersection with Y=0 plane (Normal=0,1,0)
-            // t = -(origin . n + d) / (dir . n)
-            // For Plane(Vector3.Up, 0), d = 0.
-            
             var plane = new Plane(Vector3.Up, 0);
             var intersection = plane.IntersectsRay(origin, dir);
             
             if (intersection.HasValue)
             {
                 GD.Print($"Commanding move to: {intersection.Value}");
-                
-                var selectedUnits = SelectionManager.Instance.SelectedUnits;
-                if (selectedUnits.Count == 0) return;
 
                 foreach (var unit in selectedUnits)
                 {
@@ -61,6 +57,8 @@ public partial class GameManager : Node
                     Vector3 offset = new Vector3(GD.Randf() * 2 - 1, 0, GD.Randf() * 2 - 1);
                     unit.MoveTo(intersection.Value + offset);
                 }
+                
+                GetViewport().SetInputAsHandled();
             }
         }
     }

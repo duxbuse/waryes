@@ -38,6 +38,8 @@ public partial class SelectionManager : Node2D
     {
         if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
         {
+            GD.Print($"SelectionManager: Left mouse button, Pressed={mb.Pressed}, Dragging={_isDragging}");
+            
             if (mb.Pressed)
             {
                 _isDragging = true;
@@ -53,18 +55,34 @@ public partial class SelectionManager : Node2D
                 // Perform selection
                 if (_dragStart.DistanceSquaredTo(_dragEnd) < 16) // Tiny drag = Click
                 {
+                    GD.Print("SelectionManager: Click selection");
                     SelectAt(_dragEnd);
                 }
                 else
                 {
+                    GD.Print("SelectionManager: Box selection");
                     SelectInRect(_dragStart, _dragEnd);
                 }
+                
+                GetViewport().SetInputAsHandled();
             }
         }
         else if (@event is InputEventMouseMotion mm && _isDragging)
         {
             _dragEnd = mm.Position;
             QueueRedraw();
+        }
+        else if (@event is InputEventKey key && !key.Echo)
+        {
+            if (key.Keycode == Key.C)
+            {
+                // Toggle LOS preview on/off based on key press/release
+                if (LOSPreview.Instance != null)
+                {
+                    LOSPreview.Instance.SetActive(key.Pressed);
+                }
+                GetViewport().SetInputAsHandled();
+            }
         }
     }
 

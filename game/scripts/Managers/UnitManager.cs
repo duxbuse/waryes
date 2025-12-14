@@ -17,13 +17,16 @@ public partial class UnitManager : Node
 
     public Unit SpawnUnit(string unitId, Vector3 position)
     {
-        if (!_unitLibrary.ContainsKey(unitId))
+        // Strip "enemy_" prefix for data lookup
+        string lookupId = unitId.Replace("enemy_", "");
+        
+        if (!_unitLibrary.ContainsKey(lookupId))
         {
-            GD.PrintErr($"UnitManager: Unknown unit ID {unitId}");
+            GD.PrintErr($"UnitManager: Unknown unit ID {lookupId} (Original: {unitId})");
             return null;
         }
 
-        UnitData data = _unitLibrary[unitId];
+        UnitData data = _unitLibrary[lookupId];
         
         var unit = new Unit();
         unit.Name = $"{unitId}_{_activeUnits.Count}";

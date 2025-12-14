@@ -28,7 +28,8 @@ public partial class RTSCamera : Camera3D
 
     public override void _Ready()
     {
-        _targetHeight = Position.Y;
+        _targetHeight = 40.0f; // Start zoomed out to see battlefield
+        Position = new Vector3(Position.X, _targetHeight, Position.Z);
     }
 
     public override void _Process(double delta)

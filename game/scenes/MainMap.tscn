@@ -1,9 +1,11 @@
-[gd_scene load_steps=8 format=3 uid="uid://b8j4k5l6m7n8o"]
+[gd_scene load_steps=11 format=3 uid="uid://b8j4k5l6m7n8o"]
 
-[ext_resource type="Script" path="res://scripts/Input/RTSCamera.cs" id="1_camera"]
-[ext_resource type="Script" path="res://scripts/Core/GameManager.cs" id="2_game_manager"]
-[ext_resource type="Script" path="res://scripts/Managers/SelectionManager.cs" id="3_selection_manager"]
-[ext_resource type="Script" path="res://scripts/World/MapBuilder.cs" id="4_map_builder"]
+[ext_resource type="Script" uid="uid://b8cxctt68y608" path="res://scripts/Input/RTSCamera.cs" id="1_camera"]
+[ext_resource type="Script" uid="uid://dhb3ffxiwfh12" path="res://scripts/Core/GameManager.cs" id="2_game_manager"]
+[ext_resource type="Script" uid="uid://ck2expaa4fchl" path="res://scripts/Managers/SelectionManager.cs" id="3_selection_manager"]
+[ext_resource type="Script" uid="uid://bxu064fi87vp1" path="res://scripts/World/MapBuilder.cs" id="4_map_builder"]
+[ext_resource type="Script" uid="uid://j3dossrfd4yk" path="res://scripts/Combat/CombatManager.cs" id="5_combat_manager"]
+[ext_resource type="Script" path="res://scripts/Visuals/LOSPreview.cs" id="6_los_preview"]
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_1"]
 vertices = PackedVector3Array(-50, 0.5, -50, -50, 0.5, 50, 50, 0.5, 50, 50, 0.5, -50)
@@ -22,10 +24,10 @@ albedo_color = Color(0.2, 0.4, 0.2, 1)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 10, 0)
-item_cull_mask = 4294967295
 shadow_enabled = true
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.012767792, 0.048734665, -0.023366928)
 navigation_mesh = SubResource("NavigationMesh_1")
 
 [node name="Ground" type="StaticBody3D" parent="NavigationRegion3D"]
@@ -50,3 +52,9 @@ script = ExtResource("3_selection_manager")
 
 [node name="MapBuilder" type="Node3D" parent="."]
 script = ExtResource("4_map_builder")
+
+[node name="CombatManager" type="Node" parent="."]
+script = ExtResource("5_combat_manager")
+
+[node name="LOSPreview" type="Node3D" parent="."]
+script = ExtResource("6_los_preview")
