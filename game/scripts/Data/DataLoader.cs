@@ -16,14 +16,8 @@ public static class DataLoader
     public static Dictionary<string, UnitData> LoadUnits()
     {
         var units = new Dictionary<string, UnitData>();
-        
-        // Attempt to find the "units" directory relative to the game project
-        // Editor: waryes/game/ -> waryes/units/ is "../units"
         string projectPath = ProjectSettings.GlobalizePath("res://");
-        // Clean up path if it starts with accessible path
         string unitsPath = Path.GetFullPath(Path.Combine(projectPath, "../units"));
-        
-        // Fallback for exported builds or different structures could go here
         
         GD.Print($"DataLoader: Loading units from: {unitsPath}");
 
@@ -63,5 +57,51 @@ public static class DataLoader
         
         GD.Print($"DataLoader: Loaded {units.Count} units.");
         return units;
+    }
+
+    public static Dictionary<string, DivisionData> LoadDivisions()
+    {
+        var divisions = new Dictionary<string, DivisionData>();
+         string projectPath = ProjectSettings.GlobalizePath("res://");
+        string divisionsPath = Path.GetFullPath(Path.Combine(projectPath, "../divisions"));
+
+        GD.Print($"DataLoader: Loading divisions from: {divisionsPath}");
+
+        if (!Directory.Exists(divisionsPath))
+        {
+            GD.PrintErr($"DataLoader: Divisions directory not found at {divisionsPath}");
+            return divisions;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(divisionsPath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                string json = File.ReadAllText(file);
+                DivisionData data = JsonSerializer.Deserialize<DivisionData>(json, _jsonOptions);
+                
+                if (string.IsNullOrEmpty(data.Id))
+                {
+                    data.Id = Path.GetFileNameWithoutExtension(file);
+                }
+
+                if (!divisions.ContainsKey(data.Id))
+                {
+                    divisions.Add(data.Id, data);
+                    // GD.Print($"Loaded division: {data.Id}");
+                }
+                else
+                {
+                    GD.PrintErr($"DataLoader: Duplicate division ID found: {data.Id} in {file}");
+                }
+            }
+            catch (System.Exception e)
+            {
+                GD.PrintErr($"DataLoader: Failed to load division {file}: {e.Message}");
+            }
+        }
+        
+        GD.Print($"DataLoader: Loaded {divisions.Count} divisions.");
+        return divisions;
     }
 }

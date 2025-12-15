@@ -1,65 +1,176 @@
 using Godot;
+using System.Collections.Generic;
 
 public partial class GameManager : Node
 {
     public static GameManager Instance { get; private set; }
     
     public UnitManager UnitManager;
+    public EconomyManager EconomyManager;
+    public WarYes.Data.DeckData PlayerDeck;
+
+    private Dictionary<string, WarYes.Data.DivisionData> _divisions;
+    private Dictionary<string, WarYes.Data.UnitData> _unitLibrary;
+
+    public DeploymentUI DeploymentUI;
+    public WarYes.Data.UnitCard SelectedCardForPlacement;
 
     public override void _Ready()
     {
         Instance = this;
         
-        // Setup UnitManager
+        // Setup Managers
         UnitManager = new UnitManager();
         UnitManager.Name = "UnitManager";
         AddChild(UnitManager);
+
+        EconomyManager = new EconomyManager();
+        EconomyManager.Name = "EconomyManager";
+        AddChild(EconomyManager);
         
-        // Wait a frame for things to initialize, then spawn
-        CallDeferred(nameof(SpawnTestUnits));
+        // Load Data
+        _unitLibrary = DataLoader.LoadUnits();
+        _divisions = DataLoader.LoadDivisions();
+
+        // Wait a frame for things to initialize, then setup match
+        CallDeferred(nameof(StartSetupPhase));
     }
     
-    private void SpawnTestUnits()
+    private void StartSetupPhase()
     {
-        GD.Print("GameManager: Spawning test units...");
-        // IDs taken from file list earlier
-        UnitManager.SpawnUnit("sdf_bastion_mbt", new Vector3(0, 0, 0));
-        UnitManager.SpawnUnit("sdf_trooper", new Vector3(5, 0, 2));
-        UnitManager.SpawnUnit("sdf_scout_walker", new Vector3(-5, 0, -2)); 
-        UnitManager.SpawnUnit("sdf_osprey_gunship", new Vector3(0, 0, 5)); // Air unit test
+        GD.Print("GameManager: Starting Setup Phase...");
+        
+        // Create Test Deck
+        if (_divisions.ContainsKey("sdf_101st_airborne"))
+        {
+            PlayerDeck = DeckBuilder.BuildDefaultDeck(_divisions["sdf_101st_airborne"], _unitLibrary);
+            GD.Print($"GameManager: Created deck for {PlayerDeck.Division.Name} with {PlayerDeck.Cards.Count} cards.");
+        }
+        else
+        {
+            GD.PrintErr("GameManager: Could not find 'sdf_101st_airborne' division.");
+        }
+
+        EconomyManager.StartEconomy(); // Start income ticking
+        
+        // Setup UI
+        DeploymentUI = new DeploymentUI();
+        DeploymentUI.Name = "DeploymentUI";
+        AddChild(DeploymentUI);
+    }
+
+    public bool SpawnUnitFromCard(WarYes.Data.UnitCard card, Vector3 position)
+    {
+        if (card.AvailableCount > 0)
+        {
+            if (EconomyManager.SpendCredits(card.Cost))
+            {
+                UnitManager.SpawnUnit(card.UnitId, position);
+                card.AvailableCount--;
+                GD.Print($"Spawned {card.UnitId}. Remaining: {card.AvailableCount}. Credits: {EconomyManager.CurrentCredits}");
+                DeploymentUI?.UpdateCardVisuals(card);
+                return true;
+            }
+            else
+            {
+                GD.Print($"Cannot afford {card.UnitId} (Cost: {card.Cost}, Funds: {EconomyManager.CurrentCredits})");
+                return false;
+            }
+        }
+        else
+        {
+            GD.Print($"No availability for {card.UnitId}");
+            return false;
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        // Right click to move selected units
-        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right)
+        if (@event is InputEventMouseButton mb && mb.Pressed)
         {
-            var selectedUnits = SelectionManager.Instance?.SelectedUnits;
-            if (selectedUnits == null || selectedUnits.Count == 0) return;
-            
-            var camera = GetViewport().GetCamera3D();
-            if (camera == null) return;
-            
-            // Raycast to ground plane (Y=0)
-            var origin = camera.ProjectRayOrigin(mb.Position);
-            var dir = camera.ProjectRayNormal(mb.Position);
-            
-            var plane = new Plane(Vector3.Up, 0);
-            var intersection = plane.IntersectsRay(origin, dir);
-            
-            if (intersection.HasValue)
+            // Right Click: Move Units or Cancel Placement
+            if (mb.ButtonIndex == MouseButton.Right)
             {
-                GD.Print($"Commanding move to: {intersection.Value}");
-
-                foreach (var unit in selectedUnits)
+                if (SelectedCardForPlacement != null)
                 {
-                    // Adding small random offset so they don't stack perfectly
-                    Vector3 offset = new Vector3(GD.Randf() * 2 - 1, 0, GD.Randf() * 2 - 1);
-                    unit.MoveTo(intersection.Value + offset);
+                    SelectedCardForPlacement = null;
+                    GD.Print("Placement Cancelled");
+                    GetViewport().SetInputAsHandled();
                 }
-                
-                GetViewport().SetInputAsHandled();
+                else
+                {
+                    HandleMoveCommand(mb);
+                }
             }
+            // Left Click: Place Unit or Select
+            else if (mb.ButtonIndex == MouseButton.Left)
+            {
+                if (SelectedCardForPlacement != null)
+                {
+                    HandlePlacement(mb);
+                    GetViewport().SetInputAsHandled();
+                }
+            }
+        }
+        
+        if (@event.IsActionPressed("ui_cancel"))
+        {
+            SelectedCardForPlacement = null;
+            GD.Print("Placement Cancelled");
+        }
+    }
+
+    private void HandlePlacement(InputEventMouseButton mb)
+    {
+        var camera = GetViewport().GetCamera3D();
+        if (camera == null) return;
+        
+        var origin = camera.ProjectRayOrigin(mb.Position);
+        var dir = camera.ProjectRayNormal(mb.Position);
+        var plane = new Plane(Vector3.Up, 0);
+        var intersection = plane.IntersectsRay(origin, dir);
+        
+        if (intersection.HasValue)
+        {
+            bool success = SpawnUnitFromCard(SelectedCardForPlacement, intersection.Value);
+            
+            // Allow multiple placement if Shift is held AND we successfully spawned AND we have units left
+            bool multiPlace = mb.ShiftPressed && success && SelectedCardForPlacement.AvailableCount > 0;
+
+            if (!multiPlace)
+            {
+                SelectedCardForPlacement = null; 
+            }
+        }
+    }
+
+    private void HandleMoveCommand(InputEventMouseButton mb)
+    {
+        var selectedUnits = SelectionManager.Instance?.SelectedUnits;
+        if (selectedUnits == null || selectedUnits.Count == 0) return;
+        
+        var camera = GetViewport().GetCamera3D();
+        if (camera == null) return;
+        
+        // Raycast to ground plane (Y=0)
+        var origin = camera.ProjectRayOrigin(mb.Position);
+        var dir = camera.ProjectRayNormal(mb.Position);
+        
+        var plane = new Plane(Vector3.Up, 0);
+        var intersection = plane.IntersectsRay(origin, dir);
+        
+        if (intersection.HasValue)
+        {
+            GD.Print($"Commanding move to: {intersection.Value}");
+
+            foreach (var unit in selectedUnits)
+            {
+                // Adding small random offset so they don't stack perfectly
+                Vector3 offset = new Vector3(GD.Randf() * 2 - 1, 0, GD.Randf() * 2 - 1);
+                unit.MoveTo(intersection.Value + offset);
+            }
+            
+            GetViewport().SetInputAsHandled();
         }
     }
 }
