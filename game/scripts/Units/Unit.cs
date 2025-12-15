@@ -125,9 +125,20 @@ public partial class Unit : CharacterBody3D
         {
             _visuals = new MeshInstance3D();
             _visuals.Name = "Mesh";
-            var mesh = new BoxMesh();
+            var mesh = new PrismMesh(); // Wedge shape to indicate facing
             mesh.Size = new Vector3(2, 2, 2); 
+            // Rotate the mesh so the "point" faces forward (-Z is forward in Godot, Prism points up +Y by default)
+            // Actually PrismMesh default: Triangle along X-axis? No, it points up Y.
+            // We want it to point along -Z.
+            // Let's use a BoxMesh and taper it, or just rotate the prism.
+            // PrismMesh properties: LeftToRight is X. Up is Y. Depth is Z.
+            // If we rotate -90 X, it points along Z.
+            
             _visuals.Mesh = mesh;
+            _visuals.RotationDegrees = new Vector3(-90, 0, 0); // Point forward (-Z) ?? 
+            // Default Prism points UP (+Y). Rotating -90 on X makes it point Forward (-Z) if we assume standard orientation.
+            // Let's test. If backwards, +90.
+            
             _visualRoot.AddChild(_visuals);
         }
         else
@@ -198,109 +209,95 @@ public partial class Unit : CharacterBody3D
         CreateHealthBar();
     }
     
+    private Sprite3D _healthBarBg;
+    private Sprite3D _healthBarFg;
+
     private void CreateHealthBar()
     {
         if (_healthBarRoot != null) return;
         
         _healthBarRoot = new Node3D();
         _healthBarRoot.Name = "HealthBar";
-        _healthBarRoot.Position = new Vector3(0, 2.5f, 0);
+        _healthBarRoot.TopLevel = true; 
         _visualRoot.AddChild(_healthBarRoot);
         
-        var healthBarRoot = _healthBarRoot; // Local alias to minimize changes below
+        // Create 1x1 White Texture
+        var image = Image.Create(1, 1, false, Image.Format.Rgb8);
+        image.SetPixel(0, 0, new Color(1, 1, 1));
+        var texture = ImageTexture.CreateFromImage(image);
         
-        // Create SubViewport to render UI
-        var viewport = new SubViewport();
-        viewport.Size = new Vector2I(200, 30);
-        viewport.TransparentBg = true;
-        viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        healthBarRoot.AddChild(viewport);
+        // Background Sprite
+        _healthBarBg = new Sprite3D();
+        _healthBarBg.Name = "BG";
+        _healthBarBg.Texture = texture;
+        _healthBarBg.Modulate = new Color(0, 0, 0); // Black
+        _healthBarBg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _healthBarBg.PixelSize = 0.01f; // Standardize pixel size
+        // Size = TextureSize * PixelSize. 1px * 0.01 = 0.01m.
+        // We want 2m width, 0.5m height.
+        // Scale = Target / Base.
+        _healthBarBg.Scale = new Vector3(2.0f / 0.01f, 0.5f / 0.01f, 1);
+        _healthBarBg.RenderPriority = 10;
+        _healthBarBg.NoDepthTest = true; // Optional: ensure it draws on top of unit? No, might clip terrain.
+        _healthBarRoot.AddChild(_healthBarBg);
         
-        // Create ProgressBar
-        var progressBar = new ProgressBar();
-        progressBar.Size = new Vector2(200, 30);
-        progressBar.MinValue = 0;
-        progressBar.MaxValue = 100;
-        progressBar.Value = 100;
-        progressBar.ShowPercentage = false;
+        // Foreground Sprite
+        _healthBarFg = new Sprite3D();
+        _healthBarFg.Name = "FG";
+        _healthBarFg.Texture = texture;
+        _healthBarFg.Modulate = new Color(0, 1, 0); // Green
+        _healthBarFg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _healthBarFg.PixelSize = 0.01f;
+        _healthBarFg.RenderPriority = 11; // Draw over BG
+        _healthBarFg.NoDepthTest = true;
+        _healthBarRoot.AddChild(_healthBarFg);
         
-        // Style the progress bar
-        var styleBox = new StyleBoxFlat();
-        styleBox.BgColor = new Color(0.1f, 0.1f, 0.1f); // Dark Gray/Black background
-        styleBox.BorderColor = new Color(0, 0, 0); // Black border
-        styleBox.SetBorderWidthAll(2);
-        
-        var styleFill = new StyleBoxFlat();
-        styleFill.BgColor = new Color(1, 0, 0); // Red fill
-        
-        progressBar.AddThemeStyleboxOverride("background", styleBox);
-        progressBar.AddThemeStyleboxOverride("fill", styleFill);
-        
-        viewport.AddChild(progressBar);
-        
-        // Create quad to display the viewport texture
-        _healthBarBackground = new MeshInstance3D();
-        _healthBarBackground.Name = "Display";
-        _healthBarBackground.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-        
-        var quadMesh = new QuadMesh();
-        quadMesh.Size = new Vector2(2.0f, 0.3f);
-        _healthBarBackground.Mesh = quadMesh;
-        
-        var mat = new StandardMaterial3D();
-        mat.AlbedoTexture = viewport.GetTexture();
-        mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-        mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
-        // mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled; // Handle manually to sync collision
-        _healthBarBackground.MaterialOverride = mat;
-        
-        healthBarRoot.AddChild(_healthBarBackground);
-        
-        // Create Collision for selection
-        var hbBody = new StaticBody3D();
-        hbBody.Name = "HealthBarCollision";
-        var hbShape = new CollisionShape3D();
-        var hbBox = new BoxShape3D();
-        hbBox.Size = new Vector3(2.0f, 0.3f, 0.1f);
-        hbShape.Shape = hbBox;
-        hbBody.AddChild(hbShape);
-        _healthBarRoot.AddChild(hbBody);
-
-        // Start hidden
         _healthBarRoot.Visible = false;
     }
     
     private void UpdateHealthBar()
     {
-        if (_healthBarBackground == null) return;
+        if (_healthBarBg == null || _healthBarFg == null) return;
         
         float healthPercent = (float)Health / _maxHealth;
-        
-        var healthBarRoot = _visualRoot.GetNodeOrNull<Node3D>("HealthBar");
-        if (healthBarRoot == null) return;
         
         // Hide at full health unless selected
         if (healthPercent >= 1.0f && !_isSelected)
         {
-            healthBarRoot.Visible = false;
+            _healthBarRoot.Visible = false;
             return;
         }
         
-        healthBarRoot.Visible = true;
+        _healthBarRoot.Visible = true;
         
-        // Update ProgressBar value
-        var viewport = healthBarRoot.GetNodeOrNull<SubViewport>("SubViewport");
-        if (viewport != null)
-        {
-            var progressBar = viewport.GetNodeOrNull<ProgressBar>("ProgressBar");
-            if (progressBar != null)
-            {
-                progressBar.Value = healthPercent * 100;
-            }
-        }
+        // Update Color
+        if (healthPercent > 0.5f) _healthBarFg.Modulate = new Color(0, 1, 0); // Green
+        else if (healthPercent > 0.25f) _healthBarFg.Modulate = new Color(1, 1, 0); // Yellow
+        else _healthBarFg.Modulate = new Color(1, 0, 0); // Red
         
-        // Billboard handled by Material
-
+        // Update Scale for Fill
+        // Base Width = 2.0m. BG is 2.0m.
+        // FG Width = 2.0m * healthPercent.
+        // PixelSize is 0.01. Base Texture is 1px. Base Size 0.01m.
+        // Scale X = TargetWidth / 0.01
+        float targetWidth = 2.0f * healthPercent;
+        float scaleX = targetWidth / 0.01f;
+        float scaleY = 0.5f / 0.01f; // Height 0.5m
+        
+        _healthBarFg.Scale = new Vector3(scaleX, scaleY, 1);
+        
+        // Left Align Logic
+        // Center of BG is (0,0). Width 2.0. Left Edge is -1.0.
+        // Center of FG (width W) is usually 0. We want its Left Edge at -1.0.
+        // FG Left Edge = PosX - (W/2).
+        // -1.0 = PosX - (targetWidth / 2).
+        // PosX = -1.0 + (targetWidth / 2).
+        
+        float posX = -1.0f + (targetWidth / 2.0f);
+        // Note: For Billboard Enabled sprites, changing Position might affect billboard pivot?
+        // Sprite3D pivot is center by default. This math assumes center pivot.
+        
+        _healthBarFg.Position = new Vector3(posX, 0, 0);
     }
     
     private void CreateSelectionRing()
@@ -397,7 +394,8 @@ public partial class Unit : CharacterBody3D
 
         _aimIndicatorRoot = new Node3D();
         _aimIndicatorRoot.Name = "AimIndicator";
-        _aimIndicatorRoot.Position = new Vector3(0, 3.5f, 0); // Above health bar
+        // _aimIndicatorRoot.Position = ...
+        _aimIndicatorRoot.TopLevel = true; // Decouple transform
         _visualRoot.AddChild(_aimIndicatorRoot);
         
         _aimIndicators.Clear();
@@ -607,68 +605,46 @@ public partial class Unit : CharacterBody3D
 
         if (isVehicle && !isAir)
         {
-            // Tank Turn Logic
+            // Tank Turn Logic with Rotation Speed
             Vector3 lookTarget = GlobalPosition + safeVelocity;
             Vector3 direction = (lookTarget - GlobalPosition).Normalized();
             
-            // Get local forward vector
-            Vector3 forward = GlobalTransform.Basis.Z; // Godot forward is -Z usually, but LookAt uses -Z. Let's check Basis.
-            // Actually CharacterBody3D LookAt makes -Z point to target.
-            
-            // Calculate angle to target
-            // We use SignedAngle to know which way to turn, but AngleTo is enough for threshold
-            // Note: Basis.Z is backwards in Godot? No, Forward is -Z.
-            // Let's rely on LookAt logic which aligns -Z.
-            
             Vector3 currentForward = -GlobalTransform.Basis.Z;
-            float angle = currentForward.AngleTo(direction);
+            float angle = currentForward.AngleTo(direction); // Always positive (0..Pi)
             
-            if (Mathf.RadToDeg(angle) > 15.0f) // Threshold
+            // Get Rotation Speed from Data or Default
+            float rotSpeedDeg = Data.Speed.RotationSpeed.HasValue ? Data.Speed.RotationSpeed.Value : 90.0f; // Default 90 deg/s
+            float rotSpeedRad = Mathf.DegToRad(rotSpeedDeg);
+            float maxRotStep = rotSpeedRad * (float)GetPhysicsProcessDeltaTime();
+            
+            if (angle > 0.01f) // Needs turning
             {
-                // Turn in place
-                Velocity = Vector3.Zero; // Stop moving
+                // Determine turn direction (Left or Right) using Cross Product
+                Vector3 cross = currentForward.Cross(direction);
+                float sign = (cross.Y > 0) ? 1.0f : -1.0f; // Y-up axis, +Y cross means target is left
                 
-                // Rotate towards target (simple lerp for now, or fixed speed)
-                float rotateSpeed = 2.0f; 
+                // Cap rotation
+                float rotAmount = Mathf.Min(angle, maxRotStep);
                 
-                // Determine rotation axis
-                Vector3 axis = currentForward.Cross(direction).Normalized();
-                if (axis.LengthSquared() < 0.01f) axis = Vector3.Up; // 180 turn edge case
+                // Apply rotation
+                RotateY(rotAmount * sign);
                 
-                Rotate(axis, rotateSpeed * (float)GetPhysicsProcessDeltaTime());
-                
-                // Re-align explicitly if close to avoid wobble?
-                // For prototype, Rotate is fine, but LookAt with Lerp is easier.
-                // Let's use specific LookAt for simplicity but we need to limit speed.
-                
-                // Implementation: Transform.Basis = Transform.Basis.Slerp(...). 
-                // But we are in a callback.
-                
-                // Simplest robust solution: LookAt immediately if we want instant turn, 
-                // but user asked for "Stop -> Rotate -> Move".
-                
-                Vector3 targetDir = new Vector3(lookTarget.X, GlobalPosition.Y, lookTarget.Z);
-                LookAt(targetDir, Vector3.Up); // Instant turn for now to satisfy "rotate" 
-                // Wait, user said "must come to a halt turn (at max rotation speed)".
-                // Implementing actual rotation speed is complex in OnVelocityComputed because it's driven by NavigationServer.
-                // For the Prototype, "Stop-Turn-Move" can be simulated by killing velocity while angle is high.
-                
-                // Since I just called LookAt, the angle is now 0. So next frame it will move.
-                // To simulate "time to turn", we shouldn't snap.
-                
-                // REVERTING LookAt to Slerp:
-                // Transform = Transform.LookingAt(targetDir, Vector3.Up); // This is snap.
-                
-                // Let's effectively "Eat" the velocity this frame if we snapped.
-                Velocity = Vector3.Zero;
+                // Check if we are facing close enough to move
+                if (Mathf.Abs(angle) > Mathf.DegToRad(15.0f))
+                {
+                     // Stop moving until facing
+                     Velocity = Vector3.Zero;
+                }
+                else
+                {
+                     // Move
+                     Velocity = safeVelocity;
+                }
             }
             else
             {
-                // Angle is small, move and rotate normally
+                // Faced correctly
                 Velocity = safeVelocity;
-                Vector3 lookTarget2 = GlobalPosition + Velocity;
-                if (GlobalPosition.DistanceSquaredTo(lookTarget2) > 0.001f)
-                     LookAt(lookTarget2, Vector3.Up);
             }
         }
         else
@@ -690,43 +666,28 @@ public partial class Unit : CharacterBody3D
 
     public override void _Process(double delta)
     {
-        // Billboard Health Bar if visible
+        // Update TopLevel Positions manually
         if (_healthBarRoot != null && _healthBarRoot.Visible)
         {
-            var camera = GetViewport()?.GetCamera3D();
-            if (camera != null)
-            {
-                var camPos = camera.GlobalPosition;
-                // Billboard Mode usually points Z to camera.
-                // LookAt points -Z to target. 
-                // We want the Quad (facing +Z or -Z?) to face camera.
-                // Let's assume standard LookAt works, if flipped we rotate.
-                
-                if (camPos.DistanceSquaredTo(_healthBarRoot.GlobalPosition) > 0.1f)
-                {
-                    // Use Camera Up vector to avoid gimbal lock when looking down
-                    _healthBarRoot.LookAt(camPos, camera.GlobalBasis.Y);
-                    _healthBarRoot.RotateY(Mathf.Pi); // Keep flipped 
-                }
-            }
+            _healthBarRoot.GlobalPosition = GlobalPosition + new Vector3(0, 2.5f, 0);
+            
+            // Explicitly reset rotation to ensure billboard works from Identity
+            _healthBarRoot.GlobalRotation = Vector3.Zero;
+            
+            // Scaling logic (if any)
+            _healthBarRoot.Scale = Vector3.One; 
         }
 
-        // Billboard Aim Indicators
         if (_aimIndicatorRoot != null && _aimIndicatorRoot.Visible)
         {
+            _aimIndicatorRoot.GlobalPosition = GlobalPosition + new Vector3(0, 3.5f, 0);
+            
+            // Manual Billboard for Aim Indicator to prevent "disappearing"
+            // LookAt camera
             var camera = GetViewport()?.GetCamera3D();
             if (camera != null)
             {
-                var camPos = camera.GlobalPosition;
-                 if (camPos.DistanceSquaredTo(_aimIndicatorRoot.GlobalPosition) > 0.1f)
-                {
-                    _aimIndicatorRoot.LookAt(camPos, camera.GlobalBasis.Y);
-                    // Use RotateY(Pi) if shader/uvs are flipped. 
-                    // QuadMesh faces +Z? LookAt -Z?
-                    
-                    // Let's assume standard behavior. If it looks wrong, I'll rotate it.
-                    // For now, no Pi rotation.
-                }
+                _aimIndicatorRoot.LookAt(camera.GlobalPosition, Vector3.Up);
             }
         }
     }

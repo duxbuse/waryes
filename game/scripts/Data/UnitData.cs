@@ -33,6 +33,9 @@ namespace WarYes.Data
         
         [JsonPropertyName("off_road")]
         public int OffRoad { get; set; }
+        
+        [JsonPropertyName("rotation_speed")]
+        public float? RotationSpeed { get; set; }
     }
 
     public struct ArmorData

@@ -21,7 +21,7 @@ public partial class MapBuilder : Node3D
         CreateBoundary("TownBoundary", new Vector3(20, 0.01f, -20), new Vector2(30, 30), new Color(0.6f, 0.4f, 0.2f, 0.3f));
 
         // Forest
-        CreateForest("Forest", new Vector3(-20, 0, -20), 10);
+        CreateForest("Forest", new Vector3(-20, 0, -20), 30);
         CreateBoundary("ForestBoundary", new Vector3(-20, 0.01f, -20), new Vector2(30, 30), new Color(0, 0.5f, 0, 0.3f));
     }
 

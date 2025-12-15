@@ -129,7 +129,7 @@ public partial class SelectionManager : Node2D
         
         foreach (var unit in UnitManager.Instance.GetActiveUnits())
         {
-            if (unit.IsQueuedForDeletion()) continue;
+            if (!IsInstanceValid(unit) || unit.IsQueuedForDeletion()) continue;
             
             Vector2 screenPos = camera.UnprojectPosition(unit.GlobalPosition);
             
@@ -169,7 +169,10 @@ public partial class SelectionManager : Node2D
     {
         foreach (var unit in SelectedUnits)
         {
-            unit.SetSelected(false);
+            if (IsInstanceValid(unit) && !unit.IsQueuedForDeletion())
+            {
+                unit.SetSelected(false);
+            }
         }
         SelectedUnits.Clear();
     }
