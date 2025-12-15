@@ -26,7 +26,7 @@
                     {
                         "weapon_id":  "sdf_rapid_laser_cannon",
                         "count":  1,
-                        "max_ammo":  300
+                        "max_ammo":  10
                     }
                 ]
 }

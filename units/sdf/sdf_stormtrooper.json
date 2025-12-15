@@ -23,7 +23,7 @@
                     {
                         "weapon_id":  "sdf_heavy_laser_rifle",
                         "count":  10,
-                        "max_ammo":  300
+                        "max_ammo":  20
                     }
                 ]
 }

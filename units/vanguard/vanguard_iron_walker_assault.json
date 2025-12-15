@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "vanguard_rotary_assault_cannon",
                         "count":  1,
-                        "max_ammo":  800
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_walker_fist",
                         "count":  1,
-                        "max_ammo":  0
+                        "max_ammo":  20
                     }
                 ]
 }

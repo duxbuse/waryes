@@ -23,7 +23,7 @@
                     {
                         "weapon_id":  "vanguard_twin_kinetic_rifle",
                         "count":  5,
-                        "max_ammo":  500
+                        "max_ammo":  20
                     }
                 ]
 }

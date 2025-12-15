@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_howitzer_155mm",
                         "count":  1,
-                        "max_ammo":  20
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  1,
-                        "max_ammo":  300
+                        "max_ammo":  10
                     }
                 ]
 }

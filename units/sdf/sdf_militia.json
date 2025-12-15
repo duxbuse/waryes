@@ -23,7 +23,7 @@
                     {
                         "weapon_id":  "sdf_laser_rifle_militia",
                         "count":  20,
-                        "max_ammo":  100
+                        "max_ammo":  20
                     }
                 ]
 }

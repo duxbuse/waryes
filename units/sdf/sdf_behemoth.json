@@ -26,27 +26,27 @@
                     {
                         "weapon_id":  "sdf_behemoth_cannon",
                         "count":  1,
-                        "max_ammo":  30
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_siege_mortar",
                         "count":  1,
-                        "max_ammo":  20
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_auto_cannon_30mm_air",
                         "count":  1,
-                        "max_ammo":  200
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_laser_cannon_tripod",
                         "count":  2,
-                        "max_ammo":  40
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  3,
-                        "max_ammo":  1000
+                        "max_ammo":  10
                     }
                 ]
 }

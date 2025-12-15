@@ -23,12 +23,12 @@
                     {
                         "weapon_id":  "vanguard_kinetic_pistol",
                         "count":  5,
-                        "max_ammo":  100
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_saw_blade",
                         "count":  5,
-                        "max_ammo":  0
+                        "max_ammo":  20
                     }
                 ]
 }

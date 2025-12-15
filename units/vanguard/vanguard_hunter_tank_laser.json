@@ -26,7 +26,7 @@
                     {
                         "weapon_id":  "vanguard_hunter_laser_cannon",
                         "count":  1,
-                        "max_ammo":  40
+                        "max_ammo":  10
                     }
                 ]
 }

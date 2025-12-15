@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_siege_mortar",
                         "count":  1,
-                        "max_ammo":  20
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  1,
-                        "max_ammo":  600
+                        "max_ammo":  10
                     }
                 ]
 }

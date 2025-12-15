@@ -26,17 +26,17 @@
                     {
                         "weapon_id":  "sdf_auto_cannon_30mm_air",
                         "count":  3,
-                        "max_ammo":  1200
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "pdf_hellstrike_missile",
                         "count":  8,
-                        "max_ammo":  8
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  1,
-                        "max_ammo":  400
+                        "max_ammo":  10
                     }
                 ]
 }

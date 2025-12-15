@@ -26,7 +26,7 @@
                     {
                         "weapon_id":  "vanguard_hellstorm_bomb",
                         "count":  2,
-                        "max_ammo":  4
+                        "max_ammo":  10
                     }
                 ]
 }

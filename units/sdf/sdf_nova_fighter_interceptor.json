@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_auto_cannon_30mm_air",
                         "count":  2,
-                        "max_ammo":  600
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "pdf_aa_rocket",
                         "count":  3,
-                        "max_ammo":  6
+                        "max_ammo":  10
                     }
                 ]
 }

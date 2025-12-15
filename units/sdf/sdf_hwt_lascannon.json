@@ -23,7 +23,7 @@
                     {
                         "weapon_id":  "sdf_heavy_laser_cannon_tripod",
                         "count":  1,
-                        "max_ammo":  20
+                        "max_ammo":  10
                     }
                 ]
 }

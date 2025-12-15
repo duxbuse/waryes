@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_skysweeper_autocannon",
                         "count":  2,
-                        "max_ammo":  800
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  1,
-                        "max_ammo":  400
+                        "max_ammo":  10
                     }
                 ]
 }

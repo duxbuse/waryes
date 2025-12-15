@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_rotary_cannon_air",
                         "count":  2,
-                        "max_ammo":  2000
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "sdf_heavy_auto_cannon_hull",
                         "count":  1,
-                        "max_ammo":  400
+                        "max_ammo":  10
                     }
                 ]
 }

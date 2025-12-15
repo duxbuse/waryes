@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "vanguard_air_laser_cannon",
                         "count":  1,
-                        "max_ammo":  100
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "vanguard_rotary_missile",
                         "count":  1,
-                        "max_ammo":  40
+                        "max_ammo":  10
                     }
                 ]
 }

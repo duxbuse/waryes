@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "vanguard_rotary_assault_cannon",
                         "count":  1,
-                        "max_ammo":  1200
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_skyhammer_missile",
                         "count":  1,
-                        "max_ammo":  12
+                        "max_ammo":  10
                     }
                 ]
 }

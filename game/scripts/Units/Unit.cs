@@ -430,6 +430,9 @@ public partial class Unit : CharacterBody3D
         
         // Health Bar
         CreateHealthBar();
+        
+        // Ammo Icon
+        CreateAmmoIcon();
     }
     
     private void CreateHealthBar()
@@ -534,6 +537,71 @@ public partial class Unit : CharacterBody3D
             float mTargetWidth = 2.0f * moralePercent;
             _moraleBarFg.Scale = new Vector3(mTargetWidth / 0.01f, 0.25f / 0.01f, 1);
             _moraleBarFg.Position = new Vector3(-1.0f + (mTargetWidth / 2.0f), -0.4f, 0); 
+        }
+    }
+    
+    private Sprite3D _ammoIcon;
+
+    private void CreateAmmoIcon()
+    {
+         if (_ammoIcon != null) return;
+         
+        _ammoIcon = new Sprite3D();
+        _ammoIcon.Name = "AmmoIcon";
+        
+        // Create Red "!" Box
+        // Use CreateEmpty as suggested by warnings
+        var image = Image.CreateEmpty(32, 32, false, Image.Format.Rgba8);
+        for(int x=0; x<32; x++)
+            for(int y=0; y<32; y++)
+            {
+                 // Red Border
+                 if (x < 2 || x > 29 || y < 2 || y > 29)
+                 {
+                     image.SetPixel(x, y, new Color(1, 0, 0)); 
+                 }
+                 // Yellow Background
+                 else
+                 {
+                     image.SetPixel(x, y, new Color(1, 1, 0, 0.5f));
+                 }
+                 
+                 // Black Exclamation (Simple)
+                 if (x >= 14 && x <= 17)
+                 {
+                     if (y > 6 && y < 20) image.SetPixel(x, y, new Color(0,0,0)); // Top part
+                     if (y > 23 && y < 26) image.SetPixel(x, y, new Color(0,0,0)); // Dot
+                 }
+            }
+            
+        var tex = ImageTexture.CreateFromImage(image);
+        _ammoIcon.Texture = tex;
+        _ammoIcon.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _ammoIcon.PixelSize = 0.02f;
+        _ammoIcon.Position = new Vector3(0, 5.0f, 0); // High above, above Rank?
+        _ammoIcon.Visible = false; // Hidden by default
+        
+        AddChild(_ammoIcon);
+    }
+
+    public void CheckAmmoStatus()
+    {
+        if (_ammoIcon == null) CreateAmmoIcon();
+        
+        bool anyEmpty = false;
+        foreach (var w in _weapons)
+        {
+            if (w.MaxAmmo > 0 && w.CurrentAmmo <= 0)
+            {
+                anyEmpty = true;
+                break;
+            }
+        }
+        
+        _ammoIcon.Visible = anyEmpty;
+        if (anyEmpty)
+        {
+            // GD.Print($"{Name} has empty weapons relative to loadout.");
         }
     }
     

@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "vanguard_typhoon_missile",
                         "count":  1,
-                        "max_ammo":  12
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "vanguard_heavy_auto_cannon",
                         "count":  1,
-                        "max_ammo":  400
+                        "max_ammo":  10
                     }
                 ]
 }

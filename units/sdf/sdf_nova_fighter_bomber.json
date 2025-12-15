@@ -26,12 +26,12 @@
                     {
                         "weapon_id":  "sdf_auto_cannon_30mm_air",
                         "count":  2,
-                        "max_ammo":  600
+                        "max_ammo":  10
                     },
                     {
                         "weapon_id":  "pdf_tactical_bomb",
                         "count":  2,
-                        "max_ammo":  2
+                        "max_ammo":  10
                     }
                 ]
 }

@@ -23,12 +23,12 @@
                     {
                         "weapon_id":  "vanguard_kinetic_rifle",
                         "count":  8,
-                        "max_ammo":  300
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_ion_rifle",
                         "count":  1,
-                        "max_ammo":  40
+                        "max_ammo":  20
                     }
                 ]
 }

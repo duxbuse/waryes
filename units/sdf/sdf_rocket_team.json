@@ -23,12 +23,12 @@
                     {
                         "weapon_id":  "pdf_manpad_missile",
                         "count":  3,
-                        "max_ammo":  9
+                        "max_ammo":  5
                     },
                     {
                         "weapon_id":  "sdf_laser_rifle",
                         "count":  3,
-                        "max_ammo":  100
+                        "max_ammo":  20
                     }
                 ]
 }

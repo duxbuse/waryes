@@ -26,17 +26,17 @@
                     {
                         "weapon_id":  "vanguard_rotary_assault_cannon",
                         "count":  1,
-                        "max_ammo":  1200
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_hurricane_kinetic_array",
                         "count":  2,
-                        "max_ammo":  2400
+                        "max_ammo":  20
                     },
                     {
                         "weapon_id":  "vanguard_heavy_fusion_cannon",
                         "count":  1,
-                        "max_ammo":  40
+                        "max_ammo":  10
                     }
                 ]
 }

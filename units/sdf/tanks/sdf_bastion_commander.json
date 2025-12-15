@@ -1,34 +1,34 @@
 {
-    "id": "sdf_bastion_commander",
-    "name": "Bastion Command Tank",
-    "cost": 300,
-    "icon": "assets/icons/tank_commander.png",
-    "health": 12,
-    "speed": {
-        "road": 60,
-        "off_road": 40,
-        "rotation_speed": 40
-    },
-    "armor": {
-        "front": 14,
-        "side": 8,
-        "rear": 4,
-        "top": 2
-    },
-    "fuel": 600,
-    "autonomy": {
-        "road": 500,
-        "off_road": 350
-    },
-    "optics": "very_good",
-    "stealth": "poor",
-    "forward_deploy": 0,
-    "is_commander": true,
-    "weapons": [
-        {
-            "weapon_id": "cannon",
-            "count": 1,
-            "max_ammo": 40
-        }
-    ]
+    "id":  "sdf_bastion_commander",
+    "name":  "Bastion Command Tank",
+    "cost":  300,
+    "icon":  "assets/icons/tank_commander.png",
+    "health":  12,
+    "speed":  {
+                  "road":  60,
+                  "off_road":  40,
+                  "rotation_speed":  40
+              },
+    "armor":  {
+                  "front":  14,
+                  "side":  8,
+                  "rear":  4,
+                  "top":  2
+              },
+    "fuel":  600,
+    "autonomy":  {
+                     "road":  500,
+                     "off_road":  350
+                 },
+    "optics":  "very_good",
+    "stealth":  "poor",
+    "forward_deploy":  0,
+    "is_commander":  true,
+    "weapons":  [
+                    {
+                        "weapon_id":  "cannon",
+                        "count":  1,
+                        "max_ammo":  10
+                    }
+                ]
 }

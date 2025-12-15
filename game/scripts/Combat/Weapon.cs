@@ -55,7 +55,17 @@ public partial class Weapon : Node
     {
         _owner = owner;
         WeaponId = weaponId;
-        MaxAmmo = maxAmmo;
+        
+        // Global Ammo Limit Enforcement
+        if (maxAmmo <= 0) 
+        {
+             MaxAmmo = 200; // Default limit for "infinite" weapons
+        }
+        else
+        {
+             MaxAmmo = maxAmmo;
+        }
+        
         CurrentAmmo = MaxAmmo;
         
         // Simulating data lookup for now (should come from a centralized Weapon Database)
@@ -176,6 +186,7 @@ public partial class Weapon : Node
             if (CurrentAmmo <= 0)
             {
                 StopEngaging();
+                _owner.CheckAmmoStatus();
                 // GD.Print($"{_owner.Name} is out of ammo for {WeaponId}!");
             }
         }

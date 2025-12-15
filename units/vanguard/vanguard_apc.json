@@ -1,32 +1,32 @@
 {
-    "id": "vanguard_apc",
-    "name": "Apc",
-    "cost": 30,
-    "icon": "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health": 8,
-    "speed": {
-        "road": 70,
-        "off_road": 55
-    },
-    "armor": {
-        "front": 12,
-        "side": 10,
-        "rear": 7,
-        "top": 5
-    },
-    "fuel": 500,
-    "autonomy": {
-        "road": 600,
-        "off_road": 450
-    },
-    "optics": "Good",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "vanguard_twin_kinetic_rifle",
-            "count": 1,
-            "max_ammo": 600
-        }
-    ]
+    "id":  "vanguard_apc",
+    "name":  "Apc",
+    "cost":  30,
+    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health":  8,
+    "speed":  {
+                  "road":  70,
+                  "off_road":  55
+              },
+    "armor":  {
+                  "front":  12,
+                  "side":  10,
+                  "rear":  7,
+                  "top":  5
+              },
+    "fuel":  500,
+    "autonomy":  {
+                     "road":  600,
+                     "off_road":  450
+                 },
+    "optics":  "Good",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "vanguard_twin_kinetic_rifle",
+                        "count":  1,
+                        "max_ammo":  20
+                    }
+                ]
 }

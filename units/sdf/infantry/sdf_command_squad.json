@@ -1,29 +1,29 @@
 {
-    "id": "sdf_command_squad",
-    "name": "SDF Command Squad",
-    "cost": 120,
-    "icon": "assets/icons/infantry_commander.png",
-    "health": 10,
-    "speed": {
-        "road": 30,
-        "off_road": 25,
-        "rotation_speed": 180
-    },
-    "armor": {
-        "front": 0,
-        "side": 0,
-        "rear": 0,
-        "top": 0
-    },
-    "optics": "good",
-    "stealth": "poor",
-    "forward_deploy": 0,
-    "is_commander": true,
-    "weapons": [
-        {
-            "weapon_id": "rifle",
-            "count": 4,
-            "max_ammo": 1000
-        }
-    ]
+    "id":  "sdf_command_squad",
+    "name":  "SDF Command Squad",
+    "cost":  120,
+    "icon":  "assets/icons/infantry_commander.png",
+    "health":  10,
+    "speed":  {
+                  "road":  30,
+                  "off_road":  25,
+                  "rotation_speed":  180
+              },
+    "armor":  {
+                  "front":  0,
+                  "side":  0,
+                  "rear":  0,
+                  "top":  0
+              },
+    "optics":  "good",
+    "stealth":  "poor",
+    "forward_deploy":  0,
+    "is_commander":  true,
+    "weapons":  [
+                    {
+                        "weapon_id":  "rifle",
+                        "count":  4,
+                        "max_ammo":  20
+                    }
+                ]
 }
