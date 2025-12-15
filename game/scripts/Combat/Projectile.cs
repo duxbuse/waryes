@@ -4,7 +4,7 @@ public partial class Projectile : Node3D
 {
     private Unit _target;
     private Unit _owner;
-    private float _damage;
+    private float _ap; // Changed from _damage
     private float _speed = 50.0f;
     private Vector3 _lastKnownTargetPos;
     
@@ -14,14 +14,22 @@ public partial class Projectile : Node3D
     private bool _isAccurate = true;
     private Vector3 _targetPosOverride;
 
-    public void Initialize(Unit owner, Unit target, float damage, bool isAccurate, Vector3 targetPosOverride)
+    private Vector3 _fireOrigin;
+
+    public void Initialize(Unit owner, Unit target, int ap, bool isAccurate, Vector3 targetPosOverride)
     {
         _owner = owner;
         _target = target;
-        _damage = damage;
+        _ap = ap;
         _isAccurate = isAccurate;
         _targetPosOverride = targetPosOverride;
         
+        // Cache fire origin to prevent accessing _owner after death
+        if (IsInstanceValid(owner))
+            _fireOrigin = owner.GlobalPosition;
+        else
+            _fireOrigin = GlobalPosition;
+
         if (isAccurate)
              _lastKnownTargetPos = target.GlobalPosition;
         else
@@ -61,7 +69,10 @@ public partial class Projectile : Node3D
         Vector3 toTarget = targetPos - GlobalPosition;
         float dist = toTarget.Length();
         float moveDist = _speed * (float)delta;
-
+        
+        if (moveDist > 0.0f)
+            LookAt(targetPos, Vector3.Up);
+        
         if (dist <= moveDist)
         {
             // Hit logic
@@ -81,11 +92,11 @@ public partial class Projectile : Node3D
         {
             // Move
             GlobalPosition += toTarget.Normalized() * moveDist;
-            LookAt(targetPos, Vector3.Up);
         }
         
-        // Failsafe lifetime
-        if (GlobalPosition.DistanceSquaredTo(_owner.GlobalPosition) > 20000.0f) // 140m^2 approx
+        // Failsafe lifetime check using cached position if owner is dead
+        Vector3 checkPos = IsInstanceValid(_owner) ? _owner.GlobalPosition : _fireOrigin;
+        if (GlobalPosition.DistanceSquaredTo(checkPos) > 20000.0f) 
         {
             QueueFree();
         }
@@ -95,7 +106,21 @@ public partial class Projectile : Node3D
     {
         if (IsInstanceValid(_target))
         {
-            _target.TakeDamage((int)_damage);
+            // Use cached origin
+            int finalDamage = DamageCalculator.ResolveHit((int)_ap, _target, _fireOrigin);
+            
+            // Safe Owner Logic
+            string ownerName = IsInstanceValid(_owner) ? _owner.Name : "Unknown(Dead)";
+            
+            if (finalDamage > 0)
+            {
+                 GD.Print($"Hit! {ownerName} damaged {_target.Name} for {finalDamage} (AP: {_ap})");
+                 _target.TakeDamage(finalDamage);
+            }
+            else
+            {
+                 GD.Print($"Ricochet! {ownerName} hit {_target.Name} (AP: {_ap}) but did 0 damage.");
+            }
         }
         else
         {

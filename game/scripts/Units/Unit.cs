@@ -606,58 +606,79 @@ public partial class Unit : CharacterBody3D
 
     private void ScanAndFire()
     {
-       // Find best target for EACH weapon?
-       // Optimization: Find ONE best target for unit, engage with all compatible weapons.
-       // Usually RTS units fire all guns at main target, or secondary guns at others.
-       // Prototype: Main Target.
+       // 1. Gather potential targets (All enemies within max range of ANY weapon)
+       // Optimization: UnitManager could provide a spatial query, but for now iterate active units.
        
-       Unit bestTarget = FindBestTarget();
+       if (UnitManager.Instance == null) return;
        
+       List<Unit> candidates = new List<Unit>();
+       float maxUnitRange = 0;
+       foreach(var w in _weapons) if(w.Range > maxUnitRange) maxUnitRange = w.Range;
+       float maxRangeSq = maxUnitRange * maxUnitRange;
+       
+       foreach (var other in UnitManager.Instance.GetActiveUnits())
+       {
+            if (other == null || !IsInstanceValid(other) || other.IsQueuedForDeletion()) continue;
+            if (other == this || other.Team == this.Team) continue;
+            
+            float distSq = GlobalPosition.DistanceSquaredTo(other.GlobalPosition);
+            if (distSq <= maxRangeSq)
+            {
+                candidates.Add(other);
+            }
+       }
+       
+       // Sort candidates by distance (Closest first)
+       // Optimized sort for frame performance? List.Sort is usually fine for small counts.
+       candidates.Sort((a, b) => 
+            GlobalPosition.DistanceSquaredTo(a.GlobalPosition)
+            .CompareTo(GlobalPosition.DistanceSquaredTo(b.GlobalPosition)));
+       
+       // 2. Assign Targets per Weapon
        foreach (var w in _weapons)
        {
-           if (bestTarget != null)
+           Unit targetToEngage = null;
+           
+           // Check current target first (stickiness)
+           if (w.CurrentTarget != null && IsInstanceValid(w.CurrentTarget) && !w.CurrentTarget.IsQueuedForDeletion())
            {
-               if (CheckLineOfSight(bestTarget)) // Simple check
+               // Still valid?
+               float distSq = GlobalPosition.DistanceSquaredTo(w.CurrentTarget.GlobalPosition);
+               if (distSq <= w.Range * w.Range && w.CanPenetrate(w.CurrentTarget) && CheckLineOfSight(w.CurrentTarget))
                {
-                   w.Engage(bestTarget);
+                   targetToEngage = w.CurrentTarget;
                }
-               else
+           }
+           
+           // If no current target or it became invalid/invulnerable, find new one
+           if (targetToEngage == null)
+           {
+               foreach (var candidate in candidates)
                {
-                   w.StopEngaging();
+                   // Range Check
+                   float distSq = GlobalPosition.DistanceSquaredTo(candidate.GlobalPosition);
+                   if (distSq > w.Range * w.Range) continue; // List is sorted, but weapons have diff ranges
+                   
+                   // Penetration Check
+                   if (!w.CanPenetrate(candidate)) continue;
+                   
+                   // LOS Check (Expensive, do last)
+                   if (!CheckLineOfSight(candidate)) continue;
+                   
+                   targetToEngage = candidate;
+                   break; // Found closest valid target
                }
+           }
+           
+           if (targetToEngage != null)
+           {
+               w.Engage(targetToEngage);
            }
            else
            {
                w.StopEngaging();
            }
        }
-    }
-    
-    private Unit FindBestTarget()
-    {
-        // Simple global search
-        if (UnitManager.Instance == null) return null;
-        
-        float maxRange = 0;
-        foreach(var w in _weapons) if(w.Range > maxRange) maxRange = w.Range;
-        float rangeSq = maxRange * maxRange;
-
-        Unit best = null;
-        float bestDistSq = rangeSq;
-
-        foreach (var other in UnitManager.Instance.GetActiveUnits())
-        {
-            if (other == null || !IsInstanceValid(other) || other.IsQueuedForDeletion()) continue;
-            if (other == this || other.Team == this.Team) continue;
-
-            float distSq = GlobalPosition.DistanceSquaredTo(other.GlobalPosition);
-            if (distSq < bestDistSq)
-            {
-                 best = other;
-                 bestDistSq = distSq;
-            }
-        }
-        return best;
     }
     
     // Extracted for cleanliness
@@ -673,6 +694,8 @@ public partial class Unit : CharacterBody3D
          return false;
     }
     
+    private Node3D _rangeVisualRoot;
+
     public void SetSelected(bool selected)
     {
         _isSelected = selected;
@@ -681,6 +704,75 @@ public partial class Unit : CharacterBody3D
             _selectionData.Visible = selected;
         }
         UpdateHealthBar();
+        
+        // Range Visuals
+        if (selected)
+        {
+             CreateRangeVisuals();
+             if (_rangeVisualRoot != null) _rangeVisualRoot.Visible = true;
+        }
+        else
+        {
+             if (_rangeVisualRoot != null) _rangeVisualRoot.Visible = false;
+        }
+    }
+    
+    private void CreateRangeVisuals()
+    {
+        if (_rangeVisualRoot != null) return;
+        
+        _rangeVisualRoot = new Node3D();
+        _rangeVisualRoot.Name = "RangeVisuals";
+        _rangeVisualRoot.TopLevel = true; // Decouple transform completely
+        AddChild(_rangeVisualRoot); 
+        
+        // Group weapons by Range
+        var grouped = new Dictionary<float, List<string>>();
+        foreach(var w in _weapons)
+        {
+            if (!grouped.ContainsKey(w.Range)) grouped[w.Range] = new List<string>();
+            grouped[w.Range].Add(w.WeaponId);
+        }
+        
+        // Create visuals for each group
+        foreach (var kvp in grouped)
+        {
+             float range = kvp.Key;
+             List<string> names = kvp.Value;
+             
+             // Ring
+             var meshInst = new MeshInstance3D();
+             var torus = new TorusMesh();
+             torus.InnerRadius = range - 0.1f;
+             torus.OuterRadius = range; 
+             meshInst.Mesh = torus;
+             
+             var mat = new StandardMaterial3D();
+             // Same color as text: Faint White
+             mat.AlbedoColor = new Color(1, 1, 1, 0.15f); 
+             mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
+             mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+             meshInst.MaterialOverride = mat;
+             
+             _rangeVisualRoot.AddChild(meshInst);
+             
+             // Label
+             var label = new Label3D();
+             // Combine names: "Cannon, MG"
+             // Remove overlapping duplicates? e.g. "rifle, rifle" -> "rifle x2"?
+             // For now simple join
+             label.Text = $"{string.Join(", ", names)} ({range}m)";
+             label.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+             label.PixelSize = 0.05f; 
+             // Same Color as Radius (Requested)
+             label.Modulate = new Color(1, 1, 1, 0.5f); // 0.15 is too faint for text, using 0.5 but same hue (White)
+             // Position: North (Forward in Global Z terms is -Z)
+             // Since Root is GlobalRotation Zero, -Z is always "North" on map.
+             label.Position = new Vector3(0, 2.0f, -range); 
+             label.OutlineRenderPriority = 10;
+             
+             _rangeVisualRoot.AddChild(label);
+        }
     }
     
     public void MoveTo(Vector3 position)
@@ -793,6 +885,13 @@ public partial class Unit : CharacterBody3D
             {
                 _aimIndicatorRoot.LookAt(camera.GlobalPosition, Vector3.Up);
             }
+        }
+        
+        if (_rangeVisualRoot != null && _rangeVisualRoot.Visible)
+        {
+             // Keep position sync but reset rotation to Zero (North up)
+             _rangeVisualRoot.GlobalPosition = GlobalPosition;
+             _rangeVisualRoot.GlobalRotation = Vector3.Zero;
         }
     }
 }
