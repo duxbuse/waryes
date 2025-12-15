@@ -4,7 +4,8 @@ public partial class Projectile : Node3D
 {
     private Unit _target;
     private Unit _owner;
-    private float _ap; // Changed from _damage
+    private int _ap; 
+    private float _damageMultiplier = 1.0f;
     private float _speed = 50.0f;
     private Vector3 _lastKnownTargetPos;
     
@@ -16,11 +17,12 @@ public partial class Projectile : Node3D
 
     private Vector3 _fireOrigin;
 
-    public void Initialize(Unit owner, Unit target, int ap, bool isAccurate, Vector3 targetPosOverride)
+    public void Initialize(Unit owner, Unit target, int ap, float damageMultiplier, bool isAccurate, Vector3 targetPosOverride)
     {
         _owner = owner;
         _target = target;
         _ap = ap;
+        _damageMultiplier = damageMultiplier;
         _isAccurate = isAccurate;
         _targetPosOverride = targetPosOverride;
         
@@ -89,14 +91,14 @@ public partial class Projectile : Node3D
                  if (IsInstanceValid(_target))
                  {
                      int armor = DamageCalculator.GetProjectedArmor(_target, _fireOrigin);
-                     int potDamage = DamageCalculator.CalculateDamage((int)_ap, armor);
+                     float potDamage = DamageCalculator.CalculateDamage(_ap, armor, _damageMultiplier);
                      
                      if (potDamage > 0)
                      {
                          // Apply Suppression (Simulate damage * 1.5f)
                          float suppression = potDamage * 1.5f;
                          _target.TriggerSuppressionImpact(suppression, _fireOrigin);
-                         GD.Print($"Near Miss! {_target.Name} suppressed by {suppression} (Potential Dmg: {potDamage})");
+                         // GD.Print($"Near Miss! {_target.Name} suppressed by {suppression} (Potential Dmg: {potDamage})");
                      }
                  }
                  QueueFree();
@@ -121,19 +123,19 @@ public partial class Projectile : Node3D
         if (IsInstanceValid(_target))
         {
             // Use cached origin
-            int finalDamage = DamageCalculator.ResolveHit((int)_ap, _target, _fireOrigin);
+            float finalDamage = DamageCalculator.ResolveHit(_ap, _damageMultiplier, _target, _fireOrigin);
             
             // Safe Owner Logic
             string ownerName = IsInstanceValid(_owner) ? _owner.Name : "Unknown(Dead)";
             
             if (finalDamage > 0)
             {
-                 GD.Print($"Hit! {ownerName} damaged {_target.Name} for {finalDamage} (AP: {_ap})");
+                 // GD.Print($"Hit! {ownerName} damaged {_target.Name} for {finalDamage} (AP: {_ap})");
                  _target.TakeDamage(finalDamage, _owner);
             }
             else
             {
-                 GD.Print($"Ricochet! {ownerName} hit {_target.Name} (AP: {_ap}) but did 0 damage.");
+                 // GD.Print($"Ricochet! {ownerName} hit {_target.Name} (AP: {_ap}) but did 0 damage.");
             }
         }
         else

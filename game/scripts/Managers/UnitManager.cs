@@ -7,12 +7,14 @@ public partial class UnitManager : Node
     public static UnitManager Instance { get; private set; }
 
     private Dictionary<string, UnitData> _unitLibrary;
+    private Dictionary<string, WeaponStats> _weaponLibrary;
     private List<Unit> _activeUnits = new List<Unit>();
 
     public override void _Ready()
     {
         Instance = this;
         _unitLibrary = DataLoader.LoadUnits();
+        _weaponLibrary = DataLoader.LoadWeapons();
     }
 
     public Unit SpawnUnit(string unitId, Vector3 position, int veterancyLevel = 0)
@@ -50,6 +52,17 @@ public partial class UnitManager : Node
         return unit;
     }
     
+    public WeaponStats GetWeaponStats(string weaponId)
+    {
+        if (_weaponLibrary != null && _weaponLibrary.ContainsKey(weaponId))
+        {
+            return _weaponLibrary[weaponId];
+        }
+        // Fallback or error
+        GD.PrintErr($"UnitManager: Weapon stats not found for {weaponId}");
+        return null; // Handle null in caller
+    }
+
     public List<Unit> GetActiveUnits()
     {
         // Cleanup nulls or queued for deletion

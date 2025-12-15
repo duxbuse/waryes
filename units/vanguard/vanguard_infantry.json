@@ -1,29 +1,34 @@
 {
-    "id":  "vanguard_infantry",
-    "name":  "Infantry",
-    "cost":  40,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  10,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  20,
-                  "side":  20,
-                  "rear":  20,
-                  "top":  20
-              },
-    "fuel":  null,
-    "autonomy":  null,
-    "optics":  "Good",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_kinetic_rifle",
-                        "count":  9,
-                        "max_ammo":  300
-                    }
-                ]
+    "id": "vanguard_infantry",
+    "name": "Infantry",
+    "cost": 40,
+    "icon": "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health": 10,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "fuel": null,
+    "autonomy": null,
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_kinetic_rifle",
+            "count": 9,
+            "max_ammo": 300
+        },
+        {
+            "weapon_id": "vanguard_at_launcher",
+            "count": 1,
+            "max_ammo": 5
+        }
+    ]
 }

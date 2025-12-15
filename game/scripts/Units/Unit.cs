@@ -30,8 +30,8 @@ public partial class Unit : CharacterBody3D
     }
 
     // Combat
-    public int Health { get; private set; }
-    private int _maxHealth;
+    public float Health { get; private set; }
+    private float _maxHealth;
     
     // Morale
     public float Morale { get; private set; }
@@ -64,7 +64,7 @@ public partial class Unit : CharacterBody3D
         // Do NOT overwrite Name here, as UnitManager assigns a unique name (e.g. "enemy_tank_1")
         // Name = data.Id; 
         
-        Health = Data.Health > 0 ? Data.Health : 10; // Default if 0
+        Health = Data.Health > 0 ? Data.Health : 10.0f; // Default if 0
         _maxHealth = Health; // Store for health bar calculation
         
         // Morale Override
@@ -113,7 +113,7 @@ public partial class Unit : CharacterBody3D
             {
                 var w = new Weapon();
                 AddChild(w);
-                w.Initialize(this, wData.WeaponId);
+                w.Initialize(this, wData.WeaponId, wData.MaxAmmo);
                 _weapons.Add(w);
             }
         }
@@ -582,7 +582,7 @@ public partial class Unit : CharacterBody3D
         }
     }
 
-    public void TakeDamage(int amount, Vector3 sourcePosition)
+    public void TakeDamage(float amount, Vector3 sourcePosition)
     {
         Health -= amount;
         
@@ -620,13 +620,13 @@ public partial class Unit : CharacterBody3D
         UpdateStatusBars();
     }
     
-    public void TakeDamage(int amount, Unit attacker)
+    public void TakeDamage(float amount, Unit attacker)
     {
         if (IsInstanceValid(attacker)) _lastAttacker = attacker;
         TakeDamage(amount, attacker != null ? attacker.GlobalPosition : GlobalPosition);
     }
 
-    public void TakeDamage(int amount) 
+    public void TakeDamage(float amount) 
     {
         TakeDamage(amount, GlobalPosition + Vector3.Forward); 
     }
@@ -1001,6 +1001,11 @@ public partial class Unit : CharacterBody3D
     
     public void MoveTo(Vector3 position)
     {
+        if (IsRouting)
+        {
+            GD.Print($"{Name} is routing and ignores move command!");
+            return;
+        }
         _navAgent.TargetPosition = position;
         IsMoving = true;
     }
@@ -1070,7 +1075,8 @@ public partial class Unit : CharacterBody3D
             if (Velocity.LengthSquared() > 0.1f)
             {
                  Vector3 lookTarget = GlobalPosition + Velocity;
-                 if (GlobalPosition.DistanceSquaredTo(lookTarget) > 0.001f)
+                 // Avoid LookAt error if moving straight up/down
+                 if (GlobalPosition.DistanceSquaredTo(lookTarget) > 0.001f && Mathf.Abs(Velocity.Normalized().Dot(Vector3.Up)) < 0.99f)
                  {
                      LookAt(lookTarget, Vector3.Up);
                  }

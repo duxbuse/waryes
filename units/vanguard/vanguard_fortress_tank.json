@@ -1,42 +1,42 @@
 {
-    "id":  "vanguard_fortress_tank",
-    "name":  "Fortress Tank",
-    "cost":  320,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  12,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  250,
-                  "side":  250,
-                  "rear":  250,
-                  "top":  100
-              },
-    "fuel":  500,
-    "autonomy":  {
-                     "road":  300,
-                     "off_road":  200
-                 },
-    "optics":  "Very Good",
-    "stealth":  "None",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_twin_heavy_laser_cannon",
-                        "count":  2,
-                        "max_ammo":  100
-                    },
-                    {
-                        "weapon_id":  "vanguard_twin_heavy_auto_cannon",
-                        "count":  1,
-                        "max_ammo":  1000
-                    },
-                    {
-                        "weapon_id":  "vanguard_twin_kinetic_rifle",
-                        "count":  1,
-                        "max_ammo":  400
-                    }
-                ]
+    "id": "vanguard_fortress_tank",
+    "name": "Fortress Tank",
+    "cost": 320,
+    "icon": "assets/icons/factions/vanguard_faction_icon_main.png",
+    "health": 12,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 24,
+        "side": 18,
+        "rear": 14,
+        "top": 8
+    },
+    "fuel": 500,
+    "autonomy": {
+        "road": 300,
+        "off_road": 200
+    },
+    "optics": "Very Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_twin_heavy_laser_cannon",
+            "count": 2,
+            "max_ammo": 100
+        },
+        {
+            "weapon_id": "vanguard_twin_heavy_auto_cannon",
+            "count": 1,
+            "max_ammo": 1000
+        },
+        {
+            "weapon_id": "vanguard_twin_kinetic_rifle",
+            "count": 1,
+            "max_ammo": 400
+        }
+    ]
 }

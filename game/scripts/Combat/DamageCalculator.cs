@@ -4,10 +4,10 @@ using WarYes.Data;
 public static class DamageCalculator
 {
     // Return final damage
-    public static int ResolveHit(int ap, Unit target, Vector3 hitSourcePos)
+    public static float ResolveHit(int ap, float damageMultiplier, Unit target, Vector3 hitSourcePos)
     {
         int armor = GetProjectedArmor(target, hitSourcePos);
-        return CalculateDamage(ap, armor);
+        return CalculateDamage(ap, armor, damageMultiplier);
     }
 
     public static int GetProjectedArmor(Unit target, Vector3 hitSourcePos)
@@ -43,26 +43,24 @@ public static class DamageCalculator
         if (dot > 0.707f)
         {
             armor = target.Data.Armor.Front;
-            // GD.Print($"Hit Front Armor: {armor} (Dot: {dot})");
         }
         else if (dot < -0.707f)
         {
             armor = target.Data.Armor.Rear;
-            // GD.Print($"Hit Rear Armor: {armor} (Dot: {dot})");
         }
         else
         {
             armor = target.Data.Armor.Side;
-            // GD.Print($"Hit Side Armor: {armor} (Dot: {dot})");
         }
         
         return armor;
     }
 
-    public static int CalculateDamage(int ap, int armor)
+    public static float CalculateDamage(int ap, int armor, float multiplier = 1.0f)
     {
         // Formula: max(floor((ap - armour)/2)+1,0)
         float val = Mathf.FloorToInt((ap - armor) / 2.0f) + 1;
-        return Mathf.Max((int)val, 0);
+        float baseDmg = Mathf.Max(val, 0);
+        return baseDmg * multiplier;
     }
 }

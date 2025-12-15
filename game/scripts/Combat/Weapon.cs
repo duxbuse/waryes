@@ -26,42 +26,59 @@ public partial class Weapon : Node
         get 
         {
             if (_owner == null) return _baseAccuracy;
-            // +10% Accuracy (additive or multiplicative? Let's go multiplicative for safety so 0.1 doesn't become 0.2 instantly but 0.11)
-            // Actually user plan hinted +10%. Let's do additive 0.05 per rank? Or 10% of base.
-            // Let's do 10% multiplicative improvement (less miss chance).
-            // Actually let's do Flat +0.05 per rank. 
-            // Rank 3 = +0.15. 0.7 -> 0.85. Good.
-            return Mathf.Min(_baseAccuracy + (_owner.Rank * 0.05f), 1.0f);
+            // +0.05 per rank. 
+            float accuracy = Mathf.Min(_baseAccuracy + (_owner.Rank * 0.05f), 1.0f);
+            
+            // Morale Penalties
+            float moralePercent = _owner.Morale / _owner.MaxMorale;
+            if (moralePercent < 0.5f)
+            {
+                accuracy *= 0.25f; // < 50% Morale -> 25% Accuracy
+            }
+            else if (moralePercent < 1.0f)
+            {
+                accuracy *= 0.75f; // < 100% Morale -> 75% Accuracy
+            }
+            
+            return accuracy;
         }
         set { _baseAccuracy = value; }
     }
     public float Cooldown { get; private set; } = 0.0f;
     public int AP { get; set; } = 1; // Default low AP
+    public int MaxAmmo { get; set; } = -1; // -1 = Infinite
+    public int CurrentAmmo { get; private set; } = -1;
 
     private Unit _owner;
 
-    public void Initialize(Unit owner, string weaponId)
+    public void Initialize(Unit owner, string weaponId, int maxAmmo = -1)
     {
         _owner = owner;
         WeaponId = weaponId;
+        MaxAmmo = maxAmmo;
+        CurrentAmmo = MaxAmmo;
         
         // Simulating data lookup for now (should come from a centralized Weapon Database)
         if (weaponId.Contains("cannon"))
         {
-            Range = 40.0f; // Reduced from 80
-            Damage = 2.5f; // Base Damage (multiplier really)
-            // User Formula: Damage = max(floor((ap - armour)/2)+1,0)
-            // Wait, does Damage property replace the formula result?
-            // "Damage" variable here might be "Base Damage Multiplier" or unused if formula is purely AP-based?
-            // User Plan says: "Damage = BaseDamage * (Formula?)" No, plan says: "Damage = max(...)"
-            // Let's assume hitting "soft" targets (Armor 0) yields: Floor(AP/2)+1. 
-            // e.g. AP 12 -> 7 Damage.
+            Range = 40.0f; 
+            Damage = 2.5f; 
             
-            AP = 12; 
+            // Rebalanced AP (Targeting scale 20-25 for Heavy AT)
+            AP = 22; 
             
             FireRate = 0.25f; // Slower: 1 shot per 4s (Cooldown)
             AimTime = 2.0f; // Takes 2s to aim
             Accuracy = 0.7f; // 30% miss chance
+        }
+        else if (weaponId.Contains("at_launcher"))
+        {
+            Range = 25.0f; // Short Range
+            AP = 18; // Moderate AP (Hits Rear 8-14, Struggles vs Front 20+)
+            FireRate = 0.25f; // Slow fire
+            AimTime = 1.5f;
+            Accuracy = 0.85f; // Good accuracy
+            Damage = 1.0f; 
         }
         else if (weaponId.Contains("rifle") || weaponId.Contains("gun"))
         {
@@ -80,13 +97,12 @@ public partial class Weapon : Node
     {
         if (target != CurrentTarget)
         {
+            if (!CanFire()) return; 
+            
             // Check if we can even hurt them?
-            // Actually, best to check before setting target. But if forced:
             if (!CanPenetrate(target)) 
             {
-                 // GD.Print($"{_owner.Name} cannot penetrate {target.Name}. Holding fire.");
-                 // Should we engage implies "Aim" but don't fire?
-                 // User request: "aim, but not fire"
+                 // Don't aim if we can't scratch them?
             }
             
             CurrentTarget = target;
@@ -98,7 +114,7 @@ public partial class Weapon : Node
     {
         // Projected armor check
         int projectedArmor = DamageCalculator.GetProjectedArmor(target, _owner.GlobalPosition);
-        int predictedDamage = DamageCalculator.CalculateDamage(AP, projectedArmor);
+        int predictedDamage = (int)DamageCalculator.CalculateDamage(AP, projectedArmor, Damage);
         return predictedDamage > 0;
     }
 
@@ -142,6 +158,9 @@ public partial class Weapon : Node
 
     public bool CanFire()
     {
+        if (_owner != null && _owner.IsRouting) return false;
+        if (MaxAmmo > 0 && CurrentAmmo <= 0) return false;
+        
         return Cooldown <= 0;
     }
 
@@ -150,6 +169,16 @@ public partial class Weapon : Node
         if (!CanFire()) return;
 
         Cooldown = 1.0f / FireRate;
+        
+        if (MaxAmmo > 0)
+        {
+            CurrentAmmo--;
+            if (CurrentAmmo <= 0)
+            {
+                StopEngaging();
+                // GD.Print($"{_owner.Name} is out of ammo for {WeaponId}!");
+            }
+        }
         
         // Accuracy Check
         float roll = GD.Randf();
@@ -173,6 +202,6 @@ public partial class Weapon : Node
         _owner.GetTree().Root.AddChild(projectile);
         projectile.GlobalPosition = _owner.GlobalPosition + Vector3.Up * 2.0f; // Fire from "turret" height
 
-        projectile.Initialize(_owner, target, AP, isAccurate, targetPos);
+        projectile.Initialize(_owner, target, AP, Damage, isAccurate, targetPos);
     }
 }

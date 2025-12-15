@@ -104,4 +104,48 @@ public static class DataLoader
         GD.Print($"DataLoader: Loaded {divisions.Count} divisions.");
         return divisions;
     }
+
+    public static Dictionary<string, WeaponStats> LoadWeapons()
+    {
+        var weapons = new Dictionary<string, WeaponStats>();
+        string projectPath = ProjectSettings.GlobalizePath("res://");
+        string weaponsPath = Path.GetFullPath(Path.Combine(projectPath, "../weapons"));
+
+        GD.Print($"DataLoader: Loading weapons from: {weaponsPath}");
+
+        if (!Directory.Exists(weaponsPath))
+        {
+            GD.PrintErr($"DataLoader: Weapons directory not found at {weaponsPath}");
+            return weapons;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(weaponsPath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                string json = File.ReadAllText(file);
+                WeaponStats data = JsonSerializer.Deserialize<WeaponStats>(json, _jsonOptions);
+                
+                // Use filename as ID if not specified (though WeaponStats doesn't have ID in JSON usually, we inject it)
+                string id = Path.GetFileNameWithoutExtension(file);
+                data.Id = id;
+
+                if (!weapons.ContainsKey(id))
+                {
+                    weapons.Add(id, data);
+                }
+                else
+                {
+                    GD.PrintErr($"DataLoader: Duplicate weapon ID found: {id} in {file}");
+                }
+            }
+            catch (System.Exception e)
+            {
+                GD.PrintErr($"DataLoader: Failed to load weapon {file}: {e.Message}");
+            }
+        }
+        
+        GD.Print($"DataLoader: Loaded {weapons.Count} weapons.");
+        return weapons;
+    }
 }

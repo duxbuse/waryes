@@ -207,6 +207,8 @@ public partial class GameManager : Node
 
 			foreach (var unit in selectedUnits)
 			{
+				if (!IsInstanceValid(unit) || unit.IsQueuedForDeletion()) continue;
+
 				// Adding small random offset so they don't stack perfectly
 				Vector3 offset = new Vector3(GD.Randf() * 2 - 1, 0, GD.Randf() * 2 - 1);
 				unit.MoveTo(intersection.Value + offset);
