@@ -52,6 +52,14 @@ public partial class UnitManager : Node
     
     public List<Unit> GetActiveUnits()
     {
+        // Cleanup nulls or queued for deletion
+        for (int i = _activeUnits.Count - 1; i >= 0; i--)
+        {
+            if (_activeUnits[i] == null || !IsInstanceValid(_activeUnits[i]) || _activeUnits[i].IsQueuedForDeletion())
+            {
+                _activeUnits.RemoveAt(i);
+            }
+        }
         return _activeUnits;
     }
 }

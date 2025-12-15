@@ -24,6 +24,9 @@ namespace WarYes.Data
         [JsonPropertyName("forward_deploy")]
         public int ForwardDeploy { get; set; }
 
+        [JsonPropertyName("is_commander")]
+        public bool IsCommander { get; set; }
+
         public WeaponEntry[] Weapons { get; set; }
     }
 

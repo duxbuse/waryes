@@ -23,6 +23,44 @@ public partial class MapBuilder : Node3D
         // Forest
         CreateForest("Forest", new Vector3(-20, 0, -20), 30);
         CreateBoundary("ForestBoundary", new Vector3(-20, 0.01f, -20), new Vector2(30, 30), new Color(0, 0.5f, 0, 0.3f));
+        
+        // Capture Zone (Bottom Right)
+        CreateCaptureZone("ObjectiveAlpha", new Vector3(20, 0, 20));
+    }
+
+    private void CreateCaptureZone(string name, Vector3 pos)
+    {
+        var zone = new CaptureZone();
+        zone.Name = name;
+        zone.Position = pos;
+        
+        // Add Collision
+        var collisionShape = new CollisionShape3D();
+        var shape = new CylinderShape3D();
+        shape.Radius = 15.0f;
+        shape.Height = 2.0f;
+        collisionShape.Shape = shape;
+        zone.AddChild(collisionShape);
+        
+        // Add Visuals (MeshInstance3D expected by CaptureZone script)
+        var meshInstance = new MeshInstance3D();
+        meshInstance.Name = "MeshInstance3D";
+        var mesh = new CylinderMesh();
+        mesh.TopRadius = 15.0f;
+        mesh.BottomRadius = 15.0f;
+        mesh.Height = 0.5f;
+        meshInstance.Mesh = mesh;
+        
+        // Material will be overridden by CaptureZone script logic, but checking just in case
+        var mat = new StandardMaterial3D();
+        mat.AlbedoColor = new Color(0.5f, 0.5f, 0.5f);
+        mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        mat.AlbedoColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+        meshInstance.MaterialOverride = mat;
+        
+        zone.AddChild(meshInstance);
+        
+        AddChild(zone);
     }
 
     private void CreateRoadLines(Vector3 center, float length, float width)

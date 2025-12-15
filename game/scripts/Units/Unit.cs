@@ -103,7 +103,107 @@ public partial class Unit : CharacterBody3D
             _weapons.Add(w);
         }
         
-        GD.Print($"Unit {Name} initialized: Team={Team}, Weapons={_weapons.Count}, Health={Health}");
+        IsCommander = Data.IsCommander;
+        if (IsCommander)
+        {
+             CreateCommanderVisuals();
+        }
+        
+        // Setup Veterancy Visuals (Buffered icon)
+        CreateVeterancyIcon();
+        
+        GD.Print($"Unit {Name} initialized: Team={Team}, Weapons={_weapons.Count}, Health={Health}, Commander={IsCommander}");
+    }
+
+    public bool IsCommander { get; private set; }
+    private Node3D _commanderAura;
+    private Sprite3D _veterancyIcon;
+
+    private void CreateCommanderVisuals()
+    {
+        if (_commanderAura != null) return;
+        
+        _commanderAura = new Node3D();
+        _commanderAura.Name = "CommanderAura";
+        _visualRoot.AddChild(_commanderAura);
+        
+        // 20m Radius Ring (40% of previous 50m)
+        float radius = 20.0f;
+        
+        var meshInst = new MeshInstance3D();
+        var torus = new TorusMesh();
+        torus.InnerRadius = radius - 0.5f; 
+        torus.OuterRadius = radius;
+        meshInst.Mesh = torus;
+        
+        var mat = new StandardMaterial3D();
+        mat.AlbedoColor = new Color(1, 1, 1, 0.3f); // Faint White
+        mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
+        mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        meshInst.MaterialOverride = mat;
+        
+        _commanderAura.AddChild(meshInst);
+    }
+    
+    private void CreateVeterancyIcon()
+    {
+         if (_veterancyIcon != null) return;
+         
+        // Simple Billboard Sprite above unit
+        _veterancyIcon = new Sprite3D();
+        _veterancyIcon.Name = "VetIcon";
+        // Create a simple chevron texture procedurally if asset missing
+        // For now, let's use a placeholder or draw one
+        var image = Image.Create(32, 32, false, Image.Format.Rgba8);
+        // Draw Chevron... crude
+        for(int x=0; x<32; x++)
+            for(int y=0; y<32; y++)
+            {
+                 // V shape logic...
+                 // y = abs(x-16) roughly
+                 int centerDist = Mathf.Abs(x - 16);
+                 if (y > centerDist && y < centerDist + 4) 
+                     image.SetPixel(x, y, new Color(1, 1, 1)); // Top V
+                 if (y > centerDist + 8 && y < centerDist + 12)
+                     image.SetPixel(x, y, new Color(1, 1, 1)); // Bottom V
+            }
+            
+        var tex = ImageTexture.CreateFromImage(image);
+        _veterancyIcon.Texture = tex;
+        _veterancyIcon.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _veterancyIcon.PixelSize = 0.02f;
+        _veterancyIcon.Position = new Vector3(0, 4, 0); // Above health bar
+        _veterancyIcon.Visible = false; // Hidden by default
+        
+        AddChild(_veterancyIcon);
+    }
+    
+    private void UpdateVeterancyStatus()
+    {
+         if (IsCommander) 
+         {
+             if (_veterancyIcon != null) _veterancyIcon.Visible = false; 
+             return; 
+         }
+         
+         if (UnitManager.Instance == null) return;
+         
+         bool buffed = false;
+         foreach(var u in UnitManager.Instance.GetActiveUnits())
+         {
+             if (u == this) continue;
+             if (u.IsCommander && u.Team == this.Team)
+             {
+                 // Check 20m radius (20*20 = 400)
+                 if (GlobalPosition.DistanceSquaredTo(u.GlobalPosition) < 400.0f)
+                 {
+                     buffed = true;
+                     break;
+                 }
+             }
+         }
+         
+         if (_veterancyIcon != null) _veterancyIcon.Visible = buffed;
     }
     
     private void CreateVisuals()
@@ -666,6 +766,10 @@ public partial class Unit : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        // Low freq update for visuals?
+        // Let's do every frame for smooth popping for now, or use timer
+        UpdateVeterancyStatus();
+
         // Update TopLevel Positions manually
         if (_healthBarRoot != null && _healthBarRoot.Visible)
         {

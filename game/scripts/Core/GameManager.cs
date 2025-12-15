@@ -28,6 +28,11 @@ public partial class GameManager : Node
         EconomyManager.Name = "EconomyManager";
         AddChild(EconomyManager);
         
+        ObjectiveManager = new ObjectiveManager();
+        ObjectiveManager.Name = "ObjectiveManager";
+        ObjectiveManager.MatchEnded += OnMatchEnded;
+        AddChild(ObjectiveManager);
+        
         // Load Data
         _unitLibrary = DataLoader.LoadUnits();
         _divisions = DataLoader.LoadDivisions();
@@ -36,6 +41,8 @@ public partial class GameManager : Node
         CallDeferred(nameof(StartSetupPhase));
     }
     
+    public ObjectiveManager ObjectiveManager;
+
     private void StartSetupPhase()
     {
         GD.Print("GameManager: Starting Setup Phase...");
@@ -52,6 +59,7 @@ public partial class GameManager : Node
         }
 
         EconomyManager.StartEconomy(); // Start income ticking
+        ObjectiveManager.StartMatch(); // Start scoring ticks
         
         // Setup UI
         DeploymentUI = new DeploymentUI();
@@ -170,7 +178,14 @@ public partial class GameManager : Node
                 unit.MoveTo(intersection.Value + offset);
             }
             
+            
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    private void OnMatchEnded(string winner)
+    {
+        GD.Print($"GAME OVER! Winner: {winner}");
+        GetTree().Paused = true;
     }
 }
