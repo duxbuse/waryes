@@ -84,7 +84,21 @@ public partial class Projectile : Node3D
              }
              else
              {
-                 // Missed (hit ground/air)
+                 // Missed (landing near target)
+                 // Check if we should apply suppression (Near Miss)
+                 if (IsInstanceValid(_target))
+                 {
+                     int armor = DamageCalculator.GetProjectedArmor(_target, _fireOrigin);
+                     int potDamage = DamageCalculator.CalculateDamage((int)_ap, armor);
+                     
+                     if (potDamage > 0)
+                     {
+                         // Apply Suppression (Simulate damage * 1.5f)
+                         float suppression = potDamage * 1.5f;
+                         _target.TriggerSuppressionImpact(suppression, _fireOrigin);
+                         GD.Print($"Near Miss! {_target.Name} suppressed by {suppression} (Potential Dmg: {potDamage})");
+                     }
+                 }
                  QueueFree();
              }
         }
@@ -115,7 +129,7 @@ public partial class Projectile : Node3D
             if (finalDamage > 0)
             {
                  GD.Print($"Hit! {ownerName} damaged {_target.Name} for {finalDamage} (AP: {_ap})");
-                 _target.TakeDamage(finalDamage);
+                 _target.TakeDamage(finalDamage, _owner);
             }
             else
             {

@@ -6,9 +6,35 @@ public partial class Weapon : Node
     public string WeaponId { get; private set; }
     public float Range { get; set; } = 50.0f; // in meters (game units)
     public float Damage { get; set; } = 1.0f;
-    public float FireRate { get; set; } = 1.0f; // shots per second
+    private float _baseFireRate = 1.0f;
+    public float FireRate 
+    { 
+        get 
+        {
+            if (_owner == null) return _baseFireRate;
+            // +20% Fire Rate per Rank
+            return _baseFireRate * (1.0f + (_owner.Rank * 0.2f));
+        }
+        set { _baseFireRate = value; }
+    }
+
     public float AimTime { get; set; } = 1.0f; // Seconds to aim before firing
-    public float Accuracy { get; set; } = 0.8f; // 0.0 to 1.0
+    
+    private float _baseAccuracy = 0.8f;
+    public float Accuracy 
+    { 
+        get 
+        {
+            if (_owner == null) return _baseAccuracy;
+            // +10% Accuracy (additive or multiplicative? Let's go multiplicative for safety so 0.1 doesn't become 0.2 instantly but 0.11)
+            // Actually user plan hinted +10%. Let's do additive 0.05 per rank? Or 10% of base.
+            // Let's do 10% multiplicative improvement (less miss chance).
+            // Actually let's do Flat +0.05 per rank. 
+            // Rank 3 = +0.15. 0.7 -> 0.85. Good.
+            return Mathf.Min(_baseAccuracy + (_owner.Rank * 0.05f), 1.0f);
+        }
+        set { _baseAccuracy = value; }
+    }
     public float Cooldown { get; private set; } = 0.0f;
     public int AP { get; set; } = 1; // Default low AP
 

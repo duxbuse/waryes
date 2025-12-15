@@ -15,7 +15,7 @@ public partial class UnitManager : Node
         _unitLibrary = DataLoader.LoadUnits();
     }
 
-    public Unit SpawnUnit(string unitId, Vector3 position)
+    public Unit SpawnUnit(string unitId, Vector3 position, int veterancyLevel = 0)
     {
         // Strip "enemy_" prefix for data lookup
         string lookupId = unitId.Replace("enemy_", "");
@@ -44,7 +44,7 @@ public partial class UnitManager : Node
         container.AddChild(unit);
         GD.Print($"UnitManager: Added {unit.Name} to {container.Name}");
         
-        unit.Initialize(data); // Visuals created here now
+        unit.Initialize(data, veterancyLevel); // Visuals created here now
         
         _activeUnits.Add(unit);
         return unit;
