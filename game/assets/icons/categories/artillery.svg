@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <path d="M12 48 L52 48 L56 56 L8 56 Z" fill="white"/> <!-- Base -->
+  <path d="M20 48 L44 48 L40 36 L24 36 Z" fill="white"/> <!-- Mount -->
+  <path d="M28 38 L36 38 L48 10 L40 10 Z" fill="white"/> <!-- Barrel -->
+</svg>

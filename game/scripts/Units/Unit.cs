@@ -11,6 +11,11 @@ public partial class Unit : CharacterBody3D
     public MoveMode CurrentMoveMode { 
         get { return _currentCommand != null ? _currentCommand.MoveMode : MoveMode.Normal; } 
     }
+    
+    // Tactical View
+    private Sprite3D _tacticalIcon;
+    private const float TACTICAL_VIEW_HEIGHT_THRESHOLD = 30.0f;
+    private bool _inTacticalView = false;
 
     public class Command
     {
@@ -56,6 +61,22 @@ public partial class Unit : CharacterBody3D
 
         _navAgent.VelocityComputed += OnVelocityComputed;
         AddChild(_navAgent);
+    }
+
+
+
+    private void SetTacticalView(bool active)
+    {
+        _inTacticalView = active;
+        
+        if (_tacticalIcon == null) CreateTacticalIcon();
+        if (_tacticalIcon != null) _tacticalIcon.Visible = active;
+        
+        if (_visuals != null) _visuals.Visible = !active;
+        if (_unitUI != null) _unitUI.Visible = !active;
+        
+        // We might want to keep selection ring visible?
+        // _selectionData is separate.
     }
 
     // Combat
@@ -212,6 +233,10 @@ public partial class Unit : CharacterBody3D
         
         _unitUI.Initialize(Data.Id, Name, (int)_maxHealth, category, IsCommander);
         _unitUI.UpdateHealth((int)Health);
+        
+        // Ensure visibility is correct on init
+        if (_inTacticalView) _unitUI.Visible = false;
+
     }
 
 
@@ -438,6 +463,55 @@ public partial class Unit : CharacterBody3D
         _ammoIcon.Visible = false; // Hidden by default
         
         AddChild(_ammoIcon);
+    }
+
+    private void CreateTacticalIcon()
+    {
+        if (_tacticalIcon != null) return;
+        
+        _tacticalIcon = new Sprite3D();
+        _tacticalIcon.Name = "TacticalIcon";
+        _tacticalIcon.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _tacticalIcon.PixelSize = 0.03f; // Small size appropriate for tactical view
+        _tacticalIcon.NoDepthTest = true; // Always visible on top
+        _tacticalIcon.Modulate = Team == "Player" ? new Color(0.2f, 0.5f, 1.0f) : new Color(1.0f, 0.2f, 0.2f); // Team Color
+        
+        string iconName = GetCategoryIconName();
+        string path = $"res://assets/icons/categories/{iconName}.svg";
+        
+        var tex = GD.Load<Texture2D>(path);
+        if (tex != null)
+        {
+            _tacticalIcon.Texture = tex;
+        }
+        else
+        {
+            GD.PrintErr($"Failed to load tactical icon: {path}");
+        }
+        
+        _tacticalIcon.Visible = false;
+        AddChild(_tacticalIcon);
+        // Position it slightly up so it's not clipping terrain
+        _tacticalIcon.Position = new Vector3(0, 2.0f, 0);
+    }
+
+    private string GetCategoryIconName()
+    {
+        string id = Data.Id.ToLower();
+        
+        if (id.Contains("vtol") || id.Contains("gunship") || id.Contains("air") || id.Contains("heli") || id.Contains("jet")) return "vtol";
+        if (id.Contains("artillery") || id.Contains("mortar") || id.Contains("howitzer") || id.Contains("mlrs")) return "artillery";
+        if (id.Contains("aa") || id.Contains("anti-air") || id.Contains("flak") || id.Contains("sam")) return "anti_air";
+        if (id.Contains("recon") || id.Contains("scout")) return "recon";
+        if (id.Contains("tank") || id.Contains("mbt")) return "tank";
+        if (id.Contains("apc") || id.Contains("ifv") || id.Contains("transport") || id.Contains("carrier")) return "apc";
+        if (id.Contains("supply") || id.Contains("logistics") || id.Contains("support") || id.Contains("truck") || id.Contains("repair")) return "support";
+        if (id.Contains("infantry") || id.Contains("soldier") || id.Contains("trooper") || id.Contains("squad") || id.Contains("rifle") || id.Contains("engineer") || id.Contains("grenadier")) return "infantry";
+        
+        // Fallbacks
+        if (Data.Fuel.HasValue || id.Contains("vehicle")) return "tank"; // Generic vehicle
+        
+        return "infantry"; // Default
     }
 
     public void CheckAmmoStatus()
@@ -1382,6 +1456,18 @@ public partial class Unit : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        // Tactical View Toggle
+        var viewport = GetViewport();
+        if (viewport != null && viewport.GetCamera3D() != null)
+        {
+            float cameraHeight = viewport.GetCamera3D().GlobalPosition.Y;
+            bool shouldBeTactical = cameraHeight > TACTICAL_VIEW_HEIGHT_THRESHOLD;
+            
+            if (shouldBeTactical != _inTacticalView)
+            {
+                SetTacticalView(shouldBeTactical);
+            }
+        }
         // Low freq update for visuals?
         // Let's do every frame for smooth popping for now, or use timer
         UpdateVeterancyStatus();

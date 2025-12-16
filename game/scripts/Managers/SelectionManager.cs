@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 
 public partial class SelectionManager : Node2D
 {
@@ -34,8 +35,67 @@ public partial class SelectionManager : Node2D
         }
     }
 
+    public event System.Action OnSelectionChanged;
+
+    private int _primaryTypeIndex = 0;
+    
+    public Unit GetPrimaryUnit()
+    {
+        if (SelectedUnits.Count == 0) return null;
+        
+        // Group by ID to find types
+        var types = GetSelectedTypes();
+        if (types.Count == 0) return SelectedUnits[0]; // Fallback
+        
+        // Wrap index
+        if (_primaryTypeIndex >= types.Count) _primaryTypeIndex = 0;
+        
+        string targetId = types[_primaryTypeIndex];
+        return SelectedUnits.FirstOrDefault(u => u.Data.Id == targetId);
+    }
+    
+    public List<string> GetSelectedTypes()
+    {
+        // Return distinct unit IDs
+        List<string> types = new List<string>();
+        foreach(var u in SelectedUnits)
+        {
+            if (!types.Contains(u.Data.Id)) types.Add(u.Data.Id);
+        }
+        return types;
+    }
+    
+    public void CycleSelectionType()
+    {
+        var types = GetSelectedTypes();
+        if (types.Count <= 1) return;
+        
+        _primaryTypeIndex++;
+        if (_primaryTypeIndex >= types.Count) _primaryTypeIndex = 0;
+        
+        OnSelectionChanged?.Invoke();
+    }
+    
+    public void SetPrimaryType(string unitId)
+    {
+        var types = GetSelectedTypes();
+        int idx = types.IndexOf(unitId);
+        if (idx != -1)
+        {
+            _primaryTypeIndex = idx;
+            OnSelectionChanged?.Invoke();
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
+         if (@event.IsActionPressed("ui_focus_next")) // Tab usually
+         {
+             CycleSelectionType();
+             GetViewport().SetInputAsHandled();
+             return;
+         }
+
         if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
         {
             // Ignore if command keys are pressed (let GameManager handle it)
@@ -89,12 +149,17 @@ public partial class SelectionManager : Node2D
                 }
                 GetViewport().SetInputAsHandled();
             }
+             // Tab check moved to top for ease
         }
     }
 
     private void SelectAt(Vector2 screenPos)
     {
-        ClearSelection();
+        // Helper to check if Shift is held (Add to selection)
+        bool shift = Input.IsKeyPressed(Key.Shift);
+        if (!shift) ClearSelection();
+        
+        // ... Raycast logic ...
         
         var camera = GetViewport().GetCamera3D();
         if (camera == null) return;
@@ -119,19 +184,19 @@ public partial class SelectionManager : Node2D
                 AddUnit(unit);
             }
         }
+        // If we didn't hit anything and not shift, clear? SelectAt called ClearSelection above.
+        
+        OnSelectionChanged?.Invoke();
     }
     
     private void SelectInRect(Vector2 start, Vector2 end)
     {
-        ClearSelection();
+        bool shift = Input.IsKeyPressed(Key.Shift);
+        if (!shift) ClearSelection();
         
         var rect = GetScreenRect(start, end);
         var camera = GetViewport().GetCamera3D();
         if (camera == null) return;
-        
-        // Brute force check all units (efficient enough for <5000 units on CPU usually)
-        // Optimization: Use PhysicsShapeQuery with a ConvexPolygon created from camera frustum planes
-        // For prototype: Screen-space check
         
         foreach (var unit in UnitManager.Instance.GetActiveUnits())
         {
@@ -147,6 +212,8 @@ public partial class SelectionManager : Node2D
                 AddUnit(unit);
             }
         }
+        
+        OnSelectionChanged?.Invoke();
     }
     
     private Rect2 GetScreenRect(Vector2 start, Vector2 end)
@@ -181,6 +248,10 @@ public partial class SelectionManager : Node2D
             }
         }
         SelectedUnits.Clear();
+        _primaryTypeIndex = 0; // Reset
+        // OnSelectionChanged invoked by caller (SelectAt/SelectInRect) to avoid spam? 
+        // Or trigger here? Better here if called from external. But callers usually batch.
+        // Let's rely on callers.
     }
 
     private void AddUnit(Unit unit)
