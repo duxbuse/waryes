@@ -1,38 +1,38 @@
 {
-    "id":  "sdf_tremor_cannon",
-    "name":  "Tremor Cannon",
-    "cost":  100,
-    "icon":  "assets/icons/units/sdf/sdf_tremor_cannon.png",
-    "health":  7,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  40,
-                  "side":  30,
-                  "rear":  15,
-                  "top":  10
-              },
-    "fuel":  400,
-    "autonomy":  {
-                     "road":  400,
-                     "off_road":  250
-                 },
-    "optics":  "Normal",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_howitzer_155mm",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "ART"
+    "id": "sdf_tremor_cannon",
+    "name": "Tremor Cannon",
+    "cost": 100,
+    "icon": "assets/icons/units/sdf/sdf_tremor_cannon.png",
+    "health": 7,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 40,
+        "side": 30,
+        "rear": 15,
+        "top": 10
+    },
+    "fuel": 400,
+    "autonomy": {
+        "road": 400,
+        "off_road": 250
+    },
+    "optics": "Normal",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_howitzer_155mm",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "SUP"
 }

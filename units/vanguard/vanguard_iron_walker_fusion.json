@@ -1,38 +1,38 @@
 {
-    "id":  "vanguard_iron_walker_fusion",
-    "name":  "Iron Walker Fusion",
-    "cost":  110,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  5,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  100,
-                  "side":  80,
-                  "rear":  60,
-                  "top":  40
-              },
-    "fuel":  300,
-    "autonomy":  {
-                     "road":  150,
-                     "off_road":  100
-                 },
-    "optics":  "Good",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_heavy_fusion_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "vanguard_walker_fist",
-                        "count":  1,
-                        "max_ammo":  20
-                    }
-                ],
-    "category":  "INF"
+    "id": "vanguard_iron_walker_fusion",
+    "name": "Iron Walker Fusion",
+    "cost": 110,
+    "icon": "assets/icons/units/vanguard/vanguard_iron_walker_fusion.png",
+    "health": 5,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 100,
+        "side": 80,
+        "rear": 60,
+        "top": 40
+    },
+    "fuel": 300,
+    "autonomy": {
+        "road": 150,
+        "off_road": 100
+    },
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_heavy_fusion_cannon",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "vanguard_walker_fist",
+            "count": 1,
+            "max_ammo": 20
+        }
+    ],
+    "category": "TNK"
 }

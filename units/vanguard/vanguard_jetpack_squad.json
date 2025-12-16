@@ -1,35 +1,35 @@
 {
-    "id":  "vanguard_jetpack_squad",
-    "name":  "Jetpack Squad",
-    "cost":  50,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  5,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  20,
-                  "side":  20,
-                  "rear":  20,
-                  "top":  20
-              },
-    "fuel":  null,
-    "autonomy":  null,
-    "optics":  "Good",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_kinetic_pistol",
-                        "count":  5,
-                        "max_ammo":  20
-                    },
-                    {
-                        "weapon_id":  "vanguard_saw_blade",
-                        "count":  5,
-                        "max_ammo":  20
-                    }
-                ],
-    "category":  "INF"
+    "id": "vanguard_jetpack_squad",
+    "name": "Jetpack Squad",
+    "cost": 50,
+    "icon": "assets/icons/units/vanguard/vanguard_jetpack_squad.png",
+    "health": 5,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "fuel": null,
+    "autonomy": null,
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_kinetic_pistol",
+            "count": 5,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "vanguard_saw_blade",
+            "count": 5,
+            "max_ammo": 20
+        }
+    ],
+    "category": "INF"
 }

@@ -1,43 +1,43 @@
 {
-    "id":  "vanguard_titan_dropship",
-    "name":  "Titan Dropship",
-    "cost":  600,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  12,
-    "speed":  {
-                  "road":  300,
-                  "off_road":  300
-              },
-    "armor":  {
-                  "front":  100,
-                  "side":  80,
-                  "rear":  60,
-                  "top":  60
-              },
-    "fuel":  10000,
-    "autonomy":  {
-                     "road":  5000,
-                     "off_road":  5000
-                 },
-    "optics":  "Exceptional",
-    "stealth":  "None",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_turbo_laser",
-                        "count":  1,
-                        "max_ammo":  20
-                    },
-                    {
-                        "weapon_id":  "vanguard_air_laser_cannon",
-                        "count":  2,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "vanguard_heavy_bolter_pintle",
-                        "count":  4,
-                        "max_ammo":  20
-                    }
-                ],
-    "category":  "INF"
+    "id": "vanguard_titan_dropship",
+    "name": "Titan Dropship",
+    "cost": 600,
+    "icon": "assets/icons/units/vanguard/vanguard_titan_dropship.png",
+    "health": 12,
+    "speed": {
+        "road": 300,
+        "off_road": 300
+    },
+    "armor": {
+        "front": 100,
+        "side": 80,
+        "rear": 60,
+        "top": 60
+    },
+    "fuel": 10000,
+    "autonomy": {
+        "road": 5000,
+        "off_road": 5000
+    },
+    "optics": "Exceptional",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_turbo_laser",
+            "count": 1,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "vanguard_air_laser_cannon",
+            "count": 2,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "vanguard_heavy_bolter_pintle",
+            "count": 4,
+            "max_ammo": 20
+        }
+    ],
+    "category": "AIR"
 }

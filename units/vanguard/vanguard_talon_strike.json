@@ -1,38 +1,38 @@
 {
-    "id":  "vanguard_talon_strike",
-    "name":  "Talon Strike",
-    "cost":  170,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  5,
-    "speed":  {
-                  "road":  700,
-                  "off_road":  700
-              },
-    "armor":  {
-                  "front":  30,
-                  "side":  30,
-                  "rear":  30,
-                  "top":  30
-              },
-    "fuel":  1500,
-    "autonomy":  {
-                     "road":  1500,
-                     "off_road":  1500
-                 },
-    "optics":  "Good",
-    "stealth":  "Good",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_air_laser_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "vanguard_typhoon_missile",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "INF"
+    "id": "vanguard_talon_strike",
+    "name": "Talon Strike",
+    "cost": 170,
+    "icon": "assets/icons/units/vanguard/vanguard_talon_strike.png",
+    "health": 5,
+    "speed": {
+        "road": 700,
+        "off_road": 700
+    },
+    "armor": {
+        "front": 30,
+        "side": 30,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 1500,
+    "autonomy": {
+        "road": 1500,
+        "off_road": 1500
+    },
+    "optics": "Good",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_air_laser_cannon",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "vanguard_typhoon_missile",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "AIR"
 }

@@ -1,38 +1,38 @@
 {
-    "id":  "vanguard_talon_interceptor",
-    "name":  "Talon Interceptor",
-    "cost":  160,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  5,
-    "speed":  {
-                  "road":  700,
-                  "off_road":  700
-              },
-    "armor":  {
-                  "front":  30,
-                  "side":  30,
-                  "rear":  30,
-                  "top":  30
-              },
-    "fuel":  1500,
-    "autonomy":  {
-                     "road":  1500,
-                     "off_road":  1500
-                 },
-    "optics":  "Very Good",
-    "stealth":  "Good",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_rotary_assault_cannon",
-                        "count":  1,
-                        "max_ammo":  20
-                    },
-                    {
-                        "weapon_id":  "vanguard_skyhammer_missile",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "AIR"
+    "id": "vanguard_talon_interceptor",
+    "name": "Talon Interceptor",
+    "cost": 160,
+    "icon": "assets/icons/units/vanguard/vanguard_talon_interceptor.png",
+    "health": 5,
+    "speed": {
+        "road": 700,
+        "off_road": 700
+    },
+    "armor": {
+        "front": 30,
+        "side": 30,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 1500,
+    "autonomy": {
+        "road": 1500,
+        "off_road": 1500
+    },
+    "optics": "Very Good",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_rotary_assault_cannon",
+            "count": 1,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "vanguard_skyhammer_missile",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "AIR"
 }

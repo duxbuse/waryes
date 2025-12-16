@@ -1,38 +1,38 @@
 {
-    "id":  "sdf_bastion_mbt_siege",
-    "name":  "Bastion Mbt Siege",
-    "cost":  140,
-    "icon":  "assets/icons/units/sdf/sdf_bastion_mbt_siege.png",
-    "health":  13,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  200,
-                  "side":  160,
-                  "rear":  100,
-                  "top":  40
-              },
-    "fuel":  600,
-    "autonomy":  {
-                     "road":  280,
-                     "off_road":  160
-                 },
-    "optics":  "Normal",
-    "stealth":  "None",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_siege_mortar",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "TNK"
+    "id": "sdf_bastion_mbt_siege",
+    "name": "Bastion Mbt Siege",
+    "cost": 140,
+    "icon": "assets/icons/units/sdf/sdf_bastion_mbt_siege.png",
+    "health": 13,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 200,
+        "side": 160,
+        "rear": 100,
+        "top": 40
+    },
+    "fuel": 600,
+    "autonomy": {
+        "road": 280,
+        "off_road": 160
+    },
+    "optics": "Normal",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_siege_mortar",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "SUP"
 }

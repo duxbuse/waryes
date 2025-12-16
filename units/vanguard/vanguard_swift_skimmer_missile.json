@@ -1,38 +1,38 @@
 {
-    "id":  "vanguard_swift_skimmer_missile",
-    "name":  "Swift Skimmer Missile",
-    "cost":  65,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  5,
-    "speed":  {
-                  "road":  110,
-                  "off_road":  110
-              },
-    "armor":  {
-                  "front":  15,
-                  "side":  15,
-                  "rear":  10,
-                  "top":  10
-              },
-    "fuel":  400,
-    "autonomy":  {
-                     "road":  350,
-                     "off_road":  350
-                 },
-    "optics":  "Very Good",
-    "stealth":  "Medium",
-    "forward_deploy":  1,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_typhoon_missile",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "vanguard_heavy_auto_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "AA"
+    "id": "vanguard_swift_skimmer_missile",
+    "name": "Swift Skimmer Missile",
+    "cost": 65,
+    "icon": "assets/icons/units/vanguard/vanguard_swift_skimmer_missile.png",
+    "health": 5,
+    "speed": {
+        "road": 110,
+        "off_road": 110
+    },
+    "armor": {
+        "front": 15,
+        "side": 15,
+        "rear": 10,
+        "top": 10
+    },
+    "fuel": 400,
+    "autonomy": {
+        "road": 350,
+        "off_road": 350
+    },
+    "optics": "Very Good",
+    "stealth": "Medium",
+    "forward_deploy": 1,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_typhoon_missile",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "vanguard_heavy_auto_cannon",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "AA"
 }

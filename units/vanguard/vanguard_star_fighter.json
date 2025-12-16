@@ -1,38 +1,38 @@
 {
-    "id":  "vanguard_star_fighter",
-    "name":  "Star Fighter",
-    "cost":  200,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  7,
-    "speed":  {
-                  "road":  1000,
-                  "off_road":  1000
-              },
-    "armor":  {
-                  "front":  40,
-                  "side":  30,
-                  "rear":  30,
-                  "top":  30
-              },
-    "fuel":  2500,
-    "autonomy":  {
-                     "road":  2500,
-                     "off_road":  2500
-                 },
-    "optics":  "Exceptional",
-    "stealth":  "Good",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_air_laser_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "vanguard_rotary_missile",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "AIR"
+    "id": "vanguard_star_fighter",
+    "name": "Star Fighter",
+    "cost": 200,
+    "icon": "assets/icons/units/vanguard/vanguard_star_fighter.png",
+    "health": 7,
+    "speed": {
+        "road": 1000,
+        "off_road": 1000
+    },
+    "armor": {
+        "front": 40,
+        "side": 30,
+        "rear": 30,
+        "top": 30
+    },
+    "fuel": 2500,
+    "autonomy": {
+        "road": 2500,
+        "off_road": 2500
+    },
+    "optics": "Exceptional",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_air_laser_cannon",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "vanguard_rotary_missile",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "AIR"
 }

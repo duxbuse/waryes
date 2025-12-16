@@ -1,35 +1,35 @@
 {
-    "id":  "vanguard_infantry_fusion",
-    "name":  "Infantry Fusion",
-    "cost":  45,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
-    "health":  10,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  20,
-                  "side":  20,
-                  "rear":  20,
-                  "top":  20
-              },
-    "fuel":  null,
-    "autonomy":  null,
-    "optics":  "Good",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "vanguard_kinetic_rifle",
-                        "count":  8,
-                        "max_ammo":  20
-                    },
-                    {
-                        "weapon_id":  "vanguard_fusion_gun",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "INF"
+    "id": "vanguard_infantry_fusion",
+    "name": "Infantry Fusion",
+    "cost": 45,
+    "icon": "assets/icons/units/vanguard/vanguard_infantry_fusion.png",
+    "health": 10,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "fuel": null,
+    "autonomy": null,
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "vanguard_kinetic_rifle",
+            "count": 8,
+            "max_ammo": 20
+        },
+        {
+            "weapon_id": "vanguard_fusion_gun",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ],
+    "category": "INF"
 }
