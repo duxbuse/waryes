@@ -1,29 +1,29 @@
 {
-    "id":  "sdf_militia",
-    "name":  "Militia",
-    "cost":  15,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
-    "health":  20,
-    "speed":  {
-                  "road":  12,
-                  "off_road":  10
-              },
-    "armor":  {
-                  "front":  0,
-                  "side":  0,
-                  "rear":  0,
-                  "top":  0
-              },
-    "fuel":  null,
-    "autonomy":  null,
-    "optics":  "Poor",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_laser_rifle_militia",
-                        "count":  20,
-                        "max_ammo":  20
-                    }
-                ]
+    "id": "sdf_militia",
+    "name": "Militia",
+    "cost": 15,
+    "icon": "assets/icons/units/sdf/sdf_militia.png",
+    "health": 20,
+    "speed": {
+        "road": 12,
+        "off_road": 10
+    },
+    "armor": {
+        "front": 0,
+        "side": 0,
+        "rear": 0,
+        "top": 0
+    },
+    "fuel": null,
+    "autonomy": null,
+    "optics": "Poor",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_laser_rifle_militia",
+            "count": 20,
+            "max_ammo": 20
+        }
+    ]
 }

@@ -1,34 +1,123 @@
 using Godot;
 
+[Tool] // Enable Editor Execution
 public partial class MapBuilder : Node3D
 {
+    [Export]
+    public bool BuildMap
+    {
+        get => false;
+        set
+        {
+            if (value)
+            {
+                GenerateTerrain();
+            }
+        }
+    }
+
+    private NavigationRegion3D _navRegion;
+    private NavigationMesh _navMesh;
+
     public override void _Ready()
     {
-        GenerateTerrain();
+        if (Engine.IsEditorHint()) return; // Don't auto-gen in editor
+        
+        // Runtime Generation if not already baked?
+        // If children exist, assume baked.
+        if (GetChildCount() == 0)
+        {
+             GenerateTerrain();
+        }
     }
 
     private void GenerateTerrain()
     {
+        GD.Print("MapBuilder: Generating Terrain...");
+        
+        // Clear children
+        foreach(Node child in GetChildren())
+        {
+            child.QueueFree();
+        }
+        
+        // Setup Nav Region
+        _navRegion = new NavigationRegion3D();
+        _navRegion.Name = "NavigationRegion";
+        AddChild(_navRegion);
+        
+        // Setup Nav Mesh resource
+        _navMesh = new NavigationMesh();
+        _navMesh.AgentHeight = 2.0f;
+        _navMesh.AgentRadius = 1.5f; // Match unit size approx
+        _navMesh.GeometryParsedGeometryType = NavigationMesh.ParsedGeometryType.StaticColliders; // Safer/Faster for runtime if needed, and avoids GPU readback warning
+        _navRegion.NavigationMesh = _navMesh;
+
+        // Use _navRegion as root for all generation
+        RecursivelySetOwner(_navRegion, this);
+
+
         // Road
-        CreateStrip("Road", new Vector3(0, 0.01f, 0), new Vector3(100, 0.1f, 10), new Color(0.3f, 0.3f, 0.3f));
-        CreateRoadLines(new Vector3(0, 0.02f, 0), 100, 10);
+        // Road
+        CreateStrip("Road", new Vector3(0, 0.01f, 0), new Vector3(100, 0.1f, 10), new Color(0.3f, 0.3f, 0.3f), _navRegion);
+        CreateRoadLines(new Vector3(0, 0.02f, 0), 100, 10, _navRegion);
+
         
         // Lake
-        CreateCylinder("Lake", new Vector3(-20, 0.01f, 20), 15.0f, new Color(0, 0, 1));
+        // Lake
+        CreateCylinder("Lake", new Vector3(-20, 0.01f, 20), 15.0f, new Color(0, 0, 1), _navRegion);
+
         
         // Town
-        CreateBlockCluster("Town", new Vector3(20, 0, -20), 5, new Color(0.6f, 0.4f, 0.2f));
-        CreateBoundary("TownBoundary", new Vector3(20, 0.01f, -20), new Vector2(30, 30), new Color(0.6f, 0.4f, 0.2f, 0.3f));
+        // Town
+        CreateBlockCluster("Town", new Vector3(20, 0, -20), 5, new Color(0.6f, 0.4f, 0.2f), _navRegion);
+        CreateBoundary("TownBoundary", new Vector3(20, 0.01f, -20), new Vector2(30, 30), new Color(0.6f, 0.4f, 0.2f, 0.3f), _navRegion);
+
 
         // Forest
-        CreateForest("Forest", new Vector3(-20, 0, -20), 30);
-        CreateBoundary("ForestBoundary", new Vector3(-20, 0.01f, -20), new Vector2(30, 30), new Color(0, 0.5f, 0, 0.3f));
+        // Forest
+        CreateForest("Forest", new Vector3(-20, 0, -20), 30, _navRegion);
+        CreateBoundary("ForestBoundary", new Vector3(-20, 0.01f, -20), new Vector2(30, 30), new Color(0, 0.5f, 0, 0.3f), _navRegion);
+
         
         // Capture Zone (Bottom Right)
-        CreateCaptureZone("ObjectiveAlpha", new Vector3(20, 0, 20));
+        // Capture Zone (Bottom Right)
+        CreateCaptureZone("ObjectiveAlpha", new Vector3(20, 0, 20), _navRegion);
+        
+        // Bake!
+        // Bake!
+        GD.Print("MapBuilder: Baking Navigation Mesh...");
+        _navRegion.BakeNavigationMesh();
+        GD.Print("MapBuilder: Baking Complete!");
+        
+        // Ensure everything is owned by the scene root if in editor
+        if (Engine.IsEditorHint())
+        {
+             var root = GetTree().EditedSceneRoot;
+             if (root != null)
+             {
+                 RecursivelySetOwner(this, root);
+             }
+        }
+    }
+    
+    // Helper to set owner for saving
+    private void RecursivelySetOwner(Node node, Node owner)
+    {
+        if (node != owner)
+        {
+            node.Owner = owner;
+        }
+        foreach(Node child in node.GetChildren())
+        {
+            RecursivelySetOwner(child, owner);
+        }
     }
 
-    private void CreateCaptureZone(string name, Vector3 pos)
+
+
+    private void CreateCaptureZone(string name, Vector3 pos, Node parent)
+
     {
         var zone = new CaptureZone();
         zone.Name = name;
@@ -60,15 +149,17 @@ public partial class MapBuilder : Node3D
         
         zone.AddChild(meshInstance);
         
-        AddChild(zone);
+        parent.AddChild(zone);
     }
 
-    private void CreateRoadLines(Vector3 center, float length, float width)
+
+    private void CreateRoadLines(Vector3 center, float length, float width, Node parent)
     {
         int segments = (int)(length / 4);
         var root = new Node3D();
         root.Name = "RoadLines";
-        AddChild(root);
+        parent.AddChild(root);
+
         
         var mat = new StandardMaterial3D();
         mat.AlbedoColor = new Color(1, 1, 1); // White
@@ -87,7 +178,8 @@ public partial class MapBuilder : Node3D
         }
     }
     
-    private void CreateBoundary(string name, Vector3 center, Vector2 size, Color color)
+    private void CreateBoundary(string name, Vector3 center, Vector2 size, Color color, Node parent)
+
     {
         var meshInstance = new MeshInstance3D();
         meshInstance.Name = name;
@@ -106,7 +198,9 @@ public partial class MapBuilder : Node3D
         AddChild(meshInstance);
     }
 
-    private void CreateStrip(string name, Vector3 pos, Vector3 size, Color color)
+    private void CreateStrip(string name, Vector3 pos, Vector3 size, Color color, Node parent)
+
+
     {
         var meshInstance = new MeshInstance3D();
         meshInstance.Name = name;
@@ -120,7 +214,9 @@ public partial class MapBuilder : Node3D
         AddChild(meshInstance);
     }
 
-    private void CreateCylinder(string name, Vector3 pos, float radius, Color color)
+    private void CreateCylinder(string name, Vector3 pos, float radius, Color color, Node parent)
+
+
     {
         var meshInstance = new MeshInstance3D();
         meshInstance.Name = name;
@@ -136,11 +232,13 @@ public partial class MapBuilder : Node3D
         AddChild(meshInstance);
     }
 
-    private void CreateBlockCluster(string name, Vector3 center, int count, Color color)
+    private void CreateBlockCluster(string name, Vector3 center, int count, Color color, Node parent)
     {
         var root = new Node3D();
         root.Name = name;
-        AddChild(root);
+        parent.AddChild(root);
+
+
 
         var mat = new StandardMaterial3D();
         mat.AlbedoColor = color;
@@ -170,11 +268,13 @@ public partial class MapBuilder : Node3D
         }
     }
 
-    private void CreateForest(string name, Vector3 center, int count)
+    private void CreateForest(string name, Vector3 center, int count, Node parent)
     {
         var root = new Node3D();
         root.Name = name;
-        AddChild(root);
+        parent.AddChild(root);
+
+
         
         var mat = new StandardMaterial3D();
         mat.AlbedoColor = new Color(0, 0.5f, 0); // Green
@@ -203,6 +303,10 @@ public partial class MapBuilder : Node3D
             meshInstance.AddChild(staticBody);
             
             root.AddChild(meshInstance);
+            
+            // Note: Obstacles not strictly needed if baked, but useful for dynamic avoidance of the static shape if agents push each other? 
+            // Baking is better.
         }
     }
 }
+

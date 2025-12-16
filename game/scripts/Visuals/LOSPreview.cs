@@ -11,6 +11,9 @@ public partial class LOSPreview : Node3D
     private ArrayMesh _arrayMesh;
     private StandardMaterial3D _material;
     
+    private MeshInstance3D _rangeRing;
+    private StandardMaterial3D _rangeMaterial;
+    
     private const float VISION_RANGE = 50.0f;
     private const int RAYCAST_SEGMENTS = 60;
     
@@ -34,6 +37,22 @@ public partial class LOSPreview : Node3D
         
         _visionMesh.MaterialOverride = _material;
         _visionMesh.Visible = false;
+        
+        // Range Ring
+        _rangeRing = new MeshInstance3D();
+        _rangeRing.Name = "RangeRing";
+        _rangeRing.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        AddChild(_rangeRing);
+        
+        var torus = new TorusMesh();
+        _rangeRing.Mesh = torus;
+        
+        _rangeMaterial = new StandardMaterial3D();
+        _rangeMaterial.AlbedoColor = new Color(1, 1, 1, 0.5f);
+        _rangeMaterial.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
+        _rangeMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        _rangeRing.MaterialOverride = _rangeMaterial;
+        _rangeRing.Visible = false;
     }
     
     public override void _Process(double delta)
@@ -56,12 +75,15 @@ public partial class LOSPreview : Node3D
         if (result.Count > 0)
         {
             _previewPosition = (Vector3)result["position"];
+            _previewPosition = (Vector3)result["position"];
             UpdateVisionMesh();
+            UpdateRangeRing();
             _visionMesh.Visible = true;
         }
         else
         {
             _visionMesh.Visible = false;
+            _rangeRing.Visible = false;
         }
     }
     
@@ -71,6 +93,7 @@ public partial class LOSPreview : Node3D
         if (!active)
         {
             _visionMesh.Visible = false;
+            if (_rangeRing != null) _rangeRing.Visible = false;
         }
     }
     
@@ -251,5 +274,40 @@ public partial class LOSPreview : Node3D
         return float.MaxValue; // Inside or behind? If inside, t1 < 0 and t2 > 0.
         // If we are inside, we handled it with IsInForest check already.
         // This function is for "Outside looking In".
+    }
+    private void UpdateRangeRing()
+    {
+         if (SelectionManager.Instance == null || SelectionManager.Instance.SelectedUnits.Count == 0)
+         {
+             _rangeRing.Visible = false;
+             return;
+         }
+         
+         var unit = SelectionManager.Instance.SelectedUnits[0];
+         if (unit == null || !IsInstanceValid(unit)) 
+         {
+              _rangeRing.Visible = false;
+              return;
+         }
+         
+         float range = unit.GetMaxRange();
+         if (range <= 1.0f)
+         {
+              _rangeRing.Visible = false;
+              return;
+         }
+         
+         var torus = _rangeRing.Mesh as TorusMesh;
+         if (torus != null)
+         {
+             if (Mathf.Abs(torus.OuterRadius - range) > 0.01f)
+             {
+                 torus.OuterRadius = range;
+                 torus.InnerRadius = range - 0.2f;
+             }
+         }
+         
+         _rangeRing.GlobalPosition = _previewPosition + Vector3.Up * 0.3f;
+         _rangeRing.Visible = true;
     }
 }

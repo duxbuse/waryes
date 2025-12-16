@@ -1,52 +1,52 @@
 {
-    "id":  "sdf_behemoth",
-    "name":  "Behemoth",
-    "cost":  450,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
-    "health":  12,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  300,
-                  "side":  250,
-                  "rear":  200,
-                  "top":  100
-              },
-    "fuel":  1500,
-    "autonomy":  {
-                     "road":  200,
-                     "off_road":  150
-                 },
-    "optics":  "Good",
-    "stealth":  "None",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_behemoth_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_siege_mortar",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_auto_cannon_30mm_air",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_laser_cannon_tripod",
-                        "count":  2,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
-                        "count":  3,
-                        "max_ammo":  10
-                    }
-                ]
+    "id": "sdf_behemoth",
+    "name": "Behemoth",
+    "cost": 450,
+    "icon": "assets/icons/units/sdf/sdf_behemoth.png",
+    "health": 12,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 300,
+        "side": 250,
+        "rear": 200,
+        "top": 100
+    },
+    "fuel": 1500,
+    "autonomy": {
+        "road": 200,
+        "off_road": 150
+    },
+    "optics": "Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_behemoth_cannon",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_siege_mortar",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_laser_cannon_tripod",
+            "count": 2,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 3,
+            "max_ammo": 10
+        }
+    ]
 }

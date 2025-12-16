@@ -15,5 +15,8 @@
     "aim_time": 6.0,
     "reload_time": 10.0,
     "salvo_length": 4,
-    "supply_cost": 100
+    "supply_cost": 100,
+    "is_guided": true,
+    "projectile_speed": 50.0,
+    "turn_speed": 90.0
 }

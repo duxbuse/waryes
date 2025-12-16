@@ -4,7 +4,7 @@ using System;
 public partial class RTSCamera : Camera3D
 {
     [Export]
-    public float PanSpeed = 20.0f;
+    public float PanSpeed = 40.0f;
 
     [Export]
     public float RotationSpeed = 2.0f;
@@ -24,7 +24,14 @@ public partial class RTSCamera : Camera3D
     [Export] 
     public float MaxZoom = 40.0f;
 
+    [Export]
+    public float EdgePanMargin = 20.0f;
+
+    [Export]
+    public float DragSensitivity = 1.0f;
+
     private float _targetHeight;
+    private bool _isDragging = false;
 
     public override void _Ready()
     {
@@ -54,30 +61,81 @@ public partial class RTSCamera : Camera3D
              {
                  _targetHeight += ZoomSpeed;
              }
+             else if (mb.ButtonIndex == MouseButton.Middle)
+             {
+                 _isDragging = mb.Pressed;
+             }
+
              _targetHeight = Mathf.Clamp(_targetHeight, MinHeight, MaxHeight);
+         }
+         else if (@event is InputEventMouseMotion mm && _isDragging)
+         {
+            // Drag Panning
+            // Move opposite to mouse movement
+            // Scale by height to make it feel consistent at different zooms
+            float zoomFactor = Position.Y / MaxHeight; 
+            Vector3 dragMove = new Vector3(-mm.Relative.X, 0, -mm.Relative.Y) * DragSensitivity * zoomFactor * 0.1f;
+            
+            // Align with camera orientation
+            Vector3 globalDrag = (GlobalTransform.Basis.Z * dragMove.Z + GlobalTransform.Basis.X * dragMove.X);
+            globalDrag.Y = 0;
+            
+            Position += globalDrag;
          }
     }
 
     private void ProcessMovement(float delta)
     {
         Vector3 direction = Vector3.Zero;
+        
+        // Edge Panning
+        var viewport = GetViewport();
+        if (viewport == null) return;
 
-        // Using Keycodes for prototype simplicity
-        if (Input.IsKeyPressed(Key.W))
+        var mousePos = viewport.GetMousePosition();
+        var visibleRect = viewport.GetVisibleRect();
+        var size = visibleRect.Size;
+
+        // Check window focus to prevent panning when tabbed out (though _Process usually pauses, good practice)
+        if (DisplayServer.WindowIsFocused())
         {
-            direction += Vector3.Forward;
+            if (mousePos.X < EdgePanMargin)
+            {
+                direction += Vector3.Left;
+            }
+            if (mousePos.X > size.X - EdgePanMargin)
+            {
+                direction += Vector3.Right;
+            }
+            if (mousePos.Y < EdgePanMargin)
+            {
+                direction += Vector3.Forward; // Up on screen is Forward in 3D usually (Z-) assuming looking down
+            }
+            if (mousePos.Y > size.Y - EdgePanMargin)
+            {
+                direction += Vector3.Back; // Down on screen is Back in 3D (Z+)
+            }
         }
-        if (Input.IsKeyPressed(Key.S))
+
+        // WASD Panning (Only when NO units are selected to avoid overlap with 'A' attack command)
+        if (SelectionManager.Instance == null || SelectionManager.Instance.SelectedUnits.Count == 0)
         {
-            direction += Vector3.Back;
-        }
-        if (Input.IsKeyPressed(Key.A))
-        {
-            direction += Vector3.Left;
-        }
-        if (Input.IsKeyPressed(Key.D))
-        {
-            direction += Vector3.Right;
+            if (Input.IsKeyPressed(Key.W))
+            {
+                direction += Vector3.Forward;
+            }
+            if (Input.IsKeyPressed(Key.S))
+            {
+                direction += Vector3.Back;
+            }
+            if (Input.IsKeyPressed(Key.A))
+            {
+                direction += Vector3.Left;
+            }
+            if (Input.IsKeyPressed(Key.D))
+            {
+                direction += Vector3.Right;
+            }
         }
 
         if (direction != Vector3.Zero)

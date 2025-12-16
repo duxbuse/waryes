@@ -7,6 +7,7 @@ namespace WarYes.Data
         public string Id { get; set; }
         public string Name { get; set; }
         public int Cost { get; set; }
+        public string Category { get; set; } // e.g. "INF", "TNK", "LOG"
         public string Icon { get; set; }
         public int Health { get; set; }
 

@@ -1,29 +1,29 @@
 {
-    "id":  "sdf_field_gun_heavy_lascannon",
-    "name":  "Field Gun Heavy Lascannon",
-    "cost":  50,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
-    "health":  15,
-    "speed":  {
-                  "road":  5,
-                  "off_road":  3
-              },
-    "armor":  {
-                  "front":  5,
-                  "side":  0,
-                  "rear":  0,
-                  "top":  0
-              },
-    "fuel":  null,
-    "autonomy":  null,
-    "optics":  "Very Good",
-    "stealth":  "Good",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_heavy_laser_cannon_tripod",
-                        "count":  2,
-                        "max_ammo":  10
-                    }
-                ]
+    "id": "sdf_field_gun_heavy_lascannon",
+    "name": "Field Gun Heavy Lascannon",
+    "cost": 50,
+    "icon": "assets/icons/units/sdf/sdf_field_gun_heavy_lascannon.png",
+    "health": 15,
+    "speed": {
+        "road": 5,
+        "off_road": 3
+    },
+    "armor": {
+        "front": 5,
+        "side": 0,
+        "rear": 0,
+        "top": 0
+    },
+    "fuel": null,
+    "autonomy": null,
+    "optics": "Very Good",
+    "stealth": "Good",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_heavy_laser_cannon_tripod",
+            "count": 2,
+            "max_ammo": 10
+        }
+    ]
 }

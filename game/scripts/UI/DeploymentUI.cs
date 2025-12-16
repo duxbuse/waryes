@@ -5,20 +5,37 @@ using WarYes.Data;
 public partial class DeploymentUI : Control
 {
     private HBoxContainer _cardContainer;
+    private HBoxContainer _tabContainer;
     private Label _creditsLabel;
+    
+    // Categories matching Wargame/Warno style
+    private readonly string[] _categories = { "LOG", "INF", "TNK", "REC", "AA", "ART", "HEL", "AIR" };
+    private string _currentCategory = "INF"; // Default
 
     public override void _Ready()
     {
-        // Setup Grid/Layout
-        _cardContainer = new HBoxContainer();
-        _cardContainer.Position = new Vector2(20, GetViewportRect().Size.Y - 150);
-        _cardContainer.Size = new Vector2(GetViewportRect().Size.X - 40, 130);
-        AddChild(_cardContainer);
-        
+        var viewportSize = GetViewportRect().Size;
+
+        // 1. Credits Label (Top Right or integrated?) - Let's put it Top Right for now
         _creditsLabel = new Label();
-        _creditsLabel.Position = new Vector2(20, 20);
+        _creditsLabel.Position = new Vector2(viewportSize.X - 200, 20);
         AddChild(_creditsLabel);
 
+        // 2. Tab Container (Top Left)
+        _tabContainer = new HBoxContainer();
+        _tabContainer.Position = new Vector2(20, 20);
+        _tabContainer.Size = new Vector2(viewportSize.X - 250, 40);
+        _tabContainer.AddThemeConstantOverride("separation", 10);
+        AddChild(_tabContainer);
+        
+        CreateTabs();
+
+        // 3. Card Container (Below Tabs)
+        _cardContainer = new HBoxContainer();
+        _cardContainer.Position = new Vector2(20, 70);
+        _cardContainer.Size = new Vector2(viewportSize.X - 40, 130);
+        AddChild(_cardContainer);
+        
         // Connect to Economy Signals later via GameManager
         
         // Wait for Deck to be ready
@@ -44,8 +61,70 @@ public partial class DeploymentUI : Control
 
         foreach (var card in deck.Cards)
         {
+            // Infer Category if missing
+            if (string.IsNullOrEmpty(card.Data.Category))
+            {
+                // We need to modify the copy in the list? UnitCard is a class (ref type), so yes.
+                // But UnitData is a STRUCT. modifying card.Data.Category won't work directly if accessed via property?
+                // Wait, UnitCard.Data is a property returning the struct. 
+                // We need to copy, modify, assign back.
+                var data = card.Data;
+                data.Category = InferCategory(data.Id);
+                card.Data = data;
+            }
+            
             CreateCardButton(card);
         }
+        
+        // Filter initially
+        FilterCards(_currentCategory);
+    }
+    
+    private void CreateTabs()
+    {
+        foreach (var cat in _categories)
+        {
+            var btn = new Button();
+            btn.Text = cat;
+            btn.CustomMinimumSize = new Vector2(80, 40);
+            btn.Pressed += () => FilterCards(cat);
+            _tabContainer.AddChild(btn);
+        }
+    }
+    
+    private void FilterCards(string category)
+    {
+        _currentCategory = category;
+        
+        foreach (var kvp in _cardButtons)
+        {
+            var card = kvp.Key;
+            var button = kvp.Value;
+            
+            bool match = card.Data.Category == category;
+            button.Visible = match;
+        }
+    }
+
+    private string InferCategory(string id)
+    {
+        id = id.ToLower();
+        
+        if (id.Contains("log") || id.Contains("supply") || id.Contains("fob") || id.Contains("truck")) return "LOG";
+        if (id.Contains("trooper") || id.Contains("militia") || id.Contains("hwt") || id.Contains("inf") || id.Contains("marine") || id.Contains("commando")) return "INF";
+        if (id.Contains("scout") || id.Contains("recon") || id.Contains("sniper") || id.Contains("uav")) return "REC";
+        if (id.Contains("tank") || id.Contains("mbt") || id.Contains("armor")) return "TNK"; // Walker?
+        
+        // Specific checks for mixed types (Walker can be REC or TNK usually)
+        if (id.Contains("walker")) return "TNK"; 
+        
+        if (id.Contains("aa") || id.Contains("skysweeper") || id.Contains("missile_aa") || id.Contains("air_defense")) return "AA";
+        if (id.Contains("artillery") || id.Contains("mortar") || id.Contains("howitzer") || id.Contains("bombast") || id.Contains("tremor") || id.Contains("field_gun")) return "ART";
+        
+        if (id.Contains("heli") || id.Contains("gunship") || id.Contains("vtol") || id.Contains("transport_air")) return "HEL";
+        if (id.Contains("jet") || id.Contains("fighter") || id.Contains("bomber") || id.Contains("asf") || id.Contains("air")) return "AIR";
+        
+        return "INF"; // Fallback to Infantry
     }
 
     private Dictionary<UnitCard, Button> _cardButtons = new Dictionary<UnitCard, Button>();

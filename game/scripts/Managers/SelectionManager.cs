@@ -38,6 +38,12 @@ public partial class SelectionManager : Node2D
     {
         if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
         {
+            // Ignore if command keys are pressed (let GameManager handle it)
+            if (Input.IsKeyPressed(Key.R) || Input.IsKeyPressed(Key.F) || Input.IsKeyPressed(Key.A))
+            {
+                return; 
+            }
+
             GD.Print($"SelectionManager: Left mouse button, Pressed={mb.Pressed}, Dragging={_isDragging}");
             
             if (mb.Pressed)

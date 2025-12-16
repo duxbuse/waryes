@@ -1,9 +1,30 @@
 using Godot;
 using WarYes.Data;
+using WarYes.UI;
 using System.Collections.Generic;
+using System.Linq;
 
 public partial class Unit : CharacterBody3D
 {
+    public enum MoveMode { Normal, Reverse, Fast, Hunt }
+    // Remove direct property setter, derived from CurrentCommand
+    public MoveMode CurrentMoveMode { 
+        get { return _currentCommand != null ? _currentCommand.MoveMode : MoveMode.Normal; } 
+    }
+
+    public class Command
+    {
+        public enum Type { Move, AttackUnit }
+        public Type CommandType;
+        public Vector3 TargetPosition;
+        public Unit TargetUnit;
+        public MoveMode MoveMode;
+        public Vector3? FinalFacing;
+    }
+
+    private Queue<Command> _commandQueue = new Queue<Command>();
+    private Command _currentCommand;
+
     public UnitData Data;
     public bool IsMoving = false;
     
@@ -12,6 +33,14 @@ public partial class Unit : CharacterBody3D
     private CollisionShape3D _collisionShape;
     private MeshInstance3D _selectionData;
     private Node3D _visualRoot; // Visual pivot for altitude
+
+    // Path Visualization
+    private MeshInstance3D _pathMeshInstance;
+    private ImmediateMesh _pathMesh;
+    private Material _pathMaterial; // We will clone this for colors
+    private ShaderMaterial _pathShaderMat;
+    private MeshInstance3D _pathArrow;
+
 
     public override void _Ready()
     {
@@ -50,13 +79,10 @@ public partial class Unit : CharacterBody3D
     public int Rank { get; private set; } = 0;
     public int CurrentExperience { get; private set; } = 0;
     
-    // Health & Morale Bars
-    private Sprite3D _healthBarBg;
-    private Sprite3D _healthBarFg;
-    private Sprite3D _moraleBarBg;
-    private Sprite3D _moraleBarFg;
-    private Node3D _healthBarRoot;
+    // Unit UI
+    private UnitUI _unitUI;
     private bool _isSelected = false;
+
 
     public void Initialize(UnitData data, int rank = 0)
     {
@@ -67,15 +93,7 @@ public partial class Unit : CharacterBody3D
         Health = Data.Health > 0 ? Data.Health : 10.0f; // Default if 0
         _maxHealth = Health; // Store for health bar calculation
         
-        // Morale Override
-        if (Data.Id.ToLower().Contains("stormtrooper"))
-        {
-             MaxMorale = 30.0f;
-        }
-        else
-        {
-             MaxMorale = 100.0f;
-        }
+
         Morale = MaxMorale; // Initialize full morale
         
         // Team Logic
@@ -101,8 +119,8 @@ public partial class Unit : CharacterBody3D
         _navAgent.MaxSpeed = speedMs;
         
         CreateVisuals();
-        
-        CreateVisuals();
+        CreatePathVisuals();
+
         
         // Initialize Weapons
         _weapons.Clear();
@@ -140,8 +158,7 @@ public partial class Unit : CharacterBody3D
         Rank = rank;
         
         // Setup Visuals
-        CreateCommanderBuffIcon();
-        CreateRankIcon();
+
         UpdateVeterancyStatus(); // Initial State
         
         GD.Print($"Unit {Name} initialized: Team={Team}, Weapons={_weapons.Count}, Health={Health}, Commander={IsCommander}, Rank={Rank}");
@@ -178,111 +195,53 @@ public partial class Unit : CharacterBody3D
         _commanderAura.AddChild(meshInst);
     }
     
-    private void CreateCommanderBuffIcon()
+    private void CreateUnitUI()
     {
-         if (_commanderBuffIcon != null) return;
-         
-        // Simple Billboard Sprite above unit to indicate "I am buffed by a commander"
-        _commanderBuffIcon = new Sprite3D();
-        _commanderBuffIcon.Name = "CmdBuffIcon";
+        if (_unitUI != null) return;
         
-        // Use a simple Plus sign or Star for buff
-        var image = Image.Create(32, 32, false, Image.Format.Rgba8);
-        for(int x=0; x<32; x++)
-            for(int y=0; y<32; y++)
-            {
-                 // Plus Shape
-                 if ((x > 12 && x < 20) || (y > 12 && y < 20))
-                     image.SetPixel(x, y, new Color(0, 1, 1)); // Cyan for Buff
-            }
-            
-        var tex = ImageTexture.CreateFromImage(image);
-        _commanderBuffIcon.Texture = tex;
-        _commanderBuffIcon.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _commanderBuffIcon.PixelSize = 0.02f;
-        _commanderBuffIcon.Position = new Vector3(0, 4.5f, 0); // High above
-        _commanderBuffIcon.Visible = false; 
+        _unitUI = new UnitUI();
+        _unitUI.Name = "UnitUI";
+        _unitUI.TopLevel = true; // Decouple rotation from unit
+        _visualRoot.AddChild(_unitUI);
         
-        AddChild(_commanderBuffIcon);
+        // Determine Category
+        string category = "infantry";
+        if (Data.Id.Contains("tank") || Data.Id.Contains("mbt") || Data.Id.Contains("walker") || (Data.Fuel.HasValue)) category = "vehicle";
+        if (Data.Id.Contains("air") || Data.Id.Contains("gunship")) category = "air";
+        if (IsCommander) category = "commander";
+        
+        _unitUI.Initialize(Data.Id, Name, (int)_maxHealth, category, IsCommander);
+        _unitUI.UpdateHealth((int)Health);
     }
 
-    private void CreateRankIcon()
-    {
-        if (_rankIconRoot != null) return;
 
-        _rankIconRoot = new Node3D();
-        _rankIconRoot.Name = "RankIcons";
-        AddChild(_rankIconRoot);
 
-        // We will rebuild chevrons on rank change, or just toggle visibility if we built all 3.
-        // Let's build 3 chevrons and toggle them.
-        for(int i=1; i<=3; i++)
-        {
-             var chev = new Sprite3D();
-             chev.Name = $"Chevron_{i}";
-             
-             var image = Image.Create(32, 32, false, Image.Format.Rgba8);
-             // Draw Chevron (V shape)
-             for(int x=0; x<32; x++)
-                for(int y=0; y<32; y++)
-                {
-                     int centerDist = Mathf.Abs(x - 16);
-                     // V shape logic
-                     if (y > centerDist && y < centerDist + 6) 
-                         image.SetPixel(x, y, new Color(1, 0.84f, 0)); // Gold
-                }
-             
-             var tex = ImageTexture.CreateFromImage(image);
-             chev.Texture = tex;
-             chev.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-             chev.PixelSize = 0.015f;
-             
-             // Stack them vertically
-             // Rank 1 at bottom, Rank 3 on top? Or reverse?
-             // Typically Rank 1 is one chevron. Rank 2 is two stacked.
-             // Base pos 3.5m. Offset by i.
-             float yOffset = 3.5f + (i * 0.3f); 
-             chev.Position = new Vector3(0, yOffset, 0);
-             chev.Visible = false;
-             
-             _rankIconRoot.AddChild(chev);
-        }
-    }
     
     private void UpdateVeterancyStatus()
     {
-         // 1. Update Commander Buff
-         bool buffed = false;
-         if (!IsCommander && UnitManager.Instance != null) // Commanders don't get buffed by themselves or others (design choice? usually yes)
-         {
-             foreach(var u in UnitManager.Instance.GetActiveUnits())
-             {
-                 if (u == this) continue;
-                 if (u.IsCommander && u.Team == this.Team)
-                 {
-                     if (GlobalPosition.DistanceSquaredTo(u.GlobalPosition) < 400.0f) // 20m sq
-                     {
-                         buffed = true;
-                         break;
-                     }
-                 }
-             }
-         }
-         
-         if (_commanderBuffIcon != null) _commanderBuffIcon.Visible = buffed;
-         
-         // 2. Update Rank Icons
-         if (_rankIconRoot != null)
-         {
-             for(int i=1; i<=3; i++)
-             {
-                 var node = _rankIconRoot.GetNodeOrNull<Sprite3D>($"Chevron_{i}");
-                 if (node != null)
-                 {
-                     node.Visible = (Rank >= i);
-                 }
-             }
-         }
+        // 1. Update Commander Buff
+        bool buffed = false;
+        if (!IsCommander && UnitManager.Instance != null) 
+        {
+            foreach(var u in UnitManager.Instance.GetActiveUnits())
+            {
+                if (u == this) continue;
+                if (u.IsCommander && u.Team == this.Team)
+                {
+                    if (GlobalPosition.DistanceSquaredTo(u.GlobalPosition) < 400.0f) // 20m sq
+                    {
+                        buffed = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (_unitUI != null)
+        {
+            _unitUI.SetBuffStatus(buffed);
+            _unitUI.SetVeterancy(Rank);
+        }
     }
     
     public void GainExperience(int amount)
@@ -428,117 +387,14 @@ public partial class Unit : CharacterBody3D
         // Selection Ring
         CreateSelectionRing();
         
-        // Health Bar
-        CreateHealthBar();
+        // Create Unit UI
+        CreateUnitUI();
         
         // Ammo Icon
         CreateAmmoIcon();
     }
     
-    private void CreateHealthBar()
-    {
-        if (_healthBarRoot != null) return;
-        
-        _healthBarRoot = new Node3D();
-        _healthBarRoot.Name = "HealthBar";
-        _healthBarRoot.TopLevel = true; 
-        _visualRoot.AddChild(_healthBarRoot);
-        
-        // Create 1x1 White Texture
-        var image = Image.Create(1, 1, false, Image.Format.Rgb8);
-        image.SetPixel(0, 0, new Color(1, 1, 1));
-        var texture = ImageTexture.CreateFromImage(image);
-        
-        // Background Sprite
-        _healthBarBg = new Sprite3D();
-        _healthBarBg.Name = "BG";
-        _healthBarBg.Texture = texture;
-        _healthBarBg.Modulate = new Color(0, 0, 0); // Black
-        _healthBarBg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _healthBarBg.PixelSize = 0.01f; 
-        _healthBarBg.Scale = new Vector3(2.0f / 0.01f, 0.5f / 0.01f, 1);
-        _healthBarBg.RenderPriority = 10;
-        _healthBarBg.NoDepthTest = true; 
-        _healthBarRoot.AddChild(_healthBarBg);
-        
-        // Foreground Sprite
-        _healthBarFg = new Sprite3D();
-        _healthBarFg.Name = "FG";
-        _healthBarFg.Texture = texture;
-        _healthBarFg.Modulate = new Color(0, 1, 0); // Green
-        _healthBarFg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _healthBarFg.PixelSize = 0.01f;
-        _healthBarFg.RenderPriority = 11; 
-        _healthBarFg.NoDepthTest = true;
-        _healthBarRoot.AddChild(_healthBarFg);
-        
-        // -- Morale Bar --
-        _moraleBarBg = new Sprite3D();
-        _moraleBarBg.Name = "MoraleBG";
-        _moraleBarBg.Texture = texture;
-        _moraleBarBg.Modulate = new Color(0, 0, 0); // Black
-        _moraleBarBg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _moraleBarBg.PixelSize = 0.01f;
-        _moraleBarBg.Scale = new Vector3(2.0f / 0.01f, 0.25f / 0.01f, 1);
-        _moraleBarBg.Position = new Vector3(0, -0.4f, 0); 
-        _moraleBarBg.RenderPriority = 10;
-        _moraleBarBg.NoDepthTest = true;
-        _healthBarRoot.AddChild(_moraleBarBg);
 
-        _moraleBarFg = new Sprite3D();
-        _moraleBarFg.Name = "MoraleFG";
-        _moraleBarFg.Texture = texture;
-        _moraleBarFg.Modulate = new Color(0, 1, 0); // Green
-        _moraleBarFg.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _moraleBarFg.PixelSize = 0.01f;
-        _moraleBarFg.Position = new Vector3(0, -0.4f, 0);
-        _moraleBarFg.RenderPriority = 11;
-        _moraleBarFg.NoDepthTest = true;
-        _healthBarRoot.AddChild(_moraleBarFg);
-        
-        _healthBarRoot.Visible = false;
-    }
-    
-    // Renamed from UpdateHealthBar logic
-    private void UpdateStatusBars()
-    {
-        if (_healthBarBg == null || _healthBarFg == null) return;
-        
-        float healthPercent = (float)Health / _maxHealth;
-        bool moraleDamaged = Morale < MaxMorale;
-        
-        if (healthPercent >= 1.0f && !moraleDamaged && !_isSelected)
-        {
-            _healthBarRoot.Visible = false;
-            return;
-        }
-        
-        _healthBarRoot.Visible = true;
-        
-        // HP Color
-        if (healthPercent > 0.5f) _healthBarFg.Modulate = new Color(0, 1, 0); 
-        else if (healthPercent > 0.25f) _healthBarFg.Modulate = new Color(1, 1, 0); 
-        else _healthBarFg.Modulate = new Color(1, 0, 0); 
-        
-        // HP Scale
-        float targetWidth = 2.0f * healthPercent;
-        _healthBarFg.Scale = new Vector3(targetWidth / 0.01f, 0.5f / 0.01f, 1);
-        _healthBarFg.Position = new Vector3(-1.0f + (targetWidth / 2.0f), 0, 0);
-        
-        // Morale Logic
-        if (_moraleBarFg != null)
-        {
-            float moralePercent = Mathf.Clamp(Morale / MaxMorale, 0, 1);
-            
-            if (moralePercent <= 0) _moraleBarFg.Modulate = new Color(0, 0, 0); 
-            else if (moralePercent < 0.5f) _moraleBarFg.Modulate = new Color(1, 0.5f, 0); 
-            else _moraleBarFg.Modulate = new Color(0, 1, 0); 
-             
-            float mTargetWidth = 2.0f * moralePercent;
-            _moraleBarFg.Scale = new Vector3(mTargetWidth / 0.01f, 0.25f / 0.01f, 1);
-            _moraleBarFg.Position = new Vector3(-1.0f + (mTargetWidth / 2.0f), -0.4f, 0); 
-        }
-    }
     
     private Sprite3D _ammoIcon;
 
@@ -661,7 +517,11 @@ public partial class Unit : CharacterBody3D
         
         GD.Print($"{Name} took {amount} damage. HP: {Health}. Morale: {Morale}");
         
-        UpdateStatusBars();
+        if (_unitUI != null)
+        {
+            _unitUI.UpdateHealth((int)Health);
+            _unitUI.UpdateMorale(Morale, MaxMorale);
+        }
         
         if (Health <= 0)
         {
@@ -683,9 +543,10 @@ public partial class Unit : CharacterBody3D
                 _routingCooldownTimer = 20.0f;
                 GD.Print($"{Name} is routing! Running away. Recovery paused for 20s.");
                 foreach(var w in _weapons) w.StopEngaging();
+                if (_unitUI != null) _unitUI.SetRouting(true);
             }
         }
-        UpdateStatusBars();
+        if (_unitUI != null) _unitUI.UpdateMorale(Morale, MaxMorale);
     }
     
     public void TakeDamage(float amount, Unit attacker)
@@ -737,6 +598,7 @@ public partial class Unit : CharacterBody3D
             GD.Print($"{Name} rallied! Stopping rout.");
             _navAgent.Velocity = Vector3.Zero;
             _navAgent.TargetPosition = GlobalPosition; // Stop moving
+            if (_unitUI != null) _unitUI.SetRouting(false);
         }
 
         if (IsRouting)
@@ -753,18 +615,144 @@ public partial class Unit : CharacterBody3D
         if (_scanTimer <= 0)
         {
             _scanTimer = SCAN_INTERVAL;
-            ScanAndFire(); 
+            ScanAndFire();
+            
+            // Hunt Mode Logic - Pause/Resume based on engagement
+            if (_currentCommand != null && _currentCommand.CommandType == Command.Type.Move && _currentCommand.MoveMode == MoveMode.Hunt)
+            {
+                 bool isEngaging = false;
+                 foreach(var w in _weapons) if(w.CurrentTarget != null) isEngaging = true;
+                 
+                 if (isEngaging)
+                 {
+                     if (IsMoving)
+                     {
+                         IsMoving = false;
+                         _navAgent.Velocity = Vector3.Zero;
+                         GD.Print($"{Name} (Hunt) spotted enemy! Stopping to engage.");
+                     }
+                 }
+                 else
+                 {
+                     if (!IsMoving && !_navAgent.IsNavigationFinished())
+                     {
+                         IsMoving = true;
+                         _navAgent.TargetPosition = _currentCommand.TargetPosition; // Re-assign to resume
+                         GD.Print($"{Name} (Hunt) area clear. Resuming move.");
+                     }
+                 }
+            }
         }
         
         // Update Aim Indicators (High Frequency)
         UpdateAimIndicator();
         
+        // Update Path Visuals
+        UpdatePathVisuals();
+        
+        // Check Guidance Lock
+        bool isGuiding = false;
+        foreach(var w in _weapons) if(w.IsGuiding) isGuiding = true;
+        
+        if (isGuiding)
+        {
+             Velocity = Vector3.Zero;
+             _navAgent.Velocity = Vector3.Zero;
+             // Don't process movement
+             return; 
+        }
+
         // Movement Logic
+        
+        // Command Processing Check
+        if (_currentCommand != null)
+        {
+            // Check for completion
+            bool done = false;
+            if (_currentCommand.CommandType == Command.Type.Move)
+            {
+                 if (_navAgent.IsNavigationFinished() && !IsMoving) done = true;
+                 // If Hunt mode, we also want to wait until not engaging? 
+                 // RTS convention: Move/Hunt moves to point. If blocked by enemies, it fights, then continues. 
+                 // Once point reached, queue proceeds.
+            }
+            else if (_currentCommand.CommandType == Command.Type.AttackUnit)
+            {
+                if (!IsInstanceValid(_currentCommand.TargetUnit)) // Target Dead
+                {
+                    done = true;
+                    // Stop chasing
+                    IsMoving = false;
+                    _navAgent.Velocity = Vector3.Zero;
+                }
+                else
+                {
+                    // Update Chase path periodically or every frame?
+                    // Every frame is smoother for chase
+                    _navAgent.TargetPosition = _currentCommand.TargetUnit.GlobalPosition;
+                    IsMoving = true;
+                    
+                    // But if in range of weapon?
+                    float distSq = GlobalPosition.DistanceSquaredTo(_currentCommand.TargetUnit.GlobalPosition);
+                    float maxRange = GetMaxRange();
+                    if (distSq < (maxRange * maxRange * 0.8f)) // Move within 80% of range
+                    {
+                         IsMoving = false; // Stop to shoot
+                         _navAgent.Velocity = Vector3.Zero;
+                    }
+                    else
+                    {
+                         IsMoving = true;
+                    }
+                }
+            }
+            
+            if (done)
+            {
+                _currentCommand = null;
+                ProcessNextCommand();
+                return;
+            }
+        }
+        else
+        {
+             // No command, try process queue (e.g. idle after spawn)
+             if (_commandQueue.Count > 0) ProcessNextCommand();
+        }
+
         if (!IsMoving) return;
         if (_navAgent.IsNavigationFinished())
         {
             IsMoving = false;
             Velocity = Vector3.Zero;
+            
+            // Final Facing Logic
+            if (_currentCommand != null && _currentCommand.FinalFacing.HasValue)
+            {
+                // Rotate towards final facing
+                Vector3 currentForward = -GlobalTransform.Basis.Z;
+                Vector3 targetForward = _currentCommand.FinalFacing.Value;
+                
+                // Rotation Speed (Reuse from ApplyRotationLogic logic or default)
+                float rotSpeedDeg = Data.Speed.RotationSpeed.HasValue ? Data.Speed.RotationSpeed.Value : 90.0f;
+                float rotSpeedRad = Mathf.DegToRad(rotSpeedDeg);
+                float maxRotStep = rotSpeedRad * (float)delta;
+                
+                float angle = currentForward.AngleTo(targetForward);
+                if (angle > 0.01f)
+                {
+                     Vector3 cross = currentForward.Cross(targetForward);
+                     float sign = (cross.Y > 0) ? 1.0f : -1.0f;
+                     float rotAmount = Mathf.Min(angle, maxRotStep);
+                     RotateY(rotAmount * sign);
+                     
+                     // If we are close enough, we are "done" done.
+                     if (angle < Mathf.DegToRad(5.0f))
+                     {
+                          // Fully aligned
+                     }
+                }
+            }
             return;
         }
 
@@ -773,8 +761,254 @@ public partial class Unit : CharacterBody3D
         
         Vector3 newVelocity = (nextPathPosition - currentAgentPosition).Normalized();
         newVelocity *= _navAgent.MaxSpeed;
+        
+        // Reverse Logic Adjustment?
+        // NavigationAgent always computes velocity towards next point.
+        // If reversing, we still move TOWARDS the point, just facing backwards.
+        // So Velocity is correct. Rotation in OnVelocityComputed is what changes.
+        
         _navAgent.Velocity = newVelocity;
     }
+    
+    public float GetMaxRange()
+    {
+        float max = 0;
+        foreach(var w in _weapons) if(w.Range > max) max = w.Range;
+        return max > 0 ? max : 10.0f;
+    }
+
+    private void ProcessNextCommand()
+    {
+        if (_commandQueue.Count == 0) 
+        {
+            _currentCommand = null;
+            return;
+        }
+        
+        _currentCommand = _commandQueue.Dequeue();
+        ExecuteCommand(_currentCommand);
+    }
+    
+    private void ExecuteCommand(Command cmd)
+    {
+        if (cmd.CommandType == Command.Type.Move)
+        {
+            BreakAllGuidance(); // Stop guiding to move immediately
+            _navAgent.TargetPosition = cmd.TargetPosition;
+            IsMoving = true;
+            GD.Print($"{Name} executing Move to {cmd.TargetPosition} ({cmd.MoveMode}).");
+        }
+        else if (cmd.CommandType == Command.Type.AttackUnit)
+        {
+             if (IsInstanceValid(cmd.TargetUnit))
+             {
+                 _navAgent.TargetPosition = cmd.TargetUnit.GlobalPosition;
+                 IsMoving = true;
+                 GD.Print($"{Name} executing Attack/Chase on {cmd.TargetUnit.Name}.");
+                 
+                 // Force weapons to target this unit? 
+                 // Usually ScanAndFire picks best target. 
+                 // We should probably override or prioritize.
+                 // For now, let's rely on Proximity (ScanAndFire picks closest/best). 
+                 // Since we move close, it should pick it up.
+             }
+             else
+             {
+                 ProcessNextCommand(); // Skip if invalid
+             }
+        }
+    }
+    
+    private void BreakAllGuidance()
+    {
+        foreach(var w in _weapons)
+        {
+            if (w.IsGuiding) w.BreakGuidance();
+        }
+    }
+
+    private void CreatePathVisuals()
+    {
+        if (_pathMeshInstance != null) return;
+
+        // 1. Line
+        _pathMesh = new ImmediateMesh();
+        _pathMeshInstance = new MeshInstance3D();
+        _pathMeshInstance.Mesh = _pathMesh;
+        _pathMeshInstance.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        _pathMeshInstance.TopLevel = true; // Draw in world space
+        _pathMeshInstance.Name = "PathVisualizer";
+        AddChild(_pathMeshInstance);
+
+        // Load Shader
+        var shader = GD.Load<Shader>("res://art/shaders/PathLine.gdshader");
+        _pathShaderMat = new ShaderMaterial();
+        _pathShaderMat.Shader = shader;
+        _pathShaderMat.SetShaderParameter("color", new Color(0, 1, 0, 0.5f));
+        _pathMeshInstance.MaterialOverride = _pathShaderMat;
+
+        // 2. Arrow (Marker)
+        _pathArrow = new MeshInstance3D();
+        _pathArrow.Name = "PathArrow";
+        var cone = new CylinderMesh();
+        cone.TopRadius = 0.0f;
+        cone.BottomRadius = 0.5f;
+        cone.Height = 1.5f;
+        _pathArrow.Mesh = cone;
+        
+        var arrowMat = new StandardMaterial3D();
+        arrowMat.AlbedoColor = new Color(0, 1, 0, 0.8f);
+        arrowMat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
+        arrowMat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        _pathArrow.MaterialOverride = arrowMat;
+        
+        _pathArrow.TopLevel = true;
+        _pathArrow.Visible = false;
+        AddChild(_pathArrow);
+    }
+
+    private void UpdatePathVisuals()
+    {
+        // Should we draw?
+        bool hasActivePath = IsMoving || !_navAgent.IsNavigationFinished();
+        bool hasQueue = _commandQueue.Count > 0;
+        
+        if (!hasActivePath && !hasQueue && (_currentCommand == null || _currentCommand.CommandType != Command.Type.Move))
+        {
+             if(_pathMesh != null) _pathMesh.ClearSurfaces();
+             if(_pathArrow != null) _pathArrow.Visible = false;
+             return;
+        }
+
+        _pathMesh.ClearSurfaces();
+        _pathMesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
+        
+        
+        bool surfaceHasVertices = false;
+
+        // 1. Current Path
+        Vector3 lastPos = GlobalPosition;
+        if (hasActivePath)
+        {
+            var pathPoints = _navAgent.GetCurrentNavigationPath();
+            int startIndex = _navAgent.GetCurrentNavigationPathIndex();
+            
+            if (pathPoints != null && pathPoints.Length > 0)
+            {
+                // Add current pos as start
+                AddRibbonPoint(lastPos + Vector3.Up * 0.5f, (pathPoints.Length > startIndex ? pathPoints[startIndex] : lastPos) + Vector3.Up * 0.5f, 0.4f, GetColorForMode(CurrentMoveMode));
+                surfaceHasVertices = true;
+
+                for (int i = startIndex; i < pathPoints.Length; i++)
+                {
+                    Vector3 p = pathPoints[i];
+                    Vector3 nextP = (i + 1 < pathPoints.Length) ? pathPoints[i+1] : p;
+                    AddRibbonPoint(p + Vector3.Up * 0.5f, nextP + Vector3.Up * 0.5f, 0.4f, GetColorForMode(CurrentMoveMode));
+                    lastPos = p;
+                }
+            }
+        }
+        
+        // 2. Queued Paths
+        if (hasQueue)
+        {
+             var emptyMap = new Godot.Collections.Dictionary(); // For fast queries?
+             var map = GetWorld3D().NavigationMap;
+             
+             foreach(var cmd in _commandQueue)
+             {
+                 Vector3 targetPos = Vector3.Zero;
+                 if (cmd.CommandType == Command.Type.Move) targetPos = cmd.TargetPosition;
+                 else if (cmd.CommandType == Command.Type.AttackUnit && IsInstanceValid(cmd.TargetUnit)) targetPos = cmd.TargetUnit.GlobalPosition;
+                 else continue;
+                 
+                 // Query Path from lastPos to targetPos
+                 var points = NavigationServer3D.MapGetPath(map, lastPos, targetPos, true);
+                 
+                 if (points != null && points.Length > 0)
+                 {
+                     Color cmdColor = GetColorForMode(cmd.MoveMode);
+                     // Fix opacity
+                     cmdColor.A = 0.5f; 
+
+                     for (int i = 0; i < points.Length; i++)
+                     {
+                         Vector3 p = points[i];
+                         Vector3 nextP = (i + 1 < points.Length) ? points[i+1] : p;
+                         AddRibbonPoint(p + Vector3.Up * 0.5f, nextP + Vector3.Up * 0.5f, 0.4f, cmdColor);
+                     }
+                     surfaceHasVertices = true;
+
+                     if (points.Length > 0) lastPos = points[points.Length - 1];
+                 }
+                 else
+                 {
+                     // Straight line fallback if nav fails?
+                     AddRibbonPoint(lastPos + Vector3.Up * 0.5f, targetPos + Vector3.Up * 0.5f, 0.4f, GetColorForMode(cmd.MoveMode));
+                     surfaceHasVertices = true;
+                     lastPos = targetPos;
+                 }
+             }
+        }
+        
+        if (surfaceHasVertices)
+        {
+            _pathMesh.SurfaceEnd();
+        }
+        else
+        {
+            _pathMesh.ClearSurfaces();
+        }
+        
+        // Arrow at the very end
+        if (_pathArrow != null)
+        {
+             _pathArrow.GlobalPosition = lastPos + Vector3.Up * 2.0f;
+             _pathArrow.Visible = true;
+             
+             // Color arrow based on LAST command
+             Color lastColor = new Color(0,1,0);
+             if (_commandQueue.Count > 0) lastColor = GetColorForMode(_commandQueue.Last().MoveMode);
+             else lastColor = GetColorForMode(CurrentMoveMode);
+             
+             if (_pathArrow.MaterialOverride is StandardMaterial3D arrowMat)
+             {
+                 arrowMat.AlbedoColor = new Color(lastColor.R, lastColor.G, lastColor.B, 0.8f);
+             }
+        }
+    }
+    
+    // Ribbon Generation: Triangle Strip
+    // We need 2 vertices per point.
+    // To make it face up/camera properly usually requires camera facing logic, 
+    // but for RTS path on ground, flat ribbon (XZ plane width) is usually good.
+    private void AddRibbonPoint(Vector3 curr, Vector3 next, float width, Color color)
+    {
+        Vector3 dir = (next - curr).Normalized();
+        if (dir.LengthSquared() < 0.001f) dir = Vector3.Forward; // Default
+        
+        Vector3 right = dir.Cross(Vector3.Up).Normalized() * (width * 0.5f);
+        
+        _pathMesh.SurfaceSetColor(color);
+        _pathMesh.SurfaceSetUV(new Vector2(0, 0)); 
+        _pathMesh.SurfaceAddVertex(curr - right);
+        
+        _pathMesh.SurfaceSetColor(color);
+        _pathMesh.SurfaceSetUV(new Vector2(1, 0));
+        _pathMesh.SurfaceAddVertex(curr + right);
+    }
+    
+    private Color GetColorForMode(MoveMode mode)
+    {
+         switch (mode)
+         {
+            case MoveMode.Reverse: return new Color(0.6f, 0, 0.8f, 0.5f);
+            case MoveMode.Fast: return new Color(1.0f, 0.5f, 0, 0.5f);
+            case MoveMode.Hunt: return new Color(1.0f, 0, 0, 0.5f);
+            default: return new Color(0, 1, 0, 0.5f);
+         }
+    }
+
     
     // Combat Aiming
     private List<MeshInstance3D> _aimIndicators = new List<MeshInstance3D>();
@@ -837,6 +1071,7 @@ public partial class Unit : CharacterBody3D
     {
         if (_aimIndicatorRoot == null) CreateAimIndicator();
         _aimIndicatorRoot.Visible = false;
+        _aimIndicatorRoot.GlobalPosition = GlobalPosition + new Vector3(0, 5.5f, 0);
         
         for (int i = 0; i < _weapons.Count; i++)
         {
@@ -995,7 +1230,8 @@ public partial class Unit : CharacterBody3D
         {
             _selectionData.Visible = selected;
         }
-        UpdateStatusBars();
+        
+        if (_unitUI != null) _unitUI.SetSelected(selected);
         
         // Range Visuals
         if (selected)
@@ -1067,16 +1303,62 @@ public partial class Unit : CharacterBody3D
         }
     }
     
-    public void MoveTo(Vector3 position)
+    public void MoveTo(Vector3 position, MoveMode mode = MoveMode.Normal, bool queue = false, Vector3? finalFacing = null)
     {
         if (IsRouting)
         {
             GD.Print($"{Name} is routing and ignores move command!");
             return;
         }
-        _navAgent.TargetPosition = position;
-        IsMoving = true;
+        
+        var cmd = new Command {
+            CommandType = Command.Type.Move,
+            TargetPosition = position,
+            MoveMode = mode,
+            FinalFacing = finalFacing
+        };
+        
+        if (queue)
+        {
+             _commandQueue.Enqueue(cmd);
+             GD.Print($"{Name} queued Move to {position} ({mode})");
+             
+             // If idle, start immediately
+             if (!IsMoving && _currentCommand == null) ProcessNextCommand();
+        }
+        else
+        {
+             _commandQueue.Clear();
+             _currentCommand = cmd; // Set immediately
+             ExecuteCommand(cmd);
+        }
     }
+
+    public void Attack(Unit target, bool queue = false)
+    {
+         if (IsRouting) return;
+         if (target == null) return;
+         
+         var cmd = new Command {
+             CommandType = Command.Type.AttackUnit,
+             TargetUnit = target,
+             MoveMode = MoveMode.Normal 
+         };
+         
+        if (queue)
+        {
+             _commandQueue.Enqueue(cmd);
+             GD.Print($"{Name} queued Attack on {target.Name}");
+             if (!IsMoving && _currentCommand == null) ProcessNextCommand();
+        }
+        else
+        {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd);
+        }
+    }
+
 
     private float speedMsFromKmh(float kmh) => kmh / 3.6f;
 
@@ -1090,6 +1372,276 @@ public partial class Unit : CharacterBody3D
              Velocity = Vector3.Zero;
              MoveAndSlide();
              return;
+        }
+
+        ApplyRotationLogic(safeVelocity, isVehicle, isAir);
+
+
+        MoveAndSlide();
+    }
+
+    public override void _Process(double delta)
+    {
+        // Low freq update for visuals?
+        // Let's do every frame for smooth popping for now, or use timer
+        UpdateVeterancyStatus();
+
+        // Update TopLevel Positions manually
+        // Update TopLevel Positions manually
+        if (_unitUI != null)
+        {
+            _unitUI.GlobalPosition = GlobalPosition; // UnitUI handles its own offset in Initialize/Structure
+            // _unitUI is TopLevel, so it won't rotate with Unit.
+            // But we want it to stay above the Unit.
+            _unitUI.GlobalRotation = Quaternion.Identity.GetEuler(); // Ensure upright
+            
+            // Note: UnitUI.cs sets up offsets (BgSprite Position = 3.0f), so GlobalPosition matches Unit base.
+        }
+
+
+        if (_aimIndicatorRoot != null && _aimIndicatorRoot.Visible)
+        {
+            _aimIndicatorRoot.GlobalPosition = GlobalPosition + new Vector3(0, 3.5f, 0);
+            
+            // Manual Billboard for Aim Indicator to prevent "disappearing"
+            // LookAt camera
+            var camera = GetViewport()?.GetCamera3D();
+            if (camera != null)
+            {
+                _aimIndicatorRoot.LookAt(camera.GlobalPosition, Vector3.Up);
+            }
+        }
+        
+        if (_rangeVisualRoot != null && _rangeVisualRoot.Visible)
+        {
+             // Keep position sync but reset rotation to Zero (North up)
+             _rangeVisualRoot.GlobalPosition = GlobalPosition;
+             _rangeVisualRoot.GlobalRotation = Vector3.Zero;
+        }
+    }
+
+    private void ProcessRoutingBehavior(float delta)
+    {
+        if (_navAgent.IsNavigationFinished())
+        {
+             FindSafePosition();
+        }
+        
+        Vector3 currentAgentPosition = GlobalTransform.Origin;
+        Vector3 nextPathPosition = _navAgent.GetNextPathPosition();
+        Vector3 newVelocity = (nextPathPosition - currentAgentPosition).Normalized();
+        newVelocity *= (_navAgent.MaxSpeed * 1.5f); 
+        _navAgent.Velocity = newVelocity;
+        
+        if (newVelocity.LengthSquared() > 0.1f)
+        {
+             var targetLook = GlobalPosition + newVelocity;
+             LookAt(new Vector3(targetLook.X, GlobalPosition.Y, targetLook.Z), Vector3.Up);
+        }
+        
+        MoveAndSlide();
+    }
+    
+    private void FindSafePosition()
+    {
+        // 1. Identify Threats
+        // Priority 1: Nearest Visible Enemy (Immediate danger)
+        // Priority 2: Last Damage Source (If no enemies visible, e.g. long range fire)
+        
+        Vector3 threatDir = Vector3.Zero;
+        Unit nearestEnemy = GetNearestEnemy(50.0f); // Look for enemies within 50m
+        
+        if (nearestEnemy != null)
+        {
+             threatDir = (GlobalPosition - nearestEnemy.GlobalPosition).Normalized();
+        }
+        else
+        {
+             // Fallback to damage source
+             if (_lastDamageSourcePos != Vector3.Zero)
+             {
+                 threatDir = (GlobalPosition - _lastDamageSourcePos).Normalized();
+             }
+        }
+        
+        if (threatDir.LengthSquared() < 0.01f) 
+        {
+            // Fallback if no data: Run forward (or backwards?)
+             threatDir = -Transform.Basis.Z; 
+        }
+
+        // Check current status
+        int currentVisibleThreats = GetVisibleThreatCount(GlobalPosition);
+        bool isCurrentlySafe = currentVisibleThreats == 0;
+
+        // Sampling
+        Vector3 bestCandidate = Vector3.Zero;
+        bool foundSafeCandidate = false;
+        
+        // Setup Search
+        int samples = 12; // More samples for better coverage
+        float searchRadius = 25.0f;
+        
+        for (int i = 0; i < samples; i++)
+        {
+             // Fan out away from threat (Semi-circle mostly)
+             // Base angle is Away from threat
+             float baseAngle = Mathf.Atan2(threatDir.X, threatDir.Z);
+             
+             // Spread: +/- 90 degrees? Or 360 if we are confused?
+             // Usually routing = running AWAY. So +/- 90 is good.
+             // Let's do +/- 100 degrees to allows slightly side-stepping obstacles.
+             float offset = (GD.Randf() - 0.5f) * Mathf.DegToRad(200.0f); 
+             float angle = baseAngle + offset;
+             
+             Vector3 dir = new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle));
+             float dist = 15.0f + GD.Randf() * 15.0f; // 15 to 30m
+             Vector3 candidate = GlobalPosition + dir * dist;
+             
+             // Check Visibility at Candidate
+             int candidateThreats = GetVisibleThreatCount(candidate);
+             
+             if (candidateThreats == 0)
+             {
+                 // Candidate is Safe!
+                 // If we are already safe, only move if this is "better" (further from threat source)
+                 if (isCurrentlySafe)
+                 {
+                     float currentDist = GlobalPosition.DistanceSquaredTo(_lastDamageSourcePos);
+                     float newDist = candidate.DistanceSquaredTo(_lastDamageSourcePos);
+                     if (newDist > currentDist + 25.0f) // Must be meaningfully further (5m^2 = 25)
+                     {
+                         _navAgent.TargetPosition = candidate;
+                         return; // Move to better safe spot
+                     }
+                 }
+                 else
+                 {
+                     // We were unsafe, now we found a safe spot. Go there immediately.
+                     _navAgent.TargetPosition = candidate;
+                     return;
+                 }
+                 foundSafeCandidate = true;
+             }
+        }
+        
+        // If we found NO safe candidates:
+        if (isCurrentlySafe)
+        {
+            // We are safe here, but couldn't find a better spot.
+            // STAY HERE. Do NOT run out.
+            _navAgent.TargetPosition = GlobalPosition;
+            _navAgent.Velocity = Vector3.Zero;
+            return;
+        }
+        
+        // If we are UNSAFE and found NO safe spots, we must Panic Run (Fallback)
+        // Try to minimize threats? Or just run?
+        // Let's run blindly away.
+        Vector3 fleePos = GlobalPosition + threatDir * 30.0f;
+        _navAgent.TargetPosition = fleePos;
+    }
+
+    private int GetVisibleThreatCount(Vector3 pos)
+    {
+        if (UnitManager.Instance == null) return 0;
+        int count = 0;
+        
+        var spaceState = GetWorld3D().DirectSpaceState;
+        
+        foreach (var enemy in UnitManager.Instance.GetActiveUnits())
+        {
+            if (enemy == null || enemy.Team == this.Team) continue;
+            
+            // Optimization: Only check enemies within range (e.g. 100m)
+            // Distant enemies might see us, but for routing logic we care about immediate danger.
+            if (pos.DistanceSquaredTo(enemy.GlobalPosition) > 10000.0f) continue; // 100m
+            
+            // Raycast check
+            // We check FROM Enemy TO Us (Position).
+            // This assumes Enemy can see us if we are at 'pos'.
+            // Note: 'pos' might be inside a wall? We assume NavMesh keeps 'pos' valid.
+            // We lift points up for LOS.
+            
+            var from = enemy.GlobalPosition + Vector3.Up * 1.5f;
+            var to = pos + Vector3.Up * 1.5f;
+            
+            var query = PhysicsRayQueryParameters3D.Create(from, to);
+             // We can ignore self, but 'pos' doesn't have a body yet.
+             // We want to know if 'pos' is obscured by world geometry.
+             // We usually ignore 'enemy' and 'this'.
+             
+            // Exclude enemy body from blocking its own view
+            var excludeList = new Godot.Collections.Array<Godot.Rid>();
+            excludeList.Add(enemy.GetRid());
+            excludeList.Add(GetRid());
+            
+            query.Exclude = excludeList;
+            
+            var result = spaceState.IntersectRay(query);
+            
+            if (result.Count == 0)
+            {
+                // Nothing blocking -> Visible
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    private bool CheckLineOfSightPoints(Vector3 from, Vector3 to)
+    {
+         // Legacy helper, kept if needed or replaced.
+         // Used by old logic but we are replacing FindSafePosition.
+         // We can keep it or let it be removed if unused.
+         // Check usages: ScanAndFire uses CheckLineOfSight(Unit).
+         // This overload (Vector3, Vector3) was private for FindSafePosition.
+         // We can redefine it or just rely on GetVisibleThreatCount.
+         return false; 
+    }
+    private void ApplyRotationLogic(Vector3 safeVelocity, bool isVehicle, bool isAir)
+    {
+        if (CurrentMoveMode == MoveMode.Reverse && isVehicle && !isAir)
+        {
+             // Reverse Logic: Look AWAY from velocity
+            Vector3 moveDir = safeVelocity.Normalized();
+            if (moveDir.LengthSquared() < 0.01f) return;
+
+             // We want "Back" (-Z) to point in moveDir.
+             // Body Forward = -moveDir.
+             // LookAt target = GlobalPos + BodyForward = GlobalPos - moveDir.
+             
+             Vector3 lookTarget = GlobalPosition - moveDir;
+             
+             // Smooth turn logic identical to Forward but with inverted target
+            Vector3 direction = (lookTarget - GlobalPosition).Normalized();
+            Vector3 currentForward = -GlobalTransform.Basis.Z;
+            float angle = currentForward.AngleTo(direction);
+
+            float rotSpeedDeg = Data.Speed.RotationSpeed.HasValue ? Data.Speed.RotationSpeed.Value : 90.0f;
+            float maxRotStep = Mathf.DegToRad(rotSpeedDeg) * (float)GetPhysicsProcessDeltaTime();
+
+            if (angle > 0.01f)
+            {
+                Vector3 cross = currentForward.Cross(direction);
+                float sign = (cross.Y > 0) ? 1.0f : -1.0f;
+                float rotAmount = Mathf.Min(angle, maxRotStep);
+                RotateY(rotAmount * sign);
+                
+                if (Mathf.Abs(angle) > Mathf.DegToRad(45.0f)) // Wider tolerance for reverse?
+                {
+                     Velocity = Vector3.Zero;
+                }
+                else
+                {
+                     Velocity = safeVelocity;
+                }
+            }
+            else
+            {
+                 Velocity = safeVelocity;
+            }
+            return;
         }
 
         if (isVehicle && !isAir)
@@ -1150,116 +1702,26 @@ public partial class Unit : CharacterBody3D
                  }
             }
         }
-
-        MoveAndSlide();
     }
 
-    public override void _Process(double delta)
+    private Unit GetNearestEnemy(float maxRange)
     {
-        // Low freq update for visuals?
-        // Let's do every frame for smooth popping for now, or use timer
-        UpdateVeterancyStatus();
-
-        // Update TopLevel Positions manually
-        if (_healthBarRoot != null && _healthBarRoot.Visible)
-        {
-            _healthBarRoot.GlobalPosition = GlobalPosition + new Vector3(0, 2.5f, 0);
-            
-            // Explicitly reset rotation to ensure billboard works from Identity
-            _healthBarRoot.GlobalRotation = Vector3.Zero;
-            
-            // Scaling logic (if any)
-            _healthBarRoot.Scale = Vector3.One; 
-        }
-
-        if (_aimIndicatorRoot != null && _aimIndicatorRoot.Visible)
-        {
-            _aimIndicatorRoot.GlobalPosition = GlobalPosition + new Vector3(0, 3.5f, 0);
-            
-            // Manual Billboard for Aim Indicator to prevent "disappearing"
-            // LookAt camera
-            var camera = GetViewport()?.GetCamera3D();
-            if (camera != null)
-            {
-                _aimIndicatorRoot.LookAt(camera.GlobalPosition, Vector3.Up);
-            }
-        }
-        
-        if (_rangeVisualRoot != null && _rangeVisualRoot.Visible)
-        {
-             // Keep position sync but reset rotation to Zero (North up)
-             _rangeVisualRoot.GlobalPosition = GlobalPosition;
-             _rangeVisualRoot.GlobalRotation = Vector3.Zero;
-        }
-    }
-
-    private void ProcessRoutingBehavior(float delta)
-    {
-        if (_navAgent.IsNavigationFinished())
-        {
-             FindSafePosition();
-        }
-        
-        Vector3 currentAgentPosition = GlobalTransform.Origin;
-        Vector3 nextPathPosition = _navAgent.GetNextPathPosition();
-        Vector3 newVelocity = (nextPathPosition - currentAgentPosition).Normalized();
-        newVelocity *= (_navAgent.MaxSpeed * 1.5f); 
-        _navAgent.Velocity = newVelocity;
-        
-        if (newVelocity.LengthSquared() > 0.1f)
-        {
-             var targetLook = GlobalPosition + newVelocity;
-             LookAt(new Vector3(targetLook.X, GlobalPosition.Y, targetLook.Z), Vector3.Up);
-        }
-        
-        MoveAndSlide();
-    }
-    
-    private void FindSafePosition()
-    {
-        Vector3 threatDir = (GlobalPosition - _lastDamageSourcePos).Normalized();
-        
-        // 1. Search for static obstacles within LOS (Max 40m for safety)
-        var spaceState = GetWorld3D().DirectSpaceState;
-        var shape = new SphereShape3D();
-        shape.Radius = 40.0f; 
-        var query = new PhysicsShapeQueryParameters3D();
-        query.Shape = shape;
-        query.Transform = GlobalTransform;
-        query.CollisionMask = 1; 
-        
-        var results = spaceState.IntersectShape(query, 10);
-        
-        // Simple heuristic: Try random points away from threat
-        for (int i = 0; i < 8; i++)
-        {
-             float baseAngle = Mathf.Atan2(threatDir.X, threatDir.Z);
-             float offset = (GD.Randf() - 0.5f) * Mathf.Pi; 
-             float angle = baseAngle + offset;
+         if (UnitManager.Instance == null) return null;
+         Unit nearest = null;
+         float minDistSq = maxRange * maxRange;
+         
+         foreach(var u in UnitManager.Instance.GetActiveUnits())
+         {
+             if (u == this || u.Team == this.Team || u.IsQueuedForDeletion()) continue;
              
-             Vector3 dir = new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle));
-             float dist = 20.0f + GD.Randf() * 10.0f;
-             Vector3 candidate = GlobalPosition + dir * dist;
-             
-             if (!CheckLineOfSightPoints(candidate, _lastDamageSourcePos))
+             float d = GlobalPosition.DistanceSquaredTo(u.GlobalPosition);
+             if (d < minDistSq)
              {
-                 _navAgent.TargetPosition = candidate;
-                 return;
+                 minDistSq = d;
+                 nearest = u;
              }
-        }
-        
-        Vector3 fleePos = GlobalPosition + threatDir * 30.0f;
-        _navAgent.TargetPosition = fleePos;
-    }
-    
-    private bool CheckLineOfSightPoints(Vector3 from, Vector3 to)
-    {
-         var spaceState = GetWorld3D().DirectSpaceState;
-         var ray = PhysicsRayQueryParameters3D.Create(from + Vector3.Up, to + Vector3.Up);
-         var res = spaceState.IntersectRay(ray);
-         // If IntersectRay hits something, LOS is blocked.
-         // We WANT it to be blocked for Safety (return false for "Has LOS").
-         // If count == 0, we HAVE LOS.
-         return res.Count == 0;
+         }
+         return nearest;
     }
 }
+

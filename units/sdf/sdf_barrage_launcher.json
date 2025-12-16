@@ -1,37 +1,37 @@
 {
-    "id":  "sdf_barrage_launcher",
-    "name":  "Barrage Launcher",
-    "cost":  120,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
-    "health":  7,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  40,
-                  "side":  30,
-                  "rear":  15,
-                  "top":  10
-              },
-    "fuel":  400,
-    "autonomy":  {
-                     "road":  400,
-                     "off_road":  250
-                 },
-    "optics":  "Normal",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_barrage_missile",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ]
+    "id": "sdf_barrage_launcher",
+    "name": "Barrage Launcher",
+    "cost": 120,
+    "icon": "assets/icons/units/sdf/sdf_barrage_launcher.png",
+    "health": 7,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 40,
+        "side": 30,
+        "rear": 15,
+        "top": 10
+    },
+    "fuel": 400,
+    "autonomy": {
+        "road": 400,
+        "off_road": 250
+    },
+    "optics": "Normal",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_barrage_missile",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ]
 }

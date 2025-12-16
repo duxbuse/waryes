@@ -1,5 +1,6 @@
 using Godot;
 using WarYes.Data;
+using System.Collections.Generic;
 
 public partial class Weapon : Node
 {
@@ -51,10 +52,87 @@ public partial class Weapon : Node
 
     private Unit _owner;
 
+    public bool IsGuided { get; set; } = false;
+    public float ProjectileSpeed { get; set; } = 250.0f; // Default fast
+    public float TurnSpeed { get; set; } = 0.0f;
+    
+    private List<Projectile> _activeProjectiles = new List<Projectile>();
+    
+    // Check if we are currently guiding a projectile
+    public bool IsGuiding 
+    { 
+        get 
+        { 
+            CleanProjectileList();
+            return IsGuided && _activeProjectiles.Count > 0; 
+        } 
+    }
+
+    public void BreakGuidance()
+    {
+        CleanProjectileList();
+        foreach (var p in _activeProjectiles)
+        {
+            p.StopGuiding();
+        }
+        _activeProjectiles.Clear();
+    }
+    
+    public int SupplyCost { get; set; } = 1;
+    public int SalvoLength { get; set; } = 1;
+    private int _shotsInSalvoFired = 0;
+    public float ReloadTime { get; set; } = 4.0f;
+
+    private void CleanProjectileList()
+    {
+        _activeProjectiles.RemoveAll(p => p == null || !IsInstanceValid(p) || p.IsQueuedForDeletion());
+    }
+
     public void Initialize(Unit owner, string weaponId, int maxAmmo = -1)
     {
         _owner = owner;
         WeaponId = weaponId;
+        
+        var stats = UnitManager.Instance.GetWeaponStats(weaponId);
+        if (stats != null)
+        {
+             Range = stats.Range.Ground; // Default to Ground range for now
+             AP = stats.Penetration;
+             
+             // Parse Damage "0.3 HE"
+             string dmgStr = stats.Damage.Split(' ')[0];
+             if (float.TryParse(dmgStr, out float dmg)) Damage = dmg;
+             else Damage = 1.0f;
+             
+             // Base Fire Rate in RPM -> Hz handled in logic or converted?
+             // If we use FireRate as Shots Per Second:
+             // But we have Burst mechanics now.
+             // FireRate property calculates per Rank. _baseFireRate should be RPM / 60?
+             // The user request says "rate of fire is 600... 600/60 = 10 rounds per second".
+             // So stats.RateOfFire is RPM.
+             _baseFireRate = (float)stats.RateOfFire / 60.0f;
+             
+             AimTime = stats.AimTime;
+             ReloadTime = stats.ReloadTime;
+             SalvoLength = stats.SalvoLength > 0 ? stats.SalvoLength : 1;
+             SupplyCost = stats.SupplyCost;
+             
+             IsGuided = stats.IsGuided;
+             ProjectileSpeed = stats.ProjectileSpeed;
+             TurnSpeed = stats.TurnSpeed;
+             
+             // Accuracy
+             _baseAccuracy = (float)stats.Accuracy.Static / 100.0f; // Assuming 0-100 in JSON
+             
+             // Fallbacks if 0
+             if (ProjectileSpeed <= 0) ProjectileSpeed = IsGuided ? 50f : 250f;
+        }
+        else
+        {
+             GD.PrintErr($"Weapon: Stats not found for {weaponId}, using defaults.");
+             // Default fallback (keep existing hardcoded blocks if desired, or just generic)
+             SalvoLength = 1;
+        }
         
         // Global Ammo Limit Enforcement
         if (maxAmmo <= 0) 
@@ -67,37 +145,6 @@ public partial class Weapon : Node
         }
         
         CurrentAmmo = MaxAmmo;
-        
-        // Simulating data lookup for now (should come from a centralized Weapon Database)
-        if (weaponId.Contains("cannon"))
-        {
-            Range = 40.0f; 
-            Damage = 2.5f; 
-            
-            // Rebalanced AP (Targeting scale 20-25 for Heavy AT)
-            AP = 22; 
-            
-            FireRate = 0.25f; // Slower: 1 shot per 4s (Cooldown)
-            AimTime = 2.0f; // Takes 2s to aim
-            Accuracy = 0.7f; // 30% miss chance
-        }
-        else if (weaponId.Contains("at_launcher"))
-        {
-            Range = 25.0f; // Short Range
-            AP = 18; // Moderate AP (Hits Rear 8-14, Struggles vs Front 20+)
-            FireRate = 0.25f; // Slow fire
-            AimTime = 1.5f;
-            Accuracy = 0.85f; // Good accuracy
-            Damage = 1.0f; 
-        }
-        else if (weaponId.Contains("rifle") || weaponId.Contains("gun"))
-        {
-            Range = 20.0f; 
-            AP = 1; // Rifles have low AP
-            FireRate = 1.0f; 
-            AimTime = 0.5f; 
-            Accuracy = 0.9f;
-        }
     }
 
     public Unit CurrentTarget { get; private set; }
@@ -132,6 +179,7 @@ public partial class Weapon : Node
     {
         CurrentTarget = null;
         CurrentAimTimer = 0;
+        _shotsInSalvoFired = 0; // Reset burst if interrupted?
     }
 
     public override void _Process(double delta)
@@ -178,8 +226,22 @@ public partial class Weapon : Node
     {
         if (!CanFire()) return;
 
-        Cooldown = 1.0f / FireRate;
+        // Burst / Reload Logic
+        _shotsInSalvoFired++;
         
+        if (_shotsInSalvoFired < SalvoLength)
+        {
+             // Inter-shot delay
+             // RateOfFire is shots per second.
+             Cooldown = 1.0f / FireRate; 
+        }
+        else
+        {
+             // Salvo Complete -> Reload
+             Cooldown = ReloadTime;
+             _shotsInSalvoFired = 0;
+        }
+
         if (MaxAmmo > 0)
         {
             CurrentAmmo--;
@@ -209,10 +271,12 @@ public partial class Weapon : Node
         // Spawn Projectile
         var projectile = new Projectile();
         
+        _activeProjectiles.Add(projectile);
+        
         // Add to main scene root to decouple from unit rotation
         _owner.GetTree().Root.AddChild(projectile);
         projectile.GlobalPosition = _owner.GlobalPosition + Vector3.Up * 2.0f; // Fire from "turret" height
 
-        projectile.Initialize(_owner, target, AP, Damage, isAccurate, targetPos);
+        projectile.Initialize(_owner, target, AP, Damage, isAccurate, targetPos, IsGuided, ProjectileSpeed, TurnSpeed, SalvoLength);
     }
 }

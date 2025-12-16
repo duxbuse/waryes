@@ -1,37 +1,37 @@
 {
-    "id":  "sdf_bastion_mbt_hunter",
-    "name":  "Bastion Mbt Hunter",
-    "cost":  145,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
-    "health":  12,
-    "speed":  {
-                  "road":  70,
-                  "off_road":  50
-              },
-    "armor":  {
-                  "front":  180,
-                  "side":  150,
-                  "rear":  100,
-                  "top":  30
-              },
-    "fuel":  600,
-    "autonomy":  {
-                     "road":  300,
-                     "off_road":  180
-                 },
-    "optics":  "Very Good",
-    "stealth":  "None",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_long_barrel_cannon",
-                        "count":  1,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
-                        "count":  1,
-                        "max_ammo":  10
-                    }
-                ]
+    "id": "sdf_bastion_mbt_hunter",
+    "name": "Bastion Mbt Hunter",
+    "cost": 145,
+    "icon": "assets/icons/units/sdf/sdf_bastion_mbt_hunter.png",
+    "health": 12,
+    "speed": {
+        "road": 70,
+        "off_road": 50
+    },
+    "armor": {
+        "front": 180,
+        "side": 150,
+        "rear": 100,
+        "top": 30
+    },
+    "fuel": 600,
+    "autonomy": {
+        "road": 300,
+        "off_road": 180
+    },
+    "optics": "Very Good",
+    "stealth": "None",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_long_barrel_cannon",
+            "count": 1,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_heavy_auto_cannon_hull",
+            "count": 1,
+            "max_ammo": 10
+        }
+    ]
 }

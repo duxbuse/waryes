@@ -30,6 +30,15 @@ namespace WarYes.Data
 
         [JsonPropertyName("supply_cost")]
         public int SupplyCost { get; set; }
+
+        [JsonPropertyName("is_guided")]
+        public bool IsGuided { get; set; }
+
+        [JsonPropertyName("projectile_speed")]
+        public float ProjectileSpeed { get; set; } // Speed of the projectile
+
+        [JsonPropertyName("turn_speed")]
+        public float TurnSpeed { get; set; } // Degrees per second
     }
 
     public class WeaponRange
