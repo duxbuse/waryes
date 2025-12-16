@@ -2,7 +2,7 @@
     "id":  "sdf_skyfortress_destroyer",
     "name":  "Skyfortress Destroyer",
     "cost":  260,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_skyfortress_destroyer.png",
     "health":  12,
     "speed":  {
                   "road":  550,
@@ -38,5 +38,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "INF"
 }

@@ -2,7 +2,7 @@
     "id":  "sdf_trooper",
     "name":  "Trooper",
     "cost":  20,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_trooper.png",
     "health":  10,
     "speed":  {
                   "road":  15,
@@ -30,5 +30,6 @@
                         "count":  1,
                         "max_ammo":  5
                     }
-                ]
+                ],
+    "category":  "INF"
 }

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c8apjck75o0g2"
-path="res://.godot/imported/sdf_45th_icon.jpg-01e3e3ce54a5c827c301ea9b0ef8e093.ctex"
+uid="uid://cw4q0a3dt4p36"
+path="res://.godot/imported/sdf_101st_airborne.jpg-250b35710322508632a601ef67c438e3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/divisions/sdf_45th_icon.jpg"
-dest_files=["res://.godot/imported/sdf_45th_icon.jpg-01e3e3ce54a5c827c301ea9b0ef8e093.ctex"]
+source_file="res://assets/icons/divisions/sdf_101st_airborne.jpg"
+dest_files=["res://.godot/imported/sdf_101st_airborne.jpg-250b35710322508632a601ef67c438e3.ctex"]
 
 [params]
 

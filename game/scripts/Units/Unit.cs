@@ -73,10 +73,7 @@ public partial class Unit : CharacterBody3D
         if (_tacticalIcon != null) _tacticalIcon.Visible = active;
         
         if (_visuals != null) _visuals.Visible = !active;
-        if (_unitUI != null) _unitUI.Visible = !active;
-        
-        // We might want to keep selection ring visible?
-        // _selectionData is separate.
+        // _unitUI remains visible (Persist HP/Morale bars)
     }
 
     // Combat
@@ -233,15 +230,15 @@ public partial class Unit : CharacterBody3D
         
         _unitUI.Initialize(Data.Id, Name, (int)_maxHealth, category, IsCommander);
         _unitUI.UpdateHealth((int)Health);
-        
-        // Ensure visibility is correct on init
-        if (_inTacticalView) _unitUI.Visible = false;
 
     }
 
 
 
     
+    private bool _hasCommanderBuff = false;
+    public int EffectiveRank => Rank + (_hasCommanderBuff ? 1 : 0);
+
     private void UpdateVeterancyStatus()
     {
         // 1. Update Commander Buff
@@ -262,9 +259,11 @@ public partial class Unit : CharacterBody3D
             }
         }
         
+        _hasCommanderBuff = buffed;
+
         if (_unitUI != null)
         {
-            _unitUI.SetBuffStatus(buffed);
+            _unitUI.SetBuffStatus(_hasCommanderBuff);
             _unitUI.SetVeterancy(Rank);
         }
     }
@@ -490,7 +489,14 @@ public partial class Unit : CharacterBody3D
         }
         
         _tacticalIcon.Visible = false;
-        AddChild(_tacticalIcon);
+        if (_visualRoot != null)
+        {
+            _visualRoot.AddChild(_tacticalIcon);
+        }
+        else
+        {
+            AddChild(_tacticalIcon);
+        }
         // Position it slightly up so it's not clipping terrain
         _tacticalIcon.Position = new Vector3(0, 2.0f, 0);
     }
@@ -605,7 +611,15 @@ public partial class Unit : CharacterBody3D
     
     public void ApplySuppression(float amount, Vector3 sourcePosition)
     {
-        Morale -= amount;
+        float dampener = 1.0f;
+        int effRank = EffectiveRank;
+        
+        if (effRank == 1) dampener = 0.90f; // 10% reduction
+        else if (effRank == 2) dampener = 0.80f; // 20% reduction
+        else if (effRank == 3) dampener = 0.75f; // 25% reduction
+        else if (effRank >= 4) dampener = 0.70f; // 30% reduction
+        
+        Morale -= amount * dampener;
         _lastDamageSourcePos = sourcePosition;
         
         if (Morale <= 0)
@@ -661,7 +675,15 @@ public partial class Unit : CharacterBody3D
         }
         else if (Morale < MaxMorale)
         {
-            Morale += 0.5f * (float)delta;
+            float regen = 1.0f;
+            int effRank = EffectiveRank;
+            
+            if (effRank == 1) regen = 1.0f;
+            else if (effRank == 2) regen = 2.0f;
+            else if (effRank == 3) regen = 2.5f; 
+            else if (effRank >= 4) regen = 3.0f;
+            
+            Morale += regen * (float)delta;
             if (Morale > MaxMorale) Morale = MaxMorale;
         }
         
@@ -690,6 +712,8 @@ public partial class Unit : CharacterBody3D
         {
             _scanTimer = SCAN_INTERVAL;
             ScanAndFire();
+            UpdateVeterancyStatus(); // Check for commander buff periodically
+            
             
             // Hunt Mode Logic - Pause/Resume based on engagement
             if (_currentCommand != null && _currentCommand.CommandType == Command.Type.Move && _currentCommand.MoveMode == MoveMode.Hunt)

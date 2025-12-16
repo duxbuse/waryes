@@ -2,7 +2,7 @@
     "id":  "vanguard_hunter_tank_laser",
     "name":  "Hunter Tank Laser",
     "cost":  140,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "icon":  "assets/icons/units/vanguard/vanguard_hunter_tank_laser.png",
     "health":  10,
     "speed":  {
                   "road":  70,
@@ -28,5 +28,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "TNK"
 }

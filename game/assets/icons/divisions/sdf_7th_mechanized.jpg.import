@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://db5syohdaoale"
-path="res://.godot/imported/sdf_212th_icon.jpg-f88867146098f334ee9cac4367dc432f.ctex"
+uid="uid://iek3vadxyjgb"
+path="res://.godot/imported/sdf_7th_mechanized.jpg-b033b9cc0229c96e6e9b14809b45cdee.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/divisions/sdf_212th_icon.jpg"
-dest_files=["res://.godot/imported/sdf_212th_icon.jpg-f88867146098f334ee9cac4367dc432f.ctex"]
+source_file="res://assets/icons/divisions/sdf_7th_mechanized.jpg"
+dest_files=["res://.godot/imported/sdf_7th_mechanized.jpg-b033b9cc0229c96e6e9b14809b45cdee.ctex"]
 
 [params]
 

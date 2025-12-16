@@ -2,7 +2,7 @@
     "id":  "vanguard_apc",
     "name":  "Apc",
     "cost":  30,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "icon":  "assets/icons/units/vanguard/vanguard_apc.png",
     "health":  8,
     "speed":  {
                   "road":  70,
@@ -28,5 +28,6 @@
                         "count":  1,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "INF"
 }

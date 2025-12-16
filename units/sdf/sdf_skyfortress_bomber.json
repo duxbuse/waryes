@@ -2,7 +2,7 @@
     "id":  "sdf_skyfortress_bomber",
     "name":  "Skyfortress Bomber",
     "cost":  250,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_skyfortress_bomber.png",
     "health":  12,
     "speed":  {
                   "road":  500,
@@ -38,5 +38,6 @@
                         "count":  2,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "AIR"
 }

@@ -2,7 +2,7 @@
     "id":  "vanguard_fortress_tank",
     "name":  "Fortress Tank",
     "cost":  320,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "icon":  "assets/icons/units/vanguard/vanguard_fortress_tank.png",
     "health":  12,
     "speed":  {
                   "road":  70,
@@ -38,5 +38,6 @@
                         "count":  1,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "TNK"
 }

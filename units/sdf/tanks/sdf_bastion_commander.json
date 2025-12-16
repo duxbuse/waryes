@@ -2,7 +2,7 @@
     "id":  "sdf_bastion_commander",
     "name":  "Bastion Command Tank",
     "cost":  300,
-    "icon":  "assets/icons/tank_commander.png",
+    "icon":  "assets/icons/units/sdf/sdf_bastion_commander.png",
     "health":  12,
     "speed":  {
                   "road":  60,
@@ -30,5 +30,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "INF"
 }

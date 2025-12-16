@@ -2,7 +2,7 @@
     "id":  "sdf_rocket_team",
     "name":  "Rocket Team",
     "cost":  25,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_rocket_team.png",
     "health":  6,
     "speed":  {
                   "road":  12,
@@ -30,5 +30,6 @@
                         "count":  3,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "INF"
 }

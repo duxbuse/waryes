@@ -25,10 +25,9 @@ public partial class MapBuilder : Node3D
         
         // Runtime Generation if not already baked?
         // If children exist, assume baked.
-        if (GetChildCount() == 0)
-        {
-             GenerateTerrain();
-        }
+        // Runtime Generation if not already baked?
+        // FORCE REGEN to ensure fixes apply
+        GenerateTerrain();
     }
 
     private void GenerateTerrain()
@@ -195,7 +194,17 @@ public partial class MapBuilder : Node3D
         meshInstance.Mesh = mesh;
         meshInstance.MaterialOverride = mat;
         meshInstance.Position = center;
-        AddChild(meshInstance);
+        
+        // Add Collider
+        var staticBody = new StaticBody3D();
+        var collisionShape = new CollisionShape3D();
+        var shape = new BoxShape3D();
+        shape.Size = mesh.Size;
+        collisionShape.Shape = shape;
+        staticBody.AddChild(collisionShape);
+        meshInstance.AddChild(staticBody);
+
+        parent.AddChild(meshInstance);
     }
 
     private void CreateStrip(string name, Vector3 pos, Vector3 size, Color color, Node parent)
@@ -208,10 +217,19 @@ public partial class MapBuilder : Node3D
         mesh.Size = size;
         var mat = new StandardMaterial3D();
         mat.AlbedoColor = color;
-        mesh.Material = mat;
         meshInstance.Mesh = mesh;
         meshInstance.Position = pos;
-        AddChild(meshInstance);
+
+        // Add Collider for Ground/Road
+        var staticBody = new StaticBody3D();
+        var collisionShape = new CollisionShape3D();
+        var shape = new BoxShape3D();
+        shape.Size = mesh.Size;
+        collisionShape.Shape = shape;
+        staticBody.AddChild(collisionShape);
+        meshInstance.AddChild(staticBody);
+
+        parent.AddChild(meshInstance);
     }
 
     private void CreateCylinder(string name, Vector3 pos, float radius, Color color, Node parent)
@@ -229,7 +247,7 @@ public partial class MapBuilder : Node3D
         mesh.Material = mat;
         meshInstance.Mesh = mesh;
         meshInstance.Position = pos;
-        AddChild(meshInstance);
+        parent.AddChild(meshInstance);
     }
 
     private void CreateBlockCluster(string name, Vector3 center, int count, Color color, Node parent)
@@ -245,26 +263,24 @@ public partial class MapBuilder : Node3D
 
         for (int i = 0; i < count; i++)
         {
+            Vector3 offset = new Vector3(GD.Randf() * 20 - 10, 0, GD.Randf() * 20 - 10);
+            var staticBody = new StaticBody3D();
+            staticBody.Position = center + offset;
+            
             var meshInstance = new MeshInstance3D();
             var mesh = new BoxMesh();
             mesh.Size = new Vector3(4, 3, 4);
             meshInstance.Mesh = mesh;
             meshInstance.MaterialOverride = mat;
-            
-            // Random scatter around center
-            Vector3 offset = new Vector3(GD.Randf() * 20 - 10, 1.5f, GD.Randf() * 20 - 10);
-            meshInstance.Position = center + offset;
-            
-            // Add Collision
-            var staticBody = new StaticBody3D();
+            staticBody.AddChild(meshInstance);
+
             var collisionShape = new CollisionShape3D();
             var shape = new BoxShape3D();
             shape.Size = mesh.Size;
             collisionShape.Shape = shape;
             staticBody.AddChild(collisionShape);
-            meshInstance.AddChild(staticBody);
             
-            root.AddChild(meshInstance);
+            root.AddChild(staticBody);
         }
     }
 
@@ -281,6 +297,10 @@ public partial class MapBuilder : Node3D
 
         for (int i = 0; i < count; i++)
         {
+            var staticBody = new StaticBody3D();
+            Vector3 offset = new Vector3(GD.Randf() * 20 - 10, 2.0f, GD.Randf() * 20 - 10);
+            staticBody.Position = center + offset;
+
             var meshInstance = new MeshInstance3D();
             var mesh = new CylinderMesh(); // Tree trunk-ish
             mesh.TopRadius = 0.5f;
@@ -288,19 +308,17 @@ public partial class MapBuilder : Node3D
             mesh.Height = 4.0f;
             meshInstance.Mesh = mesh;
             meshInstance.MaterialOverride = mat;
-
-            Vector3 offset = new Vector3(GD.Randf() * 20 - 10, 2.0f, GD.Randf() * 20 - 10);
-            meshInstance.Position = center + offset;
+            staticBody.AddChild(meshInstance);
             
             // Add Collision
-            var staticBody = new StaticBody3D();
             var collisionShape = new CollisionShape3D();
             var shape = new CylinderShape3D();
             shape.Height = mesh.Height;
             shape.Radius = mesh.TopRadius; // Cylinders usually uniform
             collisionShape.Shape = shape;
             staticBody.AddChild(collisionShape);
-            meshInstance.AddChild(staticBody);
+            
+            root.AddChild(staticBody);
             
             root.AddChild(meshInstance);
             

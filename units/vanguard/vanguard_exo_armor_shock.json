@@ -2,7 +2,7 @@
     "id":  "vanguard_exo_armor_shock",
     "name":  "Exo Armor Shock",
     "cost":  90,
-    "icon":  "assets/icons/factions/vanguard_faction_icon_main.png",
+    "icon":  "assets/icons/units/vanguard/vanguard_exo_armor_shock.png",
     "health":  15,
     "speed":  {
                   "road":  70,
@@ -25,5 +25,6 @@
                         "count":  5,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "TNK"
 }

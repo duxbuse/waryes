@@ -1,0 +1,170 @@
+[gd_scene load_steps=3 format=3 uid="uid://deckbuilder98765"]
+
+[ext_resource type="Script" path="res://scripts/UI/DeckBuilderUI.cs" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://deckstripitem456" path="res://scenes/UI/Components/DeckStripItem.tscn" id="2_strip"]
+
+[node name="DeckBuilder" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+DeckStripItemScene = ExtResource("2_strip")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.15, 0.15, 0.15, 1)
+
+[node name="TopPanel" type="Panel" parent="."]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+
+[node name="HBox" type="HBoxContainer" parent="TopPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BackButton" type="Button" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "BACK"
+
+[node name="FactionSelector" type="OptionButton" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+alignment = 1
+
+[node name="DivisionSelector" type="OptionButton" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_vertical = 4
+alignment = 1
+
+[node name="DeckNameInput" type="LineEdit" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_vertical = 4
+placeholder_text = "Deck Name"
+alignment = 1
+
+[node name="DeckStripScroll" type="ScrollContainer" parent="TopPanel/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DeckStripContainer" type="HBoxContainer" parent="TopPanel/HBox/DeckStripScroll"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PointsLabel" type="Label" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "0/50"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LoadButton" type="Button" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "LOAD"
+
+[node name="SaveButton" type="Button" parent="TopPanel/HBox"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "SAVE"
+
+[node name="MainArea" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 84.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LeftPanel" type="VBoxContainer" parent="MainArea"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.0
+
+[node name="CategoryTabs" type="HBoxContainer" parent="MainArea/LeftPanel"]
+layout_mode = 2
+alignment = 1
+
+[node name="LibraryScroll" type="ScrollContainer" parent="MainArea/LeftPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LibraryGrid" type="HFlowContainer" parent="MainArea/LeftPanel/LibraryScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+alignment = 1
+
+[node name="RightPanel" type="PanelContainer" parent="MainArea"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBox" type="VBoxContainer" parent="MainArea/RightPanel"]
+layout_mode = 2
+
+[node name="InfoLabel" type="Label" parent="MainArea/RightPanel/VBox"]
+layout_mode = 2
+text = "Unit Info"
+horizontal_alignment = 1
+
+[node name="StatsLabel" type="RichTextLabel" parent="MainArea/RightPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Hover over a unit..."
+
+[node name="TransportPopup" type="Window" parent="."]
+title = "Select Transport"
+initial_position = 2
+size = Vector2i(400, 300)
+visible = false
+exclusive = true
+
+[node name="TransportScroll" type="ScrollContainer" parent="TransportPopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TransportGrid" type="HFlowContainer" parent="TransportPopup/TransportScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="LoadDeckPopup" type="Window" parent="."]
+title = "Load Deck"
+initial_position = 2
+size = Vector2i(500, 600)
+visible = false
+exclusive = true
+
+[node name="Scroll" type="ScrollContainer" parent="LoadDeckPopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DeckList" type="VBoxContainer" parent="LoadDeckPopup/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3

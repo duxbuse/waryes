@@ -30,5 +30,6 @@
                         "count":  1,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "INF"
 }

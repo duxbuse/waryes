@@ -2,7 +2,7 @@
     "id":  "sdf_nova_fighter_interceptor",
     "name":  "Nova Fighter Interceptor",
     "cost":  130,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_nova_fighter_interceptor.png",
     "health":  5,
     "speed":  {
                   "road":  850,
@@ -33,5 +33,6 @@
                         "count":  3,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "AIR"
 }

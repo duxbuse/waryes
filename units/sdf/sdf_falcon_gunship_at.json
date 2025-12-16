@@ -1,37 +1,38 @@
 {
-    "id": "sdf_falcon_gunship_at",
-    "name": "Falcon Gunship At",
-    "cost": 130,
-    "icon": "assets/icons/units/sdf/sdf_falcon_gunship_at.png",
-    "health": 4,
-    "speed": {
-        "road": 400,
-        "off_road": 400
-    },
-    "armor": {
-        "front": 15,
-        "side": 15,
-        "rear": 10,
-        "top": 10
-    },
-    "fuel": 1000,
-    "autonomy": {
-        "road": 800,
-        "off_road": 800
-    },
-    "optics": "Very Good",
-    "stealth": "Medium",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_tank_hunter_laser",
-            "count": 1,
-            "max_ammo": 20
-        },
-        {
-            "weapon_id": "pdf_hellstrike_missile",
-            "count": 2,
-            "max_ammo": 10
-        }
-    ]
+    "id":  "sdf_falcon_gunship_at",
+    "name":  "Falcon Gunship At",
+    "cost":  130,
+    "icon":  "assets/icons/units/sdf/sdf_falcon_gunship_at.png",
+    "health":  4,
+    "speed":  {
+                  "road":  400,
+                  "off_road":  400
+              },
+    "armor":  {
+                  "front":  15,
+                  "side":  15,
+                  "rear":  10,
+                  "top":  10
+              },
+    "fuel":  1000,
+    "autonomy":  {
+                     "road":  800,
+                     "off_road":  800
+                 },
+    "optics":  "Very Good",
+    "stealth":  "Medium",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_tank_hunter_laser",
+                        "count":  1,
+                        "max_ammo":  20
+                    },
+                    {
+                        "weapon_id":  "pdf_hellstrike_missile",
+                        "count":  2,
+                        "max_ammo":  10
+                    }
+                ],
+    "category":  "HEL"
 }

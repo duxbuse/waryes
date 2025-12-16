@@ -86,6 +86,7 @@ public partial class DeploymentUI : Control
         {
             var btn = new Button();
             btn.Text = cat;
+            btn.FocusMode = FocusModeEnum.None; // Prevent Tab Index stealing
             btn.CustomMinimumSize = new Vector2(80, 40);
             btn.Pressed += () => FilterCards(cat);
             _tabContainer.AddChild(btn);
@@ -133,6 +134,7 @@ public partial class DeploymentUI : Control
     {
         var button = new Button();
         button.CustomMinimumSize = new Vector2(100, 120);
+        button.FocusMode = FocusModeEnum.None; // Prevent Tab Index stealing
         UpdateButtonText(button, card);
         button.Pressed += () => OnCardPressed(card);
         _cardContainer.AddChild(button);

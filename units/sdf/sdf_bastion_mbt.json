@@ -1,37 +1,38 @@
 {
-    "id": "sdf_bastion_mbt",
-    "name": "Bastion Mbt",
-    "cost": 120,
-    "icon": "assets/icons/units/sdf/sdf_bastion_mbt.png",
-    "health": 12,
-    "speed": {
-        "road": 70,
-        "off_road": 50
-    },
-    "armor": {
-        "front": 20,
-        "side": 14,
-        "rear": 8,
-        "top": 4
-    },
-    "fuel": 600,
-    "autonomy": {
-        "road": 300,
-        "off_road": 180
-    },
-    "optics": "Good",
-    "stealth": "None",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_cannon_120mm",
-            "count": 1,
-            "max_ammo": 10
-        },
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_hull",
-            "count": 1,
-            "max_ammo": 10
-        }
-    ]
+    "id":  "sdf_bastion_mbt",
+    "name":  "Bastion Mbt",
+    "cost":  120,
+    "icon":  "assets/icons/units/sdf/sdf_bastion_mbt.png",
+    "health":  12,
+    "speed":  {
+                  "road":  70,
+                  "off_road":  50
+              },
+    "armor":  {
+                  "front":  20,
+                  "side":  14,
+                  "rear":  8,
+                  "top":  4
+              },
+    "fuel":  600,
+    "autonomy":  {
+                     "road":  300,
+                     "off_road":  180
+                 },
+    "optics":  "Good",
+    "stealth":  "None",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_cannon_120mm",
+                        "count":  1,
+                        "max_ammo":  10
+                    },
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
+                        "count":  1,
+                        "max_ammo":  10
+                    }
+                ],
+    "category":  "TNK"
 }

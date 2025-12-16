@@ -2,7 +2,7 @@
     "id":  "sdf_stormtrooper",
     "name":  "Stormtrooper",
     "cost":  35,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_stormtrooper.png",
     "health":  10,
     "speed":  {
                   "road":  15,
@@ -25,5 +25,6 @@
                         "count":  10,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "INF"
 }

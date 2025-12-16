@@ -2,7 +2,7 @@
     "id":  "sdf_tremor_cannon",
     "name":  "Tremor Cannon",
     "cost":  100,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_tremor_cannon.png",
     "health":  7,
     "speed":  {
                   "road":  70,
@@ -33,5 +33,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "ART"
 }

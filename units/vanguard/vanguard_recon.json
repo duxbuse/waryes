@@ -25,5 +25,6 @@
                         "count":  5,
                         "max_ammo":  20
                     }
-                ]
+                ],
+    "category":  "REC"
 }

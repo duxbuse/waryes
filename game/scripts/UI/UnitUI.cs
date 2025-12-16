@@ -9,7 +9,7 @@ namespace WarYes.UI
         private const float SCALE_FACTOR = 0.006f; 
 
         // Nodes
-        // Removed: HeaderBg, BodyBg, NameLabel, CategoryIcon
+        // Overhead elements removed
         private Node3D _veterancyRoot;
         private Sprite3D[] _vetChevrons;
         private Sprite3D _commanderAuraIcon;
@@ -107,8 +107,8 @@ namespace WarYes.UI
                 _vetChevrons[i].Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
                 _vetChevrons[i].PixelSize = 0.01f;
                 _vetChevrons[i].Modulate = Colors.White; 
-                // Smaller size as requested (was 15, 8)
-                _vetChevrons[i].Scale = new Vector3(8, 5, 1); 
+                // Smaller size as requested (25% of previous 8, 5)
+                _vetChevrons[i].Scale = new Vector3(2.0f, 1.25f, 1); 
                 _vetChevrons[i].Position = new Vector3(0, i * 0.1f, 0);
                 _vetChevrons[i].Visible = false;
                 _vetChevrons[i].NoDepthTest = true;
@@ -133,6 +133,7 @@ namespace WarYes.UI
             SetSelected(false);
             
         } // End Initialize
+
 
         private Texture2D GetChevronTexture()
         {

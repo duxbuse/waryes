@@ -2,7 +2,7 @@
     "id":  "sdf_skysweeper",
     "name":  "Skysweeper",
     "cost":  70,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_skysweeper.png",
     "health":  7,
     "speed":  {
                   "road":  55,
@@ -33,5 +33,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "AA"
 }

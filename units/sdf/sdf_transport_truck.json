@@ -2,7 +2,7 @@
     "id":  "sdf_transport_truck",
     "name":  "Transport Truck",
     "cost":  15,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_transport_truck.png",
     "health":  5,
     "speed":  {
                   "road":  80,
@@ -24,5 +24,6 @@
     "forward_deploy":  0,
     "weapons":  [
 
-                ]
+                ],
+    "category":  "LOG"
 }

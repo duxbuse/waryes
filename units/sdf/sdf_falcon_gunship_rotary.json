@@ -1,37 +1,38 @@
 {
-    "id": "sdf_falcon_gunship_rotary",
-    "name": "Falcon Gunship Rotary",
-    "cost": 120,
-    "icon": "assets/icons/units/sdf/sdf_falcon_gunship_rotary.png",
-    "health": 4,
-    "speed": {
-        "road": 400,
-        "off_road": 400
-    },
-    "armor": {
-        "front": 15,
-        "side": 15,
-        "rear": 10,
-        "top": 10
-    },
-    "fuel": 1000,
-    "autonomy": {
-        "road": 800,
-        "off_road": 800
-    },
-    "optics": "Good",
-    "stealth": "Medium",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_rotary_cannon_air",
-            "count": 2,
-            "max_ammo": 20
-        },
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_hull",
-            "count": 1,
-            "max_ammo": 10
-        }
-    ]
+    "id":  "sdf_falcon_gunship_rotary",
+    "name":  "Falcon Gunship Rotary",
+    "cost":  120,
+    "icon":  "assets/icons/units/sdf/sdf_falcon_gunship_rotary.png",
+    "health":  4,
+    "speed":  {
+                  "road":  400,
+                  "off_road":  400
+              },
+    "armor":  {
+                  "front":  15,
+                  "side":  15,
+                  "rear":  10,
+                  "top":  10
+              },
+    "fuel":  1000,
+    "autonomy":  {
+                     "road":  800,
+                     "off_road":  800
+                 },
+    "optics":  "Good",
+    "stealth":  "Medium",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_rotary_cannon_air",
+                        "count":  2,
+                        "max_ammo":  20
+                    },
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
+                        "count":  1,
+                        "max_ammo":  10
+                    }
+                ],
+    "category":  "HEL"
 }

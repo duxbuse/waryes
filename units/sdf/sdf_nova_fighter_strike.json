@@ -2,7 +2,7 @@
     "id":  "sdf_nova_fighter_strike",
     "name":  "Nova Fighter Strike",
     "cost":  140,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_nova_fighter_strike.png",
     "health":  5,
     "speed":  {
                   "road":  750,
@@ -33,5 +33,6 @@
                         "count":  4,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "AIR"
 }

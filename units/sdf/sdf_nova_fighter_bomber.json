@@ -1,37 +1,38 @@
 {
-    "id": "sdf_nova_fighter_bomber",
-    "name": "Nova Fighter Bomber",
-    "cost": 135,
-    "icon": "assets/icons/units/sdf/sdf_nova_fighter_bomber.png",
-    "health": 5,
-    "speed": {
-        "road": 700,
-        "off_road": 700
-    },
-    "armor": {
-        "front": 20,
-        "side": 20,
-        "rear": 20,
-        "top": 20
-    },
-    "fuel": 2000,
-    "autonomy": {
-        "road": 2000,
-        "off_road": 2000
-    },
-    "optics": "Normal",
-    "stealth": "Poor",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_auto_cannon_30mm_air",
-            "count": 2,
-            "max_ammo": 10
-        },
-        {
-            "weapon_id": "pdf_tactical_bomb",
-            "count": 2,
-            "max_ammo": 10
-        }
-    ]
+    "id":  "sdf_nova_fighter_bomber",
+    "name":  "Nova Fighter Bomber",
+    "cost":  135,
+    "icon":  "assets/icons/units/sdf/sdf_nova_fighter_bomber.png",
+    "health":  5,
+    "speed":  {
+                  "road":  700,
+                  "off_road":  700
+              },
+    "armor":  {
+                  "front":  20,
+                  "side":  20,
+                  "rear":  20,
+                  "top":  20
+              },
+    "fuel":  2000,
+    "autonomy":  {
+                     "road":  2000,
+                     "off_road":  2000
+                 },
+    "optics":  "Normal",
+    "stealth":  "Poor",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_auto_cannon_30mm_air",
+                        "count":  2,
+                        "max_ammo":  10
+                    },
+                    {
+                        "weapon_id":  "pdf_tactical_bomb",
+                        "count":  2,
+                        "max_ammo":  10
+                    }
+                ],
+    "category":  "AIR"
 }

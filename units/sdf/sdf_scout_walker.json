@@ -2,7 +2,7 @@
     "id":  "sdf_scout_walker",
     "name":  "Scout Walker",
     "cost":  30,
-    "icon":  "assets/icons/factions/sdf_faction_icon_main.png",
+    "icon":  "assets/icons/units/sdf/sdf_scout_walker.png",
     "health":  5,
     "speed":  {
                   "road":  65,
@@ -28,5 +28,6 @@
                         "count":  1,
                         "max_ammo":  10
                     }
-                ]
+                ],
+    "category":  "REC"
 }

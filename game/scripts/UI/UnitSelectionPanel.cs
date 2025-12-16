@@ -25,9 +25,16 @@ public partial class UnitSelectionPanel : Control
     {
         // Anchor Bottom Left
         SetAnchorsPreset(LayoutPreset.BottomLeft);
-        Position = new Vector2(20, -220); // Offset up from bottom
+        // Manual offset adjustment to ensure it's on screen
+        // Anchor (0,1) is bottom left.
+        // We want it slightly up and right.
+        Position = new Vector2(20, -220); // Relative to anchor if layout preset works? 
+        // Godot Control positioning can be finicky. 
+        // Let's use Viewport logic to be safe.
+        var vp = GetViewportRect().Size;
+        Position = new Vector2(20, vp.Y - 220);
         Size = new Vector2(400, 200);
-        
+
         // Main Logic
         if (SelectionManager.Instance != null)
         {
@@ -60,6 +67,15 @@ public partial class UnitSelectionPanel : Control
         // 2. Primary Card (Main Detail Area)
         _primaryCard = new PanelContainer();
         _primaryCard.CustomMinimumSize = new Vector2(300, 150);
+        
+        // Style: Dark Panel
+        var style = new StyleBoxFlat();
+        style.BgColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+        style.CornerRadiusTopLeft = 5;
+        style.CornerRadiusTopRight = 5;
+        style.CornerRadiusBottomLeft = 5;
+        style.CornerRadiusBottomRight = 5;
+        _primaryCard.AddThemeStyleboxOverride("panel", style);
         
         var cardHBox = new HBoxContainer();
         _primaryCard.AddChild(cardHBox);
@@ -120,12 +136,14 @@ public partial class UnitSelectionPanel : Control
 
     private void UpdatePanel()
     {
+        GD.Print("UnitSelectionPanel: UpdatePanel called.");
         if (SelectionManager.Instance == null) return;
         
         var primary = SelectionManager.Instance.GetPrimaryUnit();
         
         if (IsInstanceValid(primary))
         {
+            GD.Print($"UnitSelectionPanel: Displaying {primary.Name}");
             Visible = true;
             _currentUnit = primary;
             
@@ -145,6 +163,8 @@ public partial class UnitSelectionPanel : Control
         }
         else
         {
+            GD.Print("UnitSelectionPanel: No primary unit. Hiding.");
+            // For debugging, don't hide? No, user needs to see it work.
             Visible = false;
             _currentUnit = null;
         }
@@ -165,6 +185,7 @@ public partial class UnitSelectionPanel : Control
             foreach(var u in allSelected) if (u.Data.Id == typeId) count++;
             
             var btn = new Button();
+            btn.FocusMode = FocusModeEnum.None; // Prevent Tab Index
             btn.CustomMinimumSize = new Vector2(40, 40);
             
             // Icon

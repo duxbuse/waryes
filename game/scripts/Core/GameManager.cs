@@ -73,10 +73,17 @@ public partial class GameManager : Node
 		GD.Print("GameManager: Starting Setup Phase...");
 		
 		// Create Test Deck
-		if (_divisions.ContainsKey("sdf_101st_airborne"))
+		// Check for GameGlobal Deck
+		if (GameGlobal.Instance != null && GameGlobal.Instance.SelectedDeck != null)
+		{
+			PlayerDeck = GameGlobal.Instance.SelectedDeck;
+			GD.Print($"GameManager: Using Selected Deck: {PlayerDeck.Division?.Name ?? "Unknown"}");
+		}
+		// Fallback to Test Deck if no Global Deck (e.g. run from Scene directly)
+		else if (_divisions.ContainsKey("sdf_101st_airborne"))
 		{
 			PlayerDeck = DeckBuilder.BuildDefaultDeck(_divisions["sdf_101st_airborne"], _unitLibrary);
-			GD.Print($"GameManager: Created deck for {PlayerDeck.Division.Name} with {PlayerDeck.Cards.Count} cards.");
+			GD.Print($"GameManager: Created default deck for {PlayerDeck.Division.Name} with {PlayerDeck.Cards.Count} cards.");
 		}
 		else
 		{
@@ -87,9 +94,18 @@ public partial class GameManager : Node
 		ObjectiveManager.StartMatch(); // Start scoring ticks
 		
 		// Setup UI
+		var hudLayer = new CanvasLayer();
+		hudLayer.Name = "HUD";
+		AddChild(hudLayer);
+		
 		DeploymentUI = new DeploymentUI();
 		DeploymentUI.Name = "DeploymentUI";
-		AddChild(DeploymentUI);
+		hudLayer.AddChild(DeploymentUI);
+		
+		// Unit Selection Panel (Bottom Left)
+		var selectionPanel = new UnitSelectionPanel();
+		selectionPanel.Name = "UnitSelectionPanel";
+		hudLayer.AddChild(selectionPanel);
 		
 		// VERIFICATION: Test Veterancy
 		// CallDeferred(nameof(SetupVeterancyTest));

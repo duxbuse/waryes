@@ -1,37 +1,38 @@
 {
-    "id": "sdf_centurion_apc",
-    "name": "Centurion Apc",
-    "cost": 55,
-    "icon": "assets/icons/units/sdf/sdf_centurion_apc.png",
-    "health": 7,
-    "speed": {
-        "road": 55,
-        "off_road": 40
-    },
-    "armor": {
-        "front": 10,
-        "side": 8,
-        "rear": 6,
-        "top": 3
-    },
-    "fuel": 400,
-    "autonomy": {
-        "road": 500,
-        "off_road": 350
-    },
-    "optics": "Normal",
-    "stealth": "None",
-    "forward_deploy": 0,
-    "weapons": [
-        {
-            "weapon_id": "sdf_rapid_laser_cannon",
-            "count": 1,
-            "max_ammo": 10
-        },
-        {
-            "weapon_id": "sdf_heavy_auto_cannon_hull",
-            "count": 1,
-            "max_ammo": 10
-        }
-    ]
+    "id":  "sdf_centurion_apc",
+    "name":  "Centurion Apc",
+    "cost":  55,
+    "icon":  "assets/icons/units/sdf/sdf_centurion_apc.png",
+    "health":  7,
+    "speed":  {
+                  "road":  55,
+                  "off_road":  40
+              },
+    "armor":  {
+                  "front":  10,
+                  "side":  8,
+                  "rear":  6,
+                  "top":  3
+              },
+    "fuel":  400,
+    "autonomy":  {
+                     "road":  500,
+                     "off_road":  350
+                 },
+    "optics":  "Normal",
+    "stealth":  "None",
+    "forward_deploy":  0,
+    "weapons":  [
+                    {
+                        "weapon_id":  "sdf_rapid_laser_cannon",
+                        "count":  1,
+                        "max_ammo":  10
+                    },
+                    {
+                        "weapon_id":  "sdf_heavy_auto_cannon_hull",
+                        "count":  1,
+                        "max_ammo":  10
+                    }
+                ],
+    "category":  "INF"
 }

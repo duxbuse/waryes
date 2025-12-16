@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3 uid="uid://deckstripitem456"]
+
+[ext_resource type="Script" path="res://scripts/UI/Components/DeckStripItem.cs" id="1_script"]
+
+[node name="DeckStripItem" type="PanelContainer"]
+offset_right = 100.0
+offset_bottom = 40.0
+script = ExtResource("1_script")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="NameLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "Unit Name"
+horizontal_alignment = 1
+
+[node name="VetLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0, 1)
+theme_override_font_sizes/font_size = 10
+text = "^^"
+horizontal_alignment = 1
