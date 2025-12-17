@@ -23,6 +23,12 @@ public partial class DeckStripItem : PanelContainer
     [Signal]
     public delegate void TransportClickedEventHandler();
 
+    [Signal]
+    public delegate void TransportHoveredEventHandler();
+    
+    [Signal]
+    public delegate void TransportExitedEventHandler();
+
     private HBoxContainer _transportBar;
     private TextureRect _transportIcon;
     private Label _transportName;
@@ -141,6 +147,9 @@ public partial class DeckStripItem : PanelContainer
 
         // Connect inputs
         _transportBar.GuiInput += OnTransportGuiInput;
+        _transportBar.MouseEntered += () => EmitSignal(SignalName.TransportHovered);
+        _transportBar.MouseExited += () => EmitSignal(SignalName.TransportExited);
+        
         _vetGroup = new ButtonGroup();
         GuiInput += OnGuiInput;
     }

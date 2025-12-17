@@ -136,9 +136,29 @@ layout_mode = 2
 text = "Unit Info"
 horizontal_alignment = 1
 
-[node name="StatsLabel" type="RichTextLabel" parent="LibrarySection/RightPanel/VBox"]
+[node name="StatsContainer" type="HBoxContainer" parent="LibrarySection/RightPanel/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="PinnedPanel" type="PanelContainer" parent="LibrarySection/RightPanel/VBox/StatsContainer"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_info")
+
+[node name="PinnedStats" type="RichTextLabel" parent="LibrarySection/RightPanel/VBox/StatsContainer/PinnedPanel"]
+layout_mode = 2
+bbcode_enabled = true
+text = "Pinned Info"
+
+[node name="CurrentPanel" type="PanelContainer" parent="LibrarySection/RightPanel/VBox/StatsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_info")
+
+[node name="CurrentStats" type="RichTextLabel" parent="LibrarySection/RightPanel/VBox/StatsContainer/CurrentPanel"]
+layout_mode = 2
 bbcode_enabled = true
 text = "Hover over a unit..."
 

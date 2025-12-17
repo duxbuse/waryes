@@ -17,7 +17,16 @@ public partial class DeckBuilderUI : Control
     private HBoxContainer _deckStripContainer;
     private HBoxContainer _categoryTabs;
     private Container _libraryGrid;
-    private RichTextLabel _statsLabel;
+    
+    // Split Stats
+    private Control _pinnedPanel;
+    private Control _currentPanel;
+    private RichTextLabel _pinnedStats;
+    private RichTextLabel _currentStats;
+    
+    private Button _pinButton;
+    private bool _isPinned = false;
+    private UnitData? _pinnedUnit = null;
     
     private Window _transportPopup;
     private Container _transportGrid;
@@ -40,6 +49,9 @@ public partial class DeckBuilderUI : Control
     private Dictionary<string, List<DivisionData>> _divisionsByFaction = new Dictionary<string, List<DivisionData>>();
     private Dictionary<string, Button> _categoryButtons = new Dictionary<string, Button>();
 
+    private Control _leftPanel;
+    private Control _rightPanel;
+
     public override void _Ready()
     {
         _global = GameGlobal.Instance;
@@ -55,15 +67,26 @@ public partial class DeckBuilderUI : Control
         _deckStripContainer = GetNode<HBoxContainer>("DeckSection/VBox/DeckStripScroll/DeckStripContainer");
         
         // Library is in the bottom section
+        _leftPanel = GetNode<Control>("LibrarySection/LeftPanel");
+        _rightPanel = GetNode<Control>("LibrarySection/RightPanel");
+        
         _categoryTabs = GetNode<HBoxContainer>("LibrarySection/LeftPanel/CategoryTabs");
         _libraryGrid = GetNode<Container>("LibrarySection/LeftPanel/LibraryScroll/LibraryGrid");
-        _statsLabel = GetNode<RichTextLabel>("LibrarySection/RightPanel/VBox/StatsLabel");
-        _statsLabel.BbcodeEnabled = true;
+        
+        // Stats Containers
+        _pinnedPanel = GetNode<Control>("LibrarySection/RightPanel/VBox/StatsContainer/PinnedPanel");
+        _currentPanel = GetNode<Control>("LibrarySection/RightPanel/VBox/StatsContainer/CurrentPanel");
+        _pinnedStats = GetNode<RichTextLabel>("LibrarySection/RightPanel/VBox/StatsContainer/PinnedPanel/PinnedStats");
+        _currentStats = GetNode<RichTextLabel>("LibrarySection/RightPanel/VBox/StatsContainer/CurrentPanel/CurrentStats");
+        
+        _pinnedStats.BbcodeEnabled = true;
+        _currentStats.BbcodeEnabled = true;
+        
+        SetupPinButton(); // Init pin button
         
         _transportPopup = GetNode<Window>("TransportPopup");
         _transportGrid = GetNode<Container>("TransportPopup/TransportScroll/TransportGrid");
         _transportPopup.CloseRequested += () => _transportPopup.Hide();
-        
         _loadDeckPopup = GetNode<Window>("LoadDeckPopup");
         _deckListContainer = GetNode<Container>("LoadDeckPopup/Scroll/DeckList");
         _loadDeckPopup.CloseRequested += () => _loadDeckPopup.Hide();
@@ -137,6 +160,51 @@ public partial class DeckBuilderUI : Control
             }
         }
         _loadDeckPopup.PopupCentered();
+    }
+
+    private void SetupPinButton()
+    {
+        var infoLabel = GetNode<Label>("LibrarySection/RightPanel/VBox/InfoLabel");
+        var parent = infoLabel.GetParent();
+        
+        var hbox = new HBoxContainer();
+        hbox.Alignment = BoxContainer.AlignmentMode.Center;
+        
+        parent.AddChild(hbox);
+        parent.MoveChild(hbox, infoLabel.GetIndex());
+        
+        infoLabel.Reparent(hbox);
+        
+        _pinButton = new Button();
+        _pinButton.ToggleMode = true;
+        _pinButton.CustomMinimumSize = new Vector2(32, 32);
+        
+        var pinIcon = GD.Load<Texture2D>("res://assets/icons/ui/pin.svg");
+        _pinButton.Icon = pinIcon;
+        _pinButton.ExpandIcon = true;
+        
+        _pinButton.Pressed += OnPinToggled;
+        
+        hbox.AddChild(_pinButton);
+    }
+    
+    private void OnPinToggled()
+    {
+        _isPinned = _pinButton.ButtonPressed;
+        if (!_isPinned)
+        {
+            _pinnedUnit = null;
+            // Restore original proportions (Left 3 : Right 1)
+            _leftPanel.SizeFlagsStretchRatio = 3.0f;
+            _rightPanel.SizeFlagsStretchRatio = 1.0f;
+            ClearStats();
+        }
+        else
+        {
+             // Expand Right Panel (Left 1 : Right 1 = 50% split)
+             _leftPanel.SizeFlagsStretchRatio = 1.0f;
+             _rightPanel.SizeFlagsStretchRatio = 1.0f;
+        }
     }
 
     private void PopulateFactions()
@@ -285,14 +353,72 @@ public partial class DeckBuilderUI : Control
 
     private void DisplayUnitStats(UnitData unit)
     {
+        if (_isPinned)
+        {
+            if (_pinnedUnit == null) _pinnedUnit = unit;
+            
+            _pinnedPanel.Visible = true;
+            _currentPanel.Visible = true;
+            
+            // Pinned Side
+            if (_pinnedUnit.HasValue)
+            {
+                _pinnedStats.Text = "[center][b][color=#FFD700]PINNED[/color][/b][/center]\n" + GenerateUnitStatsText(_pinnedUnit.Value);
+            }
+            
+            // Current Side
+            if (_pinnedUnit.HasValue && _pinnedUnit.Value.Id == unit.Id)
+            {
+                // Hovering the pinned unit - show "Same" or just duplicate? 
+                // Let's show duplicate for consistency or "Hovering Pinned"
+                _currentStats.Text = "[center][b][color=#00FF00]CURRENT[/color][/b][/center]\n" + GenerateUnitStatsText(unit);
+            }
+            else
+            {
+                _currentStats.Text = "[center][b][color=#00FF00]CURRENT[/color][/b][/center]\n" + GenerateUnitStatsText(unit);
+            }
+        }
+        else
+        {
+            // Normal Mode
+            _pinnedPanel.Visible = false;
+            _currentPanel.Visible = true;
+            _currentStats.Text = GenerateUnitStatsText(unit);
+            
+            // If we decide to pin now, this is the unit we pin
+            if (_pinButton.ButtonPressed) _pinnedUnit = unit; 
+        }
+    }
+    
+    private void ClearStats()
+    {
+        if (!_isPinned)
+        {
+            _pinnedPanel.Visible = false;
+            _currentPanel.Visible = true;
+            _currentStats.Text = "Hover over a unit...";
+        }
+        else if (_pinnedUnit != null)
+        {
+            // Revert to showing just the pinned unit? Or keep pinned visible and clear right?
+            // "when mousing over another unit it will show the new unit ... side by side"
+            // So if NOT hovering, maybe hide right side?
+            _pinnedPanel.Visible = true;
+            _currentPanel.Visible = false; 
+            _pinnedStats.Text = "[center][b][color=#FFD700]PINNED[/color][/b][/center]\n" + GenerateUnitStatsText(_pinnedUnit.Value);
+        }
+    }
+
+    private string GenerateUnitStatsText(UnitData unit)
+    {
         string text = $"[b]{unit.Name.ToUpper()}[/b]\n";
-        text += $"Cost: {unit.Cost} | HP: {unit.Health} | Optics: {unit.Optics} | Stealth: {unit.Stealth}\n";
+        text += $"Cost: {unit.Cost}\nHP: {unit.Health}\nOptics: {unit.Optics}\nStealth: {unit.Stealth}\n";
         
         if (unit.Speed.Road > 0)
-            text += $"Speed: {unit.Speed.Road} (Road) / {unit.Speed.OffRoad} (Off-Road)\n";
+            text += $"Speed: {unit.Speed.Road}/{unit.Speed.OffRoad}\n";
             
         if (unit.Armor.Front > 0 || unit.Armor.Side > 0 || unit.Armor.Rear > 0 || unit.Armor.Top > 0)
-            text += $"Armor: F:{unit.Armor.Front} S:{unit.Armor.Side} R:{unit.Armor.Rear} T:{unit.Armor.Top}\n";
+            text += $"Armor: {unit.Armor.Front}/{unit.Armor.Side}/{unit.Armor.Rear}/{unit.Armor.Top}\n";
 
         text += "\n[b]WEAPONS:[/b]\n";
         if (unit.Weapons != null)
@@ -303,7 +429,6 @@ public partial class DeckBuilderUI : Control
                  if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
                  string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
                  
-                 // Ideally look up weapon stats from Library, but here we just list ID/Ammo
                  if (ResourceLoader.Exists(iconPath))
                  {
                      text += $"[img=24]{iconPath}[/img] {w.WeaponId} (x{w.Count}) [{w.MaxAmmo}]\n";
@@ -314,13 +439,7 @@ public partial class DeckBuilderUI : Control
                  }
             }
         }
-        
-        _statsLabel.Text = text;
-    }
-
-    private void ClearStats()
-    {
-        _statsLabel.Text = "Hover over a unit...";
+        return text;
     }
 
     private void OnUnitCardClicked(DivisionRosterEntry entry, UnitData data, int veterancy)
@@ -347,18 +466,42 @@ public partial class DeckBuilderUI : Control
             if (!_global.UnitLibrary.ContainsKey(transId)) continue;
             var transData = _global.UnitLibrary[transId];
             
-            var btn = new Button();
-            btn.Text = $"{transData.Name} ({transData.Cost})";
-            btn.CustomMinimumSize = new Vector2(100, 60);
-            btn.Pressed += () => 
+            // Use UnitCardUI instead of simple buttons
+            var card = UnitCardScene.Instantiate<UnitCardUI>();
+            _transportGrid.AddChild(card);
+            
+            card.Setup(transData);
+            
+            // Handle Click
+            card.GuiInput += (ev) => 
             {
-                onTransportSelected?.Invoke(transId);
-                _transportPopup.Hide();
+                if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+                {
+                    onTransportSelected?.Invoke(transId);
+                    _transportPopup.Hide();
+                }
             };
-            _transportGrid.AddChild(btn);
+            
+            // Handle Hover
+            card.MouseEntered += () => DisplayUnitStats(transData);
+            card.MouseExited += ClearStats;
         }
         
         _transportPopup.PopupCentered();
+    }
+    
+    public override void _Input(InputEvent @event)
+    {
+        // Detect click outside when popup is visible
+        if (_transportPopup.Visible && @event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        {
+            // If the click is not inside the transport popup rect...
+            // Note: Window events are tricky. If this is the main viewport input, 
+            // and the Window is a child Window, clicking outside it (on main UI) triggers this.
+            // Clicking inside the Window usually is consumed by the Window's viewport.
+            // So if we receive a click here while it's open, it's likely outside.
+            _transportPopup.Hide();
+        }
     }
 
     private void AddCardToDeck(DivisionRosterEntry entry, UnitData data, int veterancy, string transportId)
@@ -482,6 +625,19 @@ public partial class DeckBuilderUI : Control
                                 });
                             }
                         };
+
+                        // Hover logic for transport in deck strip
+                        if (entry.TransportOptions != null && !string.IsNullOrEmpty(card.TransportId))
+                        {
+                            // Capture current transport ID for the closure
+                            string tid = card.TransportId;
+                            if (tid != null && _global.UnitLibrary.ContainsKey(tid))
+                            {
+                                var tData = _global.UnitLibrary[tid];
+                                item.TransportHovered += () => DisplayUnitStats(tData);
+                                item.TransportExited += ClearStats;
+                            }
+                        }
                     }
                     else
                     {

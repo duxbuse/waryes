@@ -45,51 +45,66 @@ public partial class UnitCardUI : PanelContainer
     public void Setup(DivisionRosterEntry entry, UnitData data, int countInDeck)
     {
         _entry = entry;
-        UnitId = entry.UnitId;
+        UnitId = data.Id;
         
         _nameLabel.Text = data.Name.ToUpper();
         _costLabel.Text = data.Cost.ToString();
         _iconRect.Texture = WarYes.Utils.IconLoader.LoadUnitIcon(data);
         
-        int max = entry.MaxCards;
-        int remaining = max - countInDeck;
-        
-        // "This number would go down... until it reaches only 1 at which point ... disappear"
-        if (remaining > 1)
+        if (entry != null)
         {
-             _maxCardsLabel.Text = $"[{remaining}]";
-             _maxCardsLabel.Visible = true;
+            int max = entry.MaxCards;
+            int remaining = max - countInDeck;
+            
+            if (remaining > 1)
+            {
+                 _maxCardsLabel.Text = $"[{remaining}]";
+                 _maxCardsLabel.Visible = true;
+            }
+            else
+            {
+                 _maxCardsLabel.Visible = false;
+            }
+            
+            if (remaining <= 0)
+            {
+                Modulate = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+                MouseFilter = MouseFilterEnum.Ignore;
+            }
+            else
+            {
+                Modulate = Colors.White;
+                MouseFilter = MouseFilterEnum.Stop; 
+            }
+            
+            SetupVeterancyButtons(entry);
+            UpdateAvailabilityDisplay();
         }
         else
         {
-             _maxCardsLabel.Visible = false;
-        }
-        
-        // "once the final card is added, then the whole unit section becomes grayed out"
-        if (remaining <= 0)
-        {
-            Modulate = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Gray out
-            MouseFilter = MouseFilterEnum.Ignore; // Disable interaction
-        }
-        else
-        {
+            // Transport / Display only mode
+            _maxCardsLabel.Visible = false;
+            _countLabel.Visible = false;
+            _veterancyContainer.Visible = false;
             Modulate = Colors.White;
-            MouseFilter = MouseFilterEnum.Stop; // Enable interaction
+            MouseFilter = MouseFilterEnum.Stop;
         }
-        
+
         if (data.IsCommander)
         {
             _commanderIcon.Visible = true;
-            _nameLabel.Modulate = new Color(1, 0.8f, 0); // Gold tint for commander name
+            _nameLabel.Modulate = new Color(1, 0.8f, 0); 
         }
         else
         {
             _commanderIcon.Visible = false;
             _nameLabel.Modulate = Colors.White;
         }
-
-        SetupVeterancyButtons(entry);
-        UpdateAvailabilityDisplay();
+    }
+    
+    public void Setup(UnitData data)
+    {
+        Setup(null, data, 0);
     }
 
     private void SetupVeterancyButtons(DivisionRosterEntry entry)

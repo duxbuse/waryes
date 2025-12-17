@@ -101,7 +101,7 @@ namespace WarYes.Utils
              {
                  "INF" => "infantry.svg",
                  "TRUCK" => "truck.svg",
-                 "APC" => "apc.svg",
+                 "APC" => "apc.png",
                  "IFV" => "ifv.svg",
                  "LOG" => "support.svg",
                  "TNK" => "tank.svg",

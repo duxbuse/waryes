@@ -1,16 +1,16 @@
 {
-    "id": "sdf_transport_truck",
-    "name": "Transport Truck",
-    "cost": 15,
-    "icon": "assets/icons/categories/truck.svg",
+    "id": "sdf_armored_transport",
+    "name": "Armored Transport",
+    "cost": 20,
+    "icon": "assets/icons/categories/apc.png",
     "health": 5,
     "speed": {
         "road": 80,
-        "off_road": 50
+        "off_road": 55
     },
     "armor": {
-        "front": 0,
-        "side": 0,
+        "front": 5,
+        "side": 5,
         "rear": 0,
         "top": 0
     },
@@ -23,5 +23,5 @@
     "stealth": "Poor",
     "forward_deploy": 0,
     "weapons": [],
-    "category": "LOG"
+    "category": "APC"
 }
