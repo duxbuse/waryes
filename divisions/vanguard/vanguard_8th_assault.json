@@ -6,47 +6,47 @@
     "description": "Shock troops, fast attack, and close quarters combat. Hit and run, melee aggression.",
     "playstyle": "Closing the distance quickly is key.",
     "slot_costs": {
-        "logistics": [
+        "LOG": [
             1,
             2,
             3
         ],
-        "infantry": [
+        "INF": [
             1,
             1,
-            1,
-            2,
-            2,
-            3
-        ],
-        "tanks": [
             1,
             2,
             2,
             3
         ],
-        "recon": [
+        "TNK": [
+            1,
+            2,
+            2,
+            3
+        ],
+        "REC": [
             1,
             2,
             3
         ],
-        "anti_air": [
+        "AA": [
             1,
             2,
             3
         ],
-        "artillery": [
+        "ART": [
             3,
             4
         ],
-        "air": [
+        "AIR": [
             1,
             1,
             2,
             2,
             3
         ],
-        "vtol": [
+        "HEL": [
             1,
             1,
             2,
@@ -58,6 +58,9 @@
         {
             "unit_id": "vanguard_jetpack_squad",
             "max_cards": 6,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -69,6 +72,9 @@
         {
             "unit_id": "vanguard_infantry_fusion",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -80,6 +86,9 @@
         {
             "unit_id": "vanguard_heavy_support_auto",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,

@@ -5,20 +5,20 @@
     "description": "The Steamroller. Slow, methodical, and incredibly durable. Lacks subtlety.",
     "playstyle": "Focus on Main Battle Tanks and Heavy Armor.",
     "slot_costs": {
-        "logistics": [
+        "LOG": [
             1,
             1,
             2,
             2
         ],
-        "infantry": [
+        "INF": [
             1,
             2,
             2,
             3,
             3
         ],
-        "tanks": [
+        "TNK": [
             1,
             1,
             1,
@@ -30,28 +30,28 @@
             3,
             3
         ],
-        "recon": [
+        "REC": [
             1,
             2,
             3
         ],
-        "anti_air": [
+        "AA": [
             1,
             2,
             2,
             3
         ],
-        "artillery": [
+        "ART": [
             1,
             2,
             3
         ],
-        "air": [
+        "AIR": [
             2,
             3,
             4
         ],
-        "vtol": [
+        "HEL": [
             2,
             3,
             4
@@ -105,6 +105,9 @@
         {
             "unit_id": "sdf_trooper",
             "max_cards": 4,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -116,6 +119,9 @@
         {
             "unit_id": "sdf_engineer",
             "max_cards": 2,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
             "notes": "Repair crew",
             "availability": {
                 "trained": 12,

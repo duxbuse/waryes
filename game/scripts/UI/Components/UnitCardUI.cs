@@ -14,121 +14,170 @@ public partial class UnitCardUI : PanelContainer
     private Label _costLabel;
     private TextureRect _iconRect;
     private Label _countLabel;
-    private HBoxContainer _veterancyContainer;
-    
+    private VBoxContainer _veterancyContainer;
+    private Label _commanderIcon;
+    private Label _maxCardsLabel;
+    private ButtonGroup _vetGroup;
+
     public string UnitId { get; private set; }
-    public int SelectedVeterancy { get; private set; } = 0; // 0=Rookie
+    public int SelectedVeterancy { get; private set; } = 0; 
 
     private DivisionRosterEntry _entry;
 
     public override void _Ready()
     {
-        _nameLabel = GetNode<Label>("VBoxContainer/NameLabel");
-        _costLabel = GetNode<Label>("VBoxContainer/TopBar/CostLabel");
-        _iconRect = GetNode<TextureRect>("VBoxContainer/IconRect");
-        _countLabel = GetNode<Label>("VBoxContainer/BottomBar/CountLabel");
-        _veterancyContainer = GetNode<HBoxContainer>("VBoxContainer/VeterancyContainer");
+        _nameLabel = GetNode<Label>("Content/BottomPanel/HBox/NameLabel");
+        _costLabel = GetNode<Label>("Content/CostLabel");
+        _iconRect = GetNode<TextureRect>("Content/IconRect");
+        _countLabel = GetNode<Label>("Content/CountLabel");
+        
+        // Ensure this container has alignment logic if needed, but the panel handles position
+        _veterancyContainer = GetNode<VBoxContainer>("Content/VeterancyPanel/VeterancyContainer"); 
+        
+        _commanderIcon = GetNode<Label>("Content/BottomPanel/HBox/CommanderIcon");
+        _maxCardsLabel = GetNode<Label>("Content/BottomPanel/HBox/MaxCardsLabel");
+
+        _vetGroup = new ButtonGroup();
 
         GuiInput += OnGuiInput;
     }
 
-    public void Setup(DivisionRosterEntry entry, UnitData data)
+    public void Setup(DivisionRosterEntry entry, UnitData data, int countInDeck)
     {
         _entry = entry;
         UnitId = entry.UnitId;
         
-        _nameLabel.Text = data.Name;
+        _nameLabel.Text = data.Name.ToUpper();
         _costLabel.Text = data.Cost.ToString();
-        // Load icon if available, else placeholder
-        // Load icon logic
-        string iconPath = data.Icon;
-        if (!string.IsNullOrEmpty(iconPath))
+        _iconRect.Texture = WarYes.Utils.IconLoader.LoadUnitIcon(data);
+        
+        int max = entry.MaxCards;
+        int remaining = max - countInDeck;
+        
+        // "This number would go down... until it reaches only 1 at which point ... disappear"
+        if (remaining > 1)
         {
-            if (!iconPath.StartsWith("res://")) iconPath = "res://" + iconPath;
-            
-            // Handle mismatched extension (JSON says png but might be jpg)
-            if (!ResourceLoader.Exists(iconPath))
-            {
-                string basePath = iconPath.GetBaseName(); // Strips extension
-                string[] exts = { ".jpg", ".jpeg", ".png" };
-                foreach(var ext in exts)
-                {
-                    if (ResourceLoader.Exists(basePath + ext))
-                    {
-                        iconPath = basePath + ext;
-                        break;
-                    }
-                }
-            }
-            
-            if (ResourceLoader.Exists(iconPath))
-            {
-                _iconRect.Texture = GD.Load<Texture2D>(iconPath);
-            }
+             _maxCardsLabel.Text = $"[{remaining}]";
+             _maxCardsLabel.Visible = true;
+        }
+        else
+        {
+             _maxCardsLabel.Visible = false;
         }
         
-        SetupVeterancyButtons();
+        // "once the final card is added, then the whole unit section becomes grayed out"
+        if (remaining <= 0)
+        {
+            Modulate = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Gray out
+            MouseFilter = MouseFilterEnum.Ignore; // Disable interaction
+        }
+        else
+        {
+            Modulate = Colors.White;
+            MouseFilter = MouseFilterEnum.Stop; // Enable interaction
+        }
+        
+        if (data.IsCommander)
+        {
+            _commanderIcon.Visible = true;
+            _nameLabel.Modulate = new Color(1, 0.8f, 0); // Gold tint for commander name
+        }
+        else
+        {
+            _commanderIcon.Visible = false;
+            _nameLabel.Modulate = Colors.White;
+        }
+
+        SetupVeterancyButtons(entry);
         UpdateAvailabilityDisplay();
     }
 
-    private void SetupVeterancyButtons()
+    private void SetupVeterancyButtons(DivisionRosterEntry entry)
     {
-        // Clear existing
         foreach(Node child in _veterancyContainer.GetChildren()) child.QueueFree();
 
-        // Check availability keys in entry
-        // "rookie" (0), "trained" (1), "veteran" (2), "elite" (3)
-        // Or generic 0,1,2,3
-        
-        // Actually DivisionData uses strings "trained", etc.
         string[] vetKeys = ["rookie", "trained", "veteran", "elite"];
+
+
+        // Render Top to Bottom (High to Low or Low to High?)
+        // User image shows 3 slots. Wargame allows picking any of the 4/5 levels. 
+        // Standard UI is usually Low -> High or High -> Low.
+        // Let's stick to High to Low (3 down to 0) as typical for deck builders (Elite on top).
         
-        for(int i=0; i<4; i++)
+        for(int i=3; i>=0; i--) 
         {
             string key = vetKeys[i];
-            if (!_entry.Availability.ContainsKey(key)) continue;
+            bool isAvailable = entry.Availability.ContainsKey(key) && entry.Availability[key] > 0;
 
             var btn = new Button();
-            btn.Text = new string('^', i); // Cheap chevron representation
-            if (i==0) btn.Text = "-"; // Rookie
-            
-            btn.CustomMinimumSize = new Vector2(20, 20);
             btn.ToggleMode = true;
-            btn.ButtonGroup = new ButtonGroup(); // Wait, specific group? No, local logic.
+            btn.ButtonGroup = _vetGroup;
+            btn.CustomMinimumSize = new Vector2(30, 26);
+            btn.ThemeTypeVariation = "FlatButton"; 
             
-            // Interaction
-            int vetLevel = i;
-            btn.Pressed += () => SelectVeterancy(vetLevel);
+            // Visuals using TextureRect
+            var icon = new TextureRect();
+            icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+            icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+            icon.LayoutMode = 1; 
+            icon.AnchorsPreset = (int)Control.LayoutPreset.FullRect;
+            icon.Texture = WarYes.Utils.IconLoader.LoadVeterancyIcon(i);
             
+            btn.AddChild(icon);
+
+            if (!isAvailable)
+            {
+                // "Fully black out the section"
+                btn.Disabled = true;
+                btn.Modulate = Colors.Black; 
+                icon.Visible = false; 
+            }
+            else
+            {
+                // Interaction
+                int level = i;
+                btn.Pressed += () => SelectVeterancy(level);
+            }
+
             _veterancyContainer.AddChild(btn);
-            
-            // Auto select lowest available if nothing selected
-             if (SelectedVeterancy == -1) // or logic to default
+        }
+        
+        // Auto select LOWEST available
+        // Iterate 0 to 3
+        for(int i=0; i<4; i++)
+        {
+             string key = vetKeys[i];
+             // MUST check count > 0, not just ContainsKey
+             if (entry.Availability.ContainsKey(key) && entry.Availability[key] > 0)
              {
-                 btn.SetPressedNoSignal(true);
-                 SelectedVeterancy = i;
+                 SelectVeterancy(i);
+                 break;
              }
         }
     }
 
     private void SelectVeterancy(int level)
     {
-        SelectedVeterancy = level;
-        UpdateAvailabilityDisplay();
-        EmitSignal(SignalName.VeterancyChanged, UnitId, SelectedVeterancy);
-    }
-
-    private void OnGuiInput(InputEvent @event)
-    {
-        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        // Update button pressed state manually? 
+        // Iterate children, check index.
+        // We created buttons 3, 2, 1, 0.
+        // So level 0 is child index 3. Level 3 is child index 0.
+        int childIndex = 3 - level;
+        if (childIndex >= 0 && childIndex < _veterancyContainer.GetChildCount())
         {
-            EmitSignal(SignalName.CardClicked, UnitId, SelectedVeterancy);
+             var btn = _veterancyContainer.GetChild<Button>(childIndex);
+             if (!btn.Disabled) 
+             {
+                 btn.SetPressedNoSignal(true);
+                 SelectedVeterancy = level;
+                 UpdateAvailabilityDisplay();
+                 EmitSignal(SignalName.VeterancyChanged, UnitId, SelectedVeterancy);
+             }
         }
     }
-
+    
     private void UpdateAvailabilityDisplay()
     {
-        // Get count for current veterancy
         string[] vetKeys = ["rookie", "trained", "veteran", "elite"];
         if (SelectedVeterancy >= 0 && SelectedVeterancy < 4)
         {
@@ -136,8 +185,17 @@ public partial class UnitCardUI : PanelContainer
             if (_entry.Availability.ContainsKey(key))
             {
                 int count = _entry.Availability[key];
-                _countLabel.Text = $"{count}/{count}"; // TODO: Track remaining available
+                 // Show "xCount"
+                _countLabel.Text = $"x{count}"; 
             }
+        }
+    }
+
+    private void OnGuiInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        {
+            EmitSignal(SignalName.CardClicked, UnitId, SelectedVeterancy);
         }
     }
 }

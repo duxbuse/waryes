@@ -1,0 +1,9 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 3 Chevrons with black borders -->
+  <!-- Top -->
+  <path d="M12 30 L32 10 L52 30 L46 36 L32 22 L18 36 Z" fill="white" stroke="black" stroke-width="4"/>
+  <!-- Middle -->
+  <path d="M12 42 L32 22 L52 42 L46 48 L32 34 L18 48 Z" fill="white" stroke="black" stroke-width="4"/>
+  <!-- Bottom -->
+  <path d="M12 54 L32 34 L52 54 L46 60 L32 46 L18 60 Z" fill="white" stroke="black" stroke-width="4"/>
+</svg>

@@ -6,13 +6,13 @@
     "description": "Balanced force. Good mix of infantry, tanks and air support. The 'Jack of All Trades'.",
     "playstyle": "Can adapt to any situation. Good at everything, master of none.",
     "slot_costs": {
-        "logistics": [
+        "LOG": [
             1,
             2,
             2,
             3
         ],
-        "infantry": [
+        "INF": [
             1,
             1,
             1,
@@ -21,34 +21,34 @@
             3,
             3
         ],
-        "tanks": [
+        "TNK": [
             1,
             1,
             2,
             2,
             3
         ],
-        "recon": [
+        "REC": [
             1,
             2,
             3
         ],
-        "anti_air": [
+        "AA": [
             1,
             2,
             3
         ],
-        "artillery": [
+        "ART": [
             1,
             2,
             3
         ],
-        "air": [
+        "AIR": [
             1,
             2,
             3
         ],
-        "vtol": [
+        "HEL": [
             1,
             2,
             3
@@ -58,6 +58,9 @@
         {
             "unit_id": "vanguard_infantry",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -69,6 +72,9 @@
         {
             "unit_id": "vanguard_infantry_ion",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -80,6 +86,9 @@
         {
             "unit_id": "vanguard_infantry_fusion",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -91,6 +100,9 @@
         {
             "unit_id": "vanguard_heavy_support_laser",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -102,6 +114,9 @@
         {
             "unit_id": "vanguard_heavy_support_auto",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -113,6 +128,9 @@
         {
             "unit_id": "vanguard_jetpack_squad",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -179,6 +197,9 @@
         {
             "unit_id": "vanguard_recon",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 4,
                 "legend": 0,

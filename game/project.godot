@@ -15,10 +15,10 @@ run/main_scene="res://scenes/UI/MainMenu.tscn"
 config/features=PackedStringArray("4.5", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 
-[dotnet]
-
-project/assembly_name="waryes"
-
 [autoload]
 
 GameGlobal="*res://scripts/Managers/GameGlobal.cs"
+
+[dotnet]
+
+project/assembly_name="waryes"

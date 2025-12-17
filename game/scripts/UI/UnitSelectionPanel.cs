@@ -1,6 +1,8 @@
 using Godot;
 using System.Collections.Generic;
 using WarYes.Data;
+using System.Linq;
+using WarYes.Utils;
 
 public partial class UnitSelectionPanel : Control
 {
@@ -11,9 +13,8 @@ public partial class UnitSelectionPanel : Control
     private TextureRect _unitIcon;
     private Label _unitName;
     private ProgressBar _hpBar;
-    private Label _ammoLabel;
-    private Label _speedLabel; // Extra stat
-    private Label _ammoCount; // Detailed ammo
+
+    private RichTextLabel _detailsLabel; // Replaces individual labels
     
     // Group List Elements
     private HBoxContainer _groupListContainer;
@@ -109,11 +110,11 @@ public partial class UnitSelectionPanel : Control
         detailsVBox.AddChild(_hpBar);
         
         // Stats
-        _ammoLabel = new Label();
-        detailsVBox.AddChild(_ammoLabel);
-        
-        _speedLabel = new Label();
-        detailsVBox.AddChild(_speedLabel);
+        _detailsLabel = new RichTextLabel();
+        _detailsLabel.BbcodeEnabled = true;
+        _detailsLabel.SizeFlagsVertical = SizeFlags.ExpandFill;
+        _detailsLabel.FitContent = true; 
+        detailsVBox.AddChild(_detailsLabel);
     }
     
     public override void _Process(double delta)
@@ -150,13 +151,28 @@ public partial class UnitSelectionPanel : Control
             _unitName.Text = primary.Data.Id.ToUpper().Replace("SDF_", "").Replace("_", " ");
             
             // Icon Logic (Reuse UnitUI logic or similar)
-            _unitIcon.Texture = LoadUnitIcon(primary.Data.Id);
+            // Icon Logic (Reuse UnitUI logic or similar)
+            _unitIcon.Texture = IconLoader.LoadUnitIcon(primary.Data);
             
             // Stats
             float speed = primary.Data.Speed.Road > 0 ? primary.Data.Speed.Road : 30;
-            _speedLabel.Text = $"Speed: {speed} km/h";
             
-            _ammoLabel.Text = $"Rank: {primary.Rank}"; // Placeholder for ammo access
+            string text = $"Speed: {speed} km/h | Rank: {primary.Rank}\n";
+            
+            // Weapons
+            if (primary.Data.Weapons != null)
+            {
+                foreach(var w in primary.Data.Weapons)
+                {
+                     string faction = "vanguard";
+                     if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
+                     string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
+                     
+                     text += $"[img=20]{iconPath}[/img] {w.WeaponId} ";
+                }
+            }
+            
+            _detailsLabel.Text = text;
             
             // Update Group List
             UpdateGroupList();
@@ -189,7 +205,10 @@ public partial class UnitSelectionPanel : Control
             btn.CustomMinimumSize = new Vector2(40, 40);
             
             // Icon
-            var icon = LoadUnitIcon(typeId);
+            Texture2D icon = null;
+            var representative = allSelected.FirstOrDefault(u => u.Data.Id == typeId);
+            if (representative != null) icon = IconLoader.LoadUnitIcon(representative.Data);
+            else icon = IconLoader.LoadUnitIcon(typeId, "INF"); // Fallback if somehow unit not found (unlikely)
             btn.Icon = icon;
             btn.ExpandIcon = true;
             
@@ -210,19 +229,5 @@ public partial class UnitSelectionPanel : Control
         }
     }
 
-    // Copied from UnitUI (Should be in a utility class ideally)
-    private Texture2D LoadUnitIcon(string unitId)
-    {
-        string faction = unitId.StartsWith("sdf") ? "sdf" : "vanguard";
-        if (unitId.Contains("vanguard")) faction = "vanguard";
-        
-        string pathPng = $"res://assets/icons/units/{faction}/{unitId}.png";
-        string pathJpg = $"res://assets/icons/units/{faction}/{unitId}.jpg";
-        
-        if (ResourceLoader.Exists(pathPng)) return GD.Load<Texture2D>(pathPng);
-        if (ResourceLoader.Exists(pathJpg)) return GD.Load<Texture2D>(pathJpg);
-        
-        // Fallback
-        return null; // Or placeholder
-    }
+    // LoadUnitIcon removed, using WarYes.Utils.IconLoader
 }

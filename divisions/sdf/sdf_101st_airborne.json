@@ -1,244 +1,249 @@
 {
-    "id":  "sdf_101st_airborne",
-    "name":  "101st Airborne Drop Regiment",
-    "faction_id":  "sdf",
-    "description":  "Air Assault, Infantry, Light Vehicles. Fast, aggressive verticality.",
-    "playstyle":  "Can deploy anywhere but lacks staying power against heavy armor.",
-    "slot_costs":  {
-                       "logistics":  [
-                                         1,
-                                         2,
-                                         2
-                                     ],
-                       "infantry":  [
-                                        1,
-                                        1,
-                                        1,
-                                        1,
-                                        1,
-                                        2,
-                                        2
-                                    ],
-                       "tanks":  [
-                                     3,
-                                     4
-                                 ],
-                       "recon":  [
-                                     1,
-                                     1,
-                                     2,
-                                     3
-                                 ],
-                       "anti_air":  [
-                                        1,
-                                        2,
-                                        3
-                                    ],
-                       "artillery":  [
-                                         2,
-                                         3
-                                     ],
-                       "air":  [
-                                   1,
-                                   1,
-                                   1,
-                                   1,
-                                   2,
-                                   2,
-                                   2,
-                                   3,
-                                   3
-                               ],
-                       "vtol":  [
-                                    1,
-                                    1,
-                                    1,
-                                    1,
-                                    2,
-                                    2,
-                                    2,
-                                    3,
-                                    3
-                                ]
-                   },
-    "roster":  [
-                   {
-                       "unit_id":  "sdf_stormtrooper",
-                       "max_cards":  6,
-                       "transport_options":  [
-                                                 "sdf_osprey"
-                                             ],
-                       "availability":  {
-                                            "trained":  8,
-                                            "legend":  0,
-                                            "rookie":  0,
-                                            "elite":  4,
-                                            "veteran":  6
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_trooper",
-                       "max_cards":  2,
-                       "transport_options":  [
-                                                 "sdf_osprey",
-                                                 "sdf_transport_truck"
-                                             ],
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_command_squad",
-                       "max_cards":  2,
-                       "transport_options":  [
-                                                 "sdf_osprey"
-                                             ],
-                       "availability":  {
-                                            "trained":  4,
-                                            "legend":  0,
-                                            "rookie":  0,
-                                            "elite":  2,
-                                            "veteran":  3
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_hwt_lascannon",
-                       "max_cards":  2,
-                       "transport_options":  [
-                                                 "sdf_osprey"
-                                             ],
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_falcon_gunship_rotary",
-                       "max_cards":  4,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_falcon_gunship_at",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_nova_fighter_interceptor",
-                       "max_cards":  4,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_nova_fighter_bomber",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_skyfortress_bomber",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_skyfortress_destroyer",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  2,
-                                            "legend":  0,
-                                            "rookie":  3,
-                                            "elite":  0,
-                                            "veteran":  1
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_scout_walker",
-                       "max_cards":  4,
-                       "availability":  {
-                                            "trained":  4,
-                                            "legend":  0,
-                                            "rookie":  6,
-                                            "elite":  2,
-                                            "veteran":  3
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_rocket_team",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_skysweeper",
-                       "max_cards":  1,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_mortar_team",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_bastion_mbt",
-                       "max_cards":  1,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   }
-               ]
+    "id": "sdf_101st_airborne",
+    "name": "101st Airborne Drop Regiment",
+    "faction_id": "sdf",
+    "description": "Air Assault, Infantry, Light Vehicles. Fast, aggressive verticality.",
+    "playstyle": "Can deploy anywhere but lacks staying power against heavy armor.",
+    "slot_costs": {
+        "LOG": [
+            1,
+            2,
+            2
+        ],
+        "INF": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2
+        ],
+        "TNK": [
+            3,
+            4
+        ],
+        "REC": [
+            1,
+            1,
+            2,
+            3
+        ],
+        "AA": [
+            1,
+            2,
+            3
+        ],
+        "ART": [
+            2,
+            3
+        ],
+        "AIR": [
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+        ],
+        "HEL": [
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+        ]
+    },
+    "roster": [
+        {
+            "unit_id": "sdf_stormtrooper",
+            "max_cards": 6,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 8,
+                "legend": 0,
+                "rookie": 0,
+                "elite": 4,
+                "veteran": 6
+            }
+        },
+        {
+            "unit_id": "sdf_trooper",
+            "max_cards": 2,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_command_squad",
+            "max_cards": 2,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 0,
+                "elite": 2,
+                "veteran": 3
+            }
+        },
+        {
+            "unit_id": "sdf_hwt_lascannon",
+            "max_cards": 2,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_falcon_gunship_rotary",
+            "max_cards": 4,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_falcon_gunship_at",
+            "max_cards": 3,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_nova_fighter_interceptor",
+            "max_cards": 4,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_nova_fighter_bomber",
+            "max_cards": 3,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_skyfortress_bomber",
+            "max_cards": 2,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_skyfortress_destroyer",
+            "max_cards": 2,
+            "availability": {
+                "trained": 2,
+                "legend": 0,
+                "rookie": 3,
+                "elite": 0,
+                "veteran": 1
+            }
+        },
+        {
+            "unit_id": "sdf_scout_walker",
+            "max_cards": 4,
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 6,
+                "elite": 2,
+                "veteran": 3
+            }
+        },
+        {
+            "unit_id": "sdf_rocket_team",
+            "max_cards": 3,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_skysweeper",
+            "max_cards": 1,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_mortar_team",
+            "max_cards": 2,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_bastion_mbt",
+            "max_cards": 1,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        }
+    ]
 }

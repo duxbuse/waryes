@@ -1,239 +1,257 @@
 {
-    "id":  "sdf_45th_siege",
-    "name":  "45th Siege Regiment (Artillery)",
-    "faction_id":  "sdf",
-    "description":  "Massed Artillery, Static Defense, Entrenchment. Pounding the enemy to dust from afar before advancing.",
-    "playstyle":  "Excellent at holding ground.",
-    "slot_costs":  {
-                       "logistics":  [
-                                         1,
-                                         1,
-                                         1,
-                                         2,
-                                         2,
-                                         3
-                                     ],
-                       "infantry":  [
-                                        1,
-                                        1,
-                                        1,
-                                        2,
-                                        2,
-                                        3
-                                    ],
-                       "tanks":  [
-                                     2,
-                                     3,
-                                     4
-                                 ],
-                       "recon":  [
-                                     1,
-                                     1,
-                                     2,
-                                     3
-                                 ],
-                       "anti_air":  [
-                                        1,
-                                        1,
-                                        2,
-                                        2
-                                    ],
-                       "artillery":  [
-                                         1,
-                                         1,
-                                         1,
-                                         1,
-                                         2,
-                                         2,
-                                         2,
-                                         3,
-                                         3
-                                     ],
-                       "air":  [
-                                   3,
-                                   4
-                               ],
-                       "vtol":  [
-                                    3,
-                                    4
-                                ]
-                   },
-    "roster":  [
-                   {
-                       "unit_id":  "sdf_tremor_cannon",
-                       "max_cards":  6,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_barrage_launcher",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_vortex_missile",
-                       "max_cards":  1,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_field_gun_bombast",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_field_gun_heavy_lascannon",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_mortar_team",
-                       "max_cards":  4,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_militia",
-                       "max_cards":  5,
-                       "availability":  {
-                                            "trained":  18,
-                                            "legend":  0,
-                                            "rookie":  24,
-                                            "elite":  0,
-                                            "veteran":  0
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_trooper",
-                       "max_cards":  4,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_hwt_lascannon",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  3,
-                                            "legend":  0,
-                                            "rookie":  4,
-                                            "elite":  0,
-                                            "veteran":  2
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_hwt_heavy_bolter",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_bastion_mbt_siege",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  6,
-                                            "legend":  0,
-                                            "rookie":  8,
-                                            "elite":  3,
-                                            "veteran":  4
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_bastion_mbt",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_sniper_team",
-                       "max_cards":  3,
-                       "availability":  {
-                                            "trained":  4,
-                                            "legend":  0,
-                                            "rookie":  6,
-                                            "elite":  2,
-                                            "veteran":  3
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_scout_walker",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  4,
-                                            "legend":  0,
-                                            "rookie":  6,
-                                            "elite":  2,
-                                            "veteran":  3
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_skysweeper",
-                       "max_cards":  2,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   },
-                   {
-                       "unit_id":  "sdf_orbital_lance_strike",
-                       "max_cards":  1,
-                       "availability":  {
-                                            "trained":  12,
-                                            "legend":  0,
-                                            "rookie":  16,
-                                            "elite":  0,
-                                            "veteran":  8
-                                        }
-                   }
-               ]
+    "id": "sdf_45th_siege",
+    "name": "45th Siege Regiment (Artillery)",
+    "faction_id": "sdf",
+    "description": "Massed Artillery, Static Defense, Entrenchment. Pounding the enemy to dust from afar before advancing.",
+    "playstyle": "Excellent at holding ground.",
+    "slot_costs": {
+        "LOG": [
+            1,
+            1,
+            1,
+            2,
+            2,
+            3
+        ],
+        "INF": [
+            1,
+            1,
+            1,
+            2,
+            2,
+            3
+        ],
+        "TNK": [
+            2,
+            3,
+            4
+        ],
+        "REC": [
+            1,
+            1,
+            2,
+            3
+        ],
+        "AA": [
+            1,
+            1,
+            2,
+            2
+        ],
+        "ART": [
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+        ],
+        "AIR": [
+            3,
+            4
+        ],
+        "HEL": [
+            3,
+            4
+        ]
+    },
+    "roster": [
+        {
+            "unit_id": "sdf_tremor_cannon",
+            "max_cards": 6,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_barrage_launcher",
+            "max_cards": 3,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_vortex_missile",
+            "max_cards": 1,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_field_gun_bombast",
+            "max_cards": 3,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_field_gun_heavy_lascannon",
+            "max_cards": 2,
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_mortar_team",
+            "max_cards": 4,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_militia",
+            "max_cards": 5,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 18,
+                "legend": 0,
+                "rookie": 24,
+                "elite": 0,
+                "veteran": 0
+            }
+        },
+        {
+            "unit_id": "sdf_trooper",
+            "max_cards": 4,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_hwt_lascannon",
+            "max_cards": 3,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 3,
+                "legend": 0,
+                "rookie": 4,
+                "elite": 0,
+                "veteran": 2
+            }
+        },
+        {
+            "unit_id": "sdf_hwt_heavy_bolter",
+            "max_cards": 3,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_bastion_mbt_siege",
+            "max_cards": 2,
+            "availability": {
+                "trained": 6,
+                "legend": 0,
+                "rookie": 8,
+                "elite": 3,
+                "veteran": 4
+            }
+        },
+        {
+            "unit_id": "sdf_bastion_mbt",
+            "max_cards": 2,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_sniper_team",
+            "max_cards": 3,
+            "transport_options": [
+                "sdf_transport_truck"
+            ],
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 6,
+                "elite": 2,
+                "veteran": 3
+            }
+        },
+        {
+            "unit_id": "sdf_scout_walker",
+            "max_cards": 2,
+            "availability": {
+                "trained": 4,
+                "legend": 0,
+                "rookie": 6,
+                "elite": 2,
+                "veteran": 3
+            }
+        },
+        {
+            "unit_id": "sdf_skysweeper",
+            "max_cards": 2,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        },
+        {
+            "unit_id": "sdf_orbital_lance_strike",
+            "max_cards": 1,
+            "availability": {
+                "trained": 12,
+                "legend": 0,
+                "rookie": 16,
+                "elite": 0,
+                "veteran": 8
+            }
+        }
+    ]
 }

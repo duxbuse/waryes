@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cannon Shell -->
+  <path d="M20 10 L44 10 L44 46 L20 46 Z" fill="white" stroke="black" stroke-width="4"/>
+  <path d="M20 10 Q32 0 44 10" fill="white" stroke="black" stroke-width="4"/>
+  <rect x="18" y="46" width="28" height="8" fill="white" stroke="black" stroke-width="4"/>
+</svg>

@@ -1,134 +1,145 @@
-[gd_scene load_steps=3 format=3 uid="uid://deckbuilder98765"]
+[gd_scene load_steps=5 format=3 uid="uid://deckbuilder98765"]
 
 [ext_resource type="Script" path="res://scripts/UI/DeckBuilderUI.cs" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://deckstripitem456" path="res://scenes/UI/Components/DeckStripItem.tscn" id="2_strip"]
 
-[node name="DeckBuilder" type="Control"]
-layout_mode = 3
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_info"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.12, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.25, 0.25, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="DeckBuilder" type="VBoxContainer"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 0
 script = ExtResource("1_script")
 DeckStripItemScene = ExtResource("2_strip")
 
-[node name="Background" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.15, 0.15, 0.15, 1)
+[node name="DeckSection" type="PanelContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.55
 
-[node name="TopPanel" type="Panel" parent="."]
-custom_minimum_size = Vector2(0, 80)
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-grow_horizontal = 2
+[node name="Background" type="ColorRect" parent="DeckSection"]
+layout_mode = 2
+color = Color(0.18, 0.22, 0.25, 1)
 
-[node name="HBox" type="HBoxContainer" parent="TopPanel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="VBox" type="VBoxContainer" parent="DeckSection"]
+layout_mode = 2
 
-[node name="BackButton" type="Button" parent="TopPanel/HBox"]
+[node name="TopBar" type="HBoxContainer" parent="DeckSection/VBox"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 text = "BACK"
 
-[node name="FactionSelector" type="OptionButton" parent="TopPanel/HBox"]
+[node name="FactionSelector" type="OptionButton" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
 size_flags_vertical = 4
 alignment = 1
 
-[node name="DivisionSelector" type="OptionButton" parent="TopPanel/HBox"]
+[node name="DivisionSelector" type="OptionButton" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_vertical = 4
 alignment = 1
 
-[node name="DeckNameInput" type="LineEdit" parent="TopPanel/HBox"]
+[node name="DeckNameInput" type="LineEdit" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_vertical = 4
 placeholder_text = "Deck Name"
 alignment = 1
 
-[node name="DeckStripScroll" type="ScrollContainer" parent="TopPanel/HBox"]
+[node name="Spacer" type="Control" parent="DeckSection/VBox/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DeckStripContainer" type="HBoxContainer" parent="TopPanel/HBox/DeckStripScroll"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="PointsLabel" type="Label" parent="TopPanel/HBox"]
+[node name="PointsLabel" type="Label" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 text = "0/50"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="LoadButton" type="Button" parent="TopPanel/HBox"]
+[node name="LoadButton" type="Button" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "LOAD"
 
-[node name="SaveButton" type="Button" parent="TopPanel/HBox"]
+[node name="SaveButton" type="Button" parent="DeckSection/VBox/TopBar"]
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "SAVE"
 
-[node name="MainArea" type="HBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = 84.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="DeckStripScroll" type="ScrollContainer" parent="DeckSection/VBox"]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+size_flags_vertical = 3
 
-[node name="LeftPanel" type="VBoxContainer" parent="MainArea"]
+[node name="DeckStripContainer" type="HBoxContainer" parent="DeckSection/VBox/DeckStripScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="LibrarySection" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LeftPanel" type="VBoxContainer" parent="LibrarySection"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 3.0
 
-[node name="CategoryTabs" type="HBoxContainer" parent="MainArea/LeftPanel"]
+[node name="CategoryTabs" type="HBoxContainer" parent="LibrarySection/LeftPanel"]
 layout_mode = 2
 alignment = 1
 
-[node name="LibraryScroll" type="ScrollContainer" parent="MainArea/LeftPanel"]
+[node name="LibraryScroll" type="ScrollContainer" parent="LibrarySection/LeftPanel"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LibraryGrid" type="HFlowContainer" parent="MainArea/LeftPanel/LibraryScroll"]
+[node name="LibraryGrid" type="HFlowContainer" parent="LibrarySection/LeftPanel/LibraryScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 alignment = 1
 
-[node name="RightPanel" type="PanelContainer" parent="MainArea"]
+[node name="RightPanel" type="PanelContainer" parent="LibrarySection"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_info")
 
-[node name="VBox" type="VBoxContainer" parent="MainArea/RightPanel"]
+[node name="VBox" type="VBoxContainer" parent="LibrarySection/RightPanel"]
 layout_mode = 2
 
-[node name="InfoLabel" type="Label" parent="MainArea/RightPanel/VBox"]
+[node name="InfoLabel" type="Label" parent="LibrarySection/RightPanel/VBox"]
 layout_mode = 2
 text = "Unit Info"
 horizontal_alignment = 1
 
-[node name="StatsLabel" type="RichTextLabel" parent="MainArea/RightPanel/VBox"]
+[node name="StatsLabel" type="RichTextLabel" parent="LibrarySection/RightPanel/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+bbcode_enabled = true
 text = "Hover over a unit..."
 
 [node name="TransportPopup" type="Window" parent="."]

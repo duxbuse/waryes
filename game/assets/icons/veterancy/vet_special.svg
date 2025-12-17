@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 3 Chevrons with borders -->
+  <g transform="translate(0, 4)">
+    <path d="M16 32 L32 16 L48 32 L44 36 L32 24 L20 36 Z" fill="white" stroke="black" stroke-width="4"/>
+    <path d="M16 42 L32 26 L48 42 L44 46 L32 34 L20 46 Z" fill="white" stroke="black" stroke-width="4"/>
+    <path d="M16 52 L32 36 L48 52 L44 56 L32 44 L20 56 Z" fill="white" stroke="black" stroke-width="4"/>
+  </g>
+  <!-- Star on top - also add stroke to make it pop -->
+  <path d="M32 2 L35 11 H45 L37 17 L40 26 L32 21 L24 26 L27 17 L19 11 H29 Z" fill="white" stroke="black" stroke-width="3" transform="translate(0, 0)"/>
+</svg>

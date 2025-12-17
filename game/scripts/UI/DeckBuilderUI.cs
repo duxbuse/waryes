@@ -30,9 +30,6 @@ public partial class DeckBuilderUI : Control
     
     // State
     private string _currentCategory = "LOG";
-    private DivisionRosterEntry _pendingEntry;
-    private UnitData _pendingUnitData;
-    private int _pendingVeterancy;
 
     private readonly string[] _categories = { "LOG", "INF", "TNK", "REC", "AA", "ART", "HEL", "AIR" };
     private readonly int _maxActivationPoints = 50;
@@ -41,20 +38,27 @@ public partial class DeckBuilderUI : Control
     private List<string> _divisionIds = new List<string>();
     
     private Dictionary<string, List<DivisionData>> _divisionsByFaction = new Dictionary<string, List<DivisionData>>();
+    private Dictionary<string, Button> _categoryButtons = new Dictionary<string, Button>();
 
     public override void _Ready()
     {
         _global = GameGlobal.Instance;
         
         // Nodes
-        _factionSelector = GetNode<OptionButton>("TopPanel/HBox/FactionSelector");
-        _divisionSelector = GetNode<OptionButton>("TopPanel/HBox/DivisionSelector");
-        _deckNameInput = GetNode<LineEdit>("TopPanel/HBox/DeckNameInput");
-        _pointsLabel = GetNode<Label>("TopPanel/HBox/PointsLabel");
-        _deckStripContainer = GetNode<HBoxContainer>("TopPanel/HBox/DeckStripScroll/DeckStripContainer");
-        _categoryTabs = GetNode<HBoxContainer>("MainArea/LeftPanel/CategoryTabs");
-        _libraryGrid = GetNode<Container>("MainArea/LeftPanel/LibraryScroll/LibraryGrid");
-        _statsLabel = GetNode<RichTextLabel>("MainArea/RightPanel/VBox/StatsLabel");
+        // Nodes
+        _factionSelector = GetNode<OptionButton>("DeckSection/VBox/TopBar/FactionSelector");
+        _divisionSelector = GetNode<OptionButton>("DeckSection/VBox/TopBar/DivisionSelector");
+        _deckNameInput = GetNode<LineEdit>("DeckSection/VBox/TopBar/DeckNameInput");
+        _pointsLabel = GetNode<Label>("DeckSection/VBox/TopBar/PointsLabel");
+        
+        // Deck Strip is in the top section now
+        _deckStripContainer = GetNode<HBoxContainer>("DeckSection/VBox/DeckStripScroll/DeckStripContainer");
+        
+        // Library is in the bottom section
+        _categoryTabs = GetNode<HBoxContainer>("LibrarySection/LeftPanel/CategoryTabs");
+        _libraryGrid = GetNode<Container>("LibrarySection/LeftPanel/LibraryScroll/LibraryGrid");
+        _statsLabel = GetNode<RichTextLabel>("LibrarySection/RightPanel/VBox/StatsLabel");
+        _statsLabel.BbcodeEnabled = true;
         
         _transportPopup = GetNode<Window>("TransportPopup");
         _transportGrid = GetNode<Container>("TransportPopup/TransportScroll/TransportGrid");
@@ -64,9 +68,9 @@ public partial class DeckBuilderUI : Control
         _deckListContainer = GetNode<Container>("LoadDeckPopup/Scroll/DeckList");
         _loadDeckPopup.CloseRequested += () => _loadDeckPopup.Hide();
 
-        GetNode<Button>("TopPanel/HBox/BackButton").Pressed += OnBackPressed;
-        GetNode<Button>("TopPanel/HBox/LoadButton").Pressed += ShowLoadDeckPopup;
-        GetNode<Button>("TopPanel/HBox/SaveButton").Pressed += OnSavePressed;
+        GetNode<Button>("DeckSection/VBox/TopBar/BackButton").Pressed += OnBackPressed;
+        GetNode<Button>("DeckSection/VBox/TopBar/LoadButton").Pressed += ShowLoadDeckPopup;
+        GetNode<Button>("DeckSection/VBox/TopBar/SaveButton").Pressed += OnSavePressed;
         
         _factionSelector.ItemSelected += OnFactionSelected;
         _divisionSelector.ItemSelected += OnDivisionSelected;
@@ -198,14 +202,41 @@ public partial class DeckBuilderUI : Control
 
     private void SetupCategoryTabs()
     {
+        _categoryButtons.Clear();
+        var group = new ButtonGroup();
         foreach (var cat in _categories)
         {
             var btn = new Button();
             btn.Text = cat;
             btn.ToggleMode = true;
-            btn.ButtonGroup = new ButtonGroup(); 
+            btn.ButtonGroup = group;
             btn.Pressed += () => SelectCategory(cat);
             _categoryTabs.AddChild(btn);
+            _categoryButtons[cat] = btn;
+        }
+    }
+    
+    private void UpdateCategoryTabLabels()
+    {
+        if (_currentDeck.Division == null) return;
+        
+        foreach(var kvp in _categoryButtons)
+        {
+            string cat = kvp.Key;
+            Button btn = kvp.Value;
+            
+            int nextCost = GetNextSlotCost(cat);
+            if (nextCost == -1)
+            {
+                btn.Text = $"{cat} (MAX)";
+                // Optional: Disable button if full? 
+                // btn.Disabled = true; 
+            }
+            else
+            {
+                btn.Text = $"{cat} ({nextCost})";
+                // btn.Disabled = false;
+            }
         }
     }
     
@@ -213,6 +244,7 @@ public partial class DeckBuilderUI : Control
     {
         _currentCategory = category;
         RefreshLibrary();
+        UpdateDeckVisuals(); // Update visuals to filter deck strip
     }
 
     private void InitializeDeck(DivisionData division)
@@ -240,20 +272,65 @@ public partial class DeckBuilderUI : Control
             {
                 var card = UnitCardScene.Instantiate<UnitCardUI>();
                 _libraryGrid.AddChild(card);
-                card.Setup(entry, unitData);
+                
+                int countInDeck = _currentDeck.Cards.Count(c => c.UnitId == entry.UnitId);
+                card.Setup(entry, unitData, countInDeck);
+                
                 card.CardClicked += (uid, vet) => OnUnitCardClicked(entry, unitData, vet);
+                card.MouseEntered += () => DisplayUnitStats(unitData);
+                card.MouseExited += ClearStats;
             }
         }
+    }
+
+    private void DisplayUnitStats(UnitData unit)
+    {
+        string text = $"[b]{unit.Name.ToUpper()}[/b]\n";
+        text += $"Cost: {unit.Cost} | HP: {unit.Health} | Optics: {unit.Optics} | Stealth: {unit.Stealth}\n";
+        
+        if (unit.Speed.Road > 0)
+            text += $"Speed: {unit.Speed.Road} (Road) / {unit.Speed.OffRoad} (Off-Road)\n";
+            
+        if (unit.Armor.Front > 0 || unit.Armor.Side > 0 || unit.Armor.Rear > 0 || unit.Armor.Top > 0)
+            text += $"Armor: F:{unit.Armor.Front} S:{unit.Armor.Side} R:{unit.Armor.Rear} T:{unit.Armor.Top}\n";
+
+        text += "\n[b]WEAPONS:[/b]\n";
+        if (unit.Weapons != null)
+        {
+            foreach(var w in unit.Weapons)
+            {
+                 string faction = "vanguard";
+                 if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
+                 string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
+                 
+                 // Ideally look up weapon stats from Library, but here we just list ID/Ammo
+                 if (ResourceLoader.Exists(iconPath))
+                 {
+                     text += $"[img=24]{iconPath}[/img] {w.WeaponId} (x{w.Count}) [{w.MaxAmmo}]\n";
+                 }
+                 else
+                 {
+                     text += $"[NO ICON] {w.WeaponId} (x{w.Count}) [{w.MaxAmmo}]\n";
+                 }
+            }
+        }
+        
+        _statsLabel.Text = text;
+    }
+
+    private void ClearStats()
+    {
+        _statsLabel.Text = "Hover over a unit...";
     }
 
     private void OnUnitCardClicked(DivisionRosterEntry entry, UnitData data, int veterancy)
     {
         if (entry.TransportOptions != null && entry.TransportOptions.Count > 0)
         {
-            _pendingEntry = entry;
-            _pendingUnitData = data;
-            _pendingVeterancy = veterancy;
-            ShowTransportPopup(entry.TransportOptions);
+            ShowTransportPopup(entry.TransportOptions, (tid) => 
+            {
+                AddCardToDeck(entry, data, veterancy, tid);
+            });
         }
         else
         {
@@ -261,7 +338,7 @@ public partial class DeckBuilderUI : Control
         }
     }
 
-    private void ShowTransportPopup(List<string> options)
+    private void ShowTransportPopup(List<string> options, Action<string> onTransportSelected)
     {
         foreach (Node child in _transportGrid.GetChildren()) child.QueueFree();
         
@@ -275,7 +352,7 @@ public partial class DeckBuilderUI : Control
             btn.CustomMinimumSize = new Vector2(100, 60);
             btn.Pressed += () => 
             {
-                AddCardToDeck(_pendingEntry, _pendingUnitData, _pendingVeterancy, transId);
+                onTransportSelected?.Invoke(transId);
                 _transportPopup.Hide();
             };
             _transportGrid.AddChild(btn);
@@ -291,7 +368,7 @@ public partial class DeckBuilderUI : Control
         
         if (cost == -1) 
         {
-            GD.Print("No more slots for this category!");
+            GD.PrintErr($"No more slots for this category: {data.Category}. Check Division JSON 'slot_costs' for this category key.");
             return;
         }
         
@@ -336,24 +413,100 @@ public partial class DeckBuilderUI : Control
     private void RemoveCard(UnitCard card)
     {
         _currentDeck.Cards.Remove(card);
-        UpdateDeckVisuals();
+        UpdateDeckVisuals(); // Full refresh to handle slot shifts
     }
 
     private void UpdateDeckVisuals()
     {
         foreach (Node child in _deckStripContainer.GetChildren()) child.QueueFree();
         
-        foreach (var card in _currentDeck.Cards)
+        // Filter by current category
+        var filteredCards = _currentDeck.Cards.Where(c => c.Data.Category == _currentCategory).ToList();
+        
+        if (_currentDeck.Division != null && _currentDeck.Division.SlotCosts.ContainsKey(_currentCategory))
         {
-            var item = DeckStripItemScene.Instantiate<DeckStripItem>();
-            _deckStripContainer.AddChild(item);
-            string name = card.Data.Name;
-            item.Setup(name, card.Veterancy, card.Cost.ToString());
-            item.DecorationClicked += () => RemoveCard(card);
+            int[] costs = _currentDeck.Division.SlotCosts[_currentCategory];
+            
+            for (int i = 0; i < costs.Length; i++)
+            {
+                var item = DeckStripItemScene.Instantiate<DeckStripItem>();
+                _deckStripContainer.AddChild(item);
+                
+                if (i < filteredCards.Count)
+                {
+                    // Filled Slot
+                    var card = filteredCards[i];
+                    
+                    // Find roster entry for this card to pass to SetupFilled
+                    var entry = _currentDeck.Division.Roster.FirstOrDefault(e => e.UnitId == card.UnitId);
+                    
+                    if (entry != null)
+                    {
+                        item.SetupFilled(card, entry);
+                        
+                        // Handle interactions
+                        item.VeterancyChanged += (level) => 
+                        {
+                            card.Veterancy = level;
+                            // Recalculate max/avail
+                            string[] vetKeys = ["rookie", "trained", "veteran", "elite"];
+                            string vetKey = (level >=0 && level < 4) ? vetKeys[level] : "trained";
+                            
+                            // Re-check max count based on new veterancy
+                            if (entry.Availability.ContainsKey(vetKey))
+                                card.MaxCount = entry.Availability[vetKey];
+                            else
+                                card.MaxCount = 0; // Should handle this appropriately
+                            
+                            // Reset available count to max (or handle used count logic if that exists later)
+                            card.AvailableCount = card.MaxCount; 
+                            
+                            UpdateDeckVisuals(); // Visual refresh
+                        };
+                        
+                        item.TransportClicked += () => 
+                        {
+                            if (entry.TransportOptions != null && entry.TransportOptions.Count > 0)
+                            {
+                                ShowTransportPopup(entry.TransportOptions, (tid) => 
+                                {
+                                    card.TransportId = tid;
+                                    
+                                    // Recalculate cost
+                                    if (tid != null && _global.UnitLibrary.ContainsKey(tid))
+                                         card.Cost = card.Data.Cost + _global.UnitLibrary[tid].Cost;
+                                     else 
+                                         card.Cost = card.Data.Cost;
+                                         
+                                    UpdateDeckVisuals();
+                                });
+                            }
+                        };
+                    }
+                    else
+                    {
+                         GD.PrintErr($"Could not find roster entry for unit {card.UnitId} in current division.");
+                    }
+
+                    item.DecorationClicked += () => RemoveCard(card);
+                }
+                else if (i == filteredCards.Count)
+                {
+                    // Next Slot
+                    item.SetupEmpty(costs[i], true);
+                }
+                else
+                {
+                    // Future Slot
+                    item.SetupEmpty(costs[i], false);
+                }
+            }
         }
         
         int points = CalculateActivationPoints();
         _pointsLabel.Text = $"{points}/{_maxActivationPoints}";
+        
+        UpdateCategoryTabLabels();
     }
 
     private int CalculateActivationPoints()

@@ -6,12 +6,12 @@
     "description": "Recon, stealth, and ambiguity operations. Light Infantry. Map control, ambushes, and precision strikes.",
     "playstyle": "Weak in a straight-up fight.",
     "slot_costs": {
-        "logistics": [
+        "LOG": [
             1,
             2,
             3
         ],
-        "infantry": [
+        "INF": [
             1,
             1,
             1,
@@ -20,12 +20,12 @@
             2,
             3
         ],
-        "tanks": [
+        "TNK": [
             2,
             3,
             4
         ],
-        "recon": [
+        "REC": [
             1,
             1,
             1,
@@ -34,22 +34,22 @@
             2,
             2
         ],
-        "anti_air": [
+        "AA": [
             1,
             2,
             3
         ],
-        "artillery": [
+        "ART": [
             1,
             2,
             3
         ],
-        "air": [
+        "AIR": [
             1,
             2,
             3
         ],
-        "vtol": [
+        "HEL": [
             1,
             2,
             3
@@ -59,6 +59,9 @@
         {
             "unit_id": "vanguard_recon",
             "max_cards": 4,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 4,
                 "legend": 0,
@@ -70,6 +73,9 @@
         {
             "unit_id": "vanguard_recon_sniper",
             "max_cards": 4,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 4,
                 "legend": 0,
@@ -81,6 +87,9 @@
         {
             "unit_id": "vanguard_infantry",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,

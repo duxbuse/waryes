@@ -1,0 +1,5 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Saw Blade -->
+  <circle cx="32" cy="32" r="20" fill="white" stroke="black" stroke-width="4"/>
+  <path d="M32 12 V8 M32 52 V56 M12 32 H8 M52 32 H56" stroke="black" stroke-width="4"/>
+</svg>

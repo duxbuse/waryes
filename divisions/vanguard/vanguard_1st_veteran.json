@@ -6,12 +6,12 @@
     "description": "Exo-Armors, Veterans, Iron Walkers. Extremely low unit count.",
     "playstyle": "High durability and firepower. Every loss is painful.",
     "slot_costs": {
-        "logistics": [
+        "LOG": [
             1,
             2,
             3
         ],
-        "infantry": [
+        "INF": [
             1,
             1,
             1,
@@ -20,31 +20,31 @@
             3,
             3
         ],
-        "tanks": [
+        "TNK": [
             1,
             1,
             2,
             2,
             3
         ],
-        "recon": [
+        "REC": [
             2,
-            3,
-            4
-        ],
-        "anti_air": [
-            2,
-            3
-        ],
-        "artillery": [
             3,
             4
         ],
-        "air": [
+        "AA": [
             2,
             3
         ],
-        "vtol": [
+        "ART": [
+            3,
+            4
+        ],
+        "AIR": [
+            2,
+            3
+        ],
+        "HEL": [
             2,
             3
         ]
@@ -75,6 +75,9 @@
         {
             "unit_id": "vanguard_infantry",
             "max_cards": 2,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 12,
                 "legend": 0,
@@ -86,6 +89,9 @@
         {
             "unit_id": "vanguard_recon",
             "max_cards": 1,
+            "transport_options": [
+                "vanguard_apc"
+            ],
             "availability": {
                 "trained": 4,
                 "legend": 0,
