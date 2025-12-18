@@ -16,6 +16,10 @@ namespace WarYes.Units.Components
         private bool _isOvertaking = false;
         private float _overtakeTimer = 0.0f;
         private const float ROAD_LANE_WIDTH = 2.5f;
+        
+        // Path visual update timing
+        private float _pathUpdateTimer = 0.0f;
+        private const float PATH_UPDATE_INTERVAL = 0.1f; // Update path every 0.1 seconds
 
         public bool IsMoving { get; private set; } = false;
         
@@ -73,6 +77,11 @@ namespace WarYes.Units.Components
             {
                 IsMoving = false;
                 _unit.Velocity = Vector3.Zero;
+                // Clear path visuals when navigation finishes
+                if (_unit.Visuals != null)
+                {
+                    _unit.Visuals.UpdatePathVisuals(null, _unit.CurrentMoveMode);
+                }
                 return;
             }
             
@@ -94,8 +103,13 @@ namespace WarYes.Units.Components
             float blinkerSpeed = 5.0f * (float)delta; 
             _laneOffset = Mathf.Lerp(_laneOffset, _targetLaneOffset, blinkerSpeed);
             
-            // Update path visuals periodically
-            UpdatePathVisuals();
+            // Update path visuals periodically to reduce overhead and prevent persistence
+            _pathUpdateTimer += (float)delta;
+            if (_pathUpdateTimer >= PATH_UPDATE_INTERVAL)
+            {
+                _pathUpdateTimer = 0.0f;
+                UpdatePathVisuals();
+            }
         }
         
         private void UpdatePathVisuals()

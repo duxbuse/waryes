@@ -198,6 +198,9 @@ public partial class SelectionManager : Node2D
              
              if (unit.Data.Id != targetId) continue;
              
+             // Skip garrisoned or transported units
+             if (unit.IsGarrisoned || unit.TransportUnit != null) continue;
+             
              // Check visibility
              if (camera.IsPositionBehind(unit.GlobalPosition)) continue;
              Vector2 uScreenPos = camera.UnprojectPosition(unit.GlobalPosition);
@@ -227,7 +230,13 @@ public partial class SelectionManager : Node2D
         if (result.Count > 0)
         {
             var collider = result["collider"].As<Node>();
-            return GetUnitFromCollider(collider);
+            var unit = GetUnitFromCollider(collider);
+            
+            // Filter out garrisoned or transported units (they're invisible)
+            if (unit != null && !unit.IsGarrisoned && unit.TransportUnit == null)
+            {
+                return unit;
+            }
         }
         return null;
     }
@@ -244,6 +253,9 @@ public partial class SelectionManager : Node2D
         foreach (var unit in UnitManager.Instance.GetActiveUnits())
         {
             if (!IsInstanceValid(unit) || unit.IsQueuedForDeletion()) continue;
+            
+            // Skip garrisoned or transported units (invisible)
+            if (unit.IsGarrisoned || unit.TransportUnit != null) continue;
             
             Vector2 screenPos = camera.UnprojectPosition(unit.GlobalPosition);
             

@@ -156,15 +156,31 @@ public partial class GarrisonableBuilding : StaticBody3D
         _visualMesh.MaterialOverride = _garrisonedMaterial;
     }
     
-    public Vector3 GetExitPosition(Vector3 targetDestination)
+    public Vector3 GetExitPosition(Vector3 currentPos)
     {
-        // Find closest point on bounding box?
-        // Or simply closest side.
-        // Simplified: Project direction from center to target, exit at edge.
-        // Assuming box shape ~2m radius?
-        // Let's define generic "radius" or use collision shape.
+        // Get the building's bounding box from collision shape
+        // Find which side of the building is closest and exit from there
         
-        Vector3 dir = (targetDestination - GlobalPosition).Normalized();
-        return GlobalPosition + dir * 3.0f; // 3m out
+        Vector3 buildingPos = GlobalPosition;
+        Vector3 offset = currentPos - buildingPos;
+        
+        // Determine which axis has larger offset to find closest side
+        float absX = Mathf.Abs(offset.X);
+        float absZ = Mathf.Abs(offset.Z);
+        
+        Vector3 exitDir;
+        if (absX > absZ)
+        {
+            // Exit from East or West side
+            exitDir = new Vector3(Mathf.Sign(offset.X), 0, 0);
+        }
+        else
+        {
+            // Exit from North or South side
+            exitDir = new Vector3(0, 0, Mathf.Sign(offset.Z));
+        }
+        
+        // Exit 5m from building center in that direction
+        return buildingPos + exitDir * 8.0f;
     }
 }

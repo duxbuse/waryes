@@ -33,8 +33,12 @@ public partial class RTSCamera : Camera3D
     [Export]
     public float DragSensitivity = 1.0f;
 
+    [Export]
+    public float TacticalViewDistanceThreshold = 60.0f;
+
     private float _targetHeight;
     private bool _isDragging = false;
+    private bool _inTacticalView = false;
 
     public override void _Ready()
     {
@@ -50,6 +54,9 @@ public partial class RTSCamera : Camera3D
         Vector3 pos = Position;
         pos.Y = Mathf.Lerp(pos.Y, _targetHeight, 5.0f * (float)delta);
         Position = pos;
+
+        // Update tactical view based on camera height
+        UpdateTacticalView();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -156,6 +163,31 @@ public partial class RTSCamera : Camera3D
             globalMove = globalMove.Normalized();
 
             Position += globalMove * PanSpeed * zoomFactor * delta;
+        }
+    }
+
+    private void UpdateTacticalView()
+    {
+        // Check if we should be in tactical view based on camera height
+        bool shouldBeInTacticalView = Position.Y >= TacticalViewDistanceThreshold;
+
+        // Only update if state has changed
+        if (shouldBeInTacticalView != _inTacticalView)
+        {
+            _inTacticalView = shouldBeInTacticalView;
+
+            // Toggle tactical view for all units
+            if (UnitManager.Instance != null)
+            {
+                var units = UnitManager.Instance.GetActiveUnits();
+                foreach (var unit in units)
+                {
+                    if (unit != null && unit.Visuals != null)
+                    {
+                        unit.Visuals.SetTacticalView(_inTacticalView);
+                    }
+                }
+            }
         }
     }
 }

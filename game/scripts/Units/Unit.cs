@@ -140,14 +140,22 @@ public partial class Unit : CharacterBody3D
     {
         if (CurrentBuilding == null) return;
         
+        var building = CurrentBuilding;  // Store reference before clearing
+        CurrentBuilding = null;  // Clear before exiting to prevent recursion
         IsGarrisoned = false;
-        Visuals?.SetVisualsVisible(true);
         
-        // Find exit position
-        Vector3 exitPos = CurrentBuilding.GetExitPosition(GlobalPosition + Vector3.Forward * 5f);
+        // Find exit position on closest side of building
+        Vector3 exitPos = building.GetExitPosition(GlobalPosition);
         GlobalPosition = exitPos;
         
-        CurrentBuilding = null;
+        // Restore visibility and physics state (same as transport dismount)
+        Visuals?.SetVisualsVisible(true);
+        SetProcess(true);
+        SetPhysicsProcess(true);
+        CollisionLayer = 1;
+        CollisionMask = 1;
+        
+        GD.Print($"{Name} exited building at {exitPos}, visible={Visuals != null}");
     }
     
     public void Garrison(GarrisonableBuilding building)

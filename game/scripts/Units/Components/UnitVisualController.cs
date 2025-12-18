@@ -397,8 +397,6 @@ namespace WarYes.Units.Components
                  return;
              }
              
-             GD.Print($"Updating path visuals for {_unit?.Name}: {pathPoints.Length} points");
-             
              // Determine color based on move mode
              Color pathColor;
              switch (mode)
@@ -426,12 +424,23 @@ namespace WarYes.Units.Components
                  _pathShaderMat.SetShaderParameter("color", pathColor);
              }
              
-             // Draw path as line strip, elevated to avoid Z-fighting
+             // Draw path as line strip starting from unit's current position
+             // This ensures no trailing lines behind the unit
              _pathMesh.SurfaceBegin(Mesh.PrimitiveType.LineStrip);
+             
+             // Always start from the unit's current position
+             Vector3 currentPosition = _unit.GlobalPosition;
+             _pathMesh.SurfaceAddVertex(currentPosition + Vector3.Up * 0.5f);
+             
+             // Add remaining path points, skipping any that are behind the current position
              foreach (var point in pathPoints)
              {
-                 // Elevate by 0.5m above ground to prevent Z-fighting with terrain
-                 _pathMesh.SurfaceAddVertex(point + Vector3.Up * 0.5f);
+                 // Only add points that are ahead in the path (not behind the unit)
+                 Vector3 toPoint = point - currentPosition;
+                 if (toPoint.LengthSquared() > 0.1f) // Skip points too close to current position
+                 {
+                     _pathMesh.SurfaceAddVertex(point + Vector3.Up * 0.5f);
+                 }
              }
              _pathMesh.SurfaceEnd();
              

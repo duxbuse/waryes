@@ -25,6 +25,10 @@ public partial class MapBuilder : Node3D
 	
 	// Parent root for organization
 	private Node3D _mapRoot;
+	
+	// Highway configuration
+	private int _highwayAxis; // 0 = East-West, 1 = North-South
+	private float _highwayWidth = 20.0f;
 
 	// Textures
 	private Texture2D _texHighway;
@@ -89,39 +93,42 @@ public partial class MapBuilder : Node3D
 		float mapSize = 400.0f;
 		float halfSize = mapSize / 2.0f;
 
-		// Base Ground -> Fields (Grass)
-		CreateStrip("GroundBase", Vector3.Zero, new Vector3(mapSize, 0.1f, mapSize), _texGrass, _regionField, new Vector2(50, 50));
+		// Base Ground -> Fields (Grass) - Using plane for better UV control
+		CreatePlane("GroundBase", Vector3.Zero, new Vector2(mapSize, mapSize), _texGrass, _regionField, new Vector2(50, 50));
 
 		// Highway Logic
-		int highwayAxis = GD.Randf() > 0.5f ? 0 : 1;
+		_highwayAxis = GD.Randf() > 0.5f ? 0 : 1;
 		Vector3 highwayStart = Vector3.Zero;
 		Vector3 highwayEnd = Vector3.Zero;
-		Vector3 highwaySize = Vector3.Zero;
+		Vector2 highwayPlaneSize = Vector2.Zero;
+		float highwayRotation = 0.0f;
 
-		if (highwayAxis == 0) // East-West
+		if (_highwayAxis == 0) // East-West
 		{
 			highwayStart = new Vector3(-halfSize, 0, 0);
 			highwayEnd = new Vector3(halfSize, 0, 0);
-			highwaySize = new Vector3(mapSize, 0.2f, 20); 
+			highwayPlaneSize = new Vector2(mapSize, _highwayWidth);
+			highwayRotation = 0.0f; // No rotation needed
 		}
 		else // North-South
 		{
 			highwayStart = new Vector3(0, 0, -halfSize);
 			highwayEnd = new Vector3(0, 0, halfSize);
-			highwaySize = new Vector3(20, 0.2f, mapSize);
+			highwayPlaneSize = new Vector2(mapSize, _highwayWidth);
+			highwayRotation = 90.0f; // Rotate 90 degrees to align texture
 		}
 
-		// Create Highway Geometry
-		Vector2 highwayUV = highwayAxis == 0 ? new Vector2(40, 2) : new Vector2(2, 40);
-		CreateStrip("Highway", Vector3.Up * 0.05f, highwaySize, _texHighway, _regionHighway, highwayUV); 
+		// Create Highway Geometry with proper rotation
+		Vector2 highwayUV = new Vector2(40, 2); // UV is now consistent, rotation handles orientation
+		CreatePlane("Highway", Vector3.Up * 0.05f, highwayPlaneSize, _texHighway, _regionHighway, highwayUV, highwayRotation); 
 		
-		CreateRoadLines(Vector3.Up * 0.16f, highwayAxis == 0 ? mapSize : mapSize, 20, _regionHighway, highwayAxis == 1); 
+		CreateRoadLines(Vector3.Up * 0.16f, _highwayAxis == 0 ? mapSize : mapSize, _highwayWidth, _regionHighway, _highwayAxis == 1); 
 
 		// Spawn Points
-		GenerateSpawnPoints(highwayAxis, halfSize, _regionField);
+		GenerateSpawnPoints(_highwayAxis, halfSize, _regionField);
 
 		// Town Generation
-		CreateTown(highwayAxis, halfSize);
+		CreateTown(_highwayAxis, halfSize);
 
 		// Farming Landscape (Fields & Hedgerows & Dirt Roads)
 		CreateFarmingLandscape(halfSize);
@@ -293,6 +300,56 @@ public partial class MapBuilder : Node3D
 		staticBody.AddChild(collisionShape);
 		meshInstance.AddChild(staticBody);
 
+		parent.AddChild(meshInstance);
+	}
+
+	// NEW: PlaneMesh-based terrain for proper UV orientation control
+	private void CreatePlane(string name, Vector3 pos, Vector2 size, Texture2D texture, Node parent, Vector2? uvScale = null, float rotationDegrees = 0.0f, Color? tintColor = null)
+	{
+		var meshInstance = new MeshInstance3D();
+		meshInstance.Name = name;
+		var mesh = new PlaneMesh();
+		mesh.Size = size;
+		
+		var mat = new StandardMaterial3D();
+		if (texture != null)
+		{
+			mat.AlbedoTexture = texture;
+			if (uvScale.HasValue)
+			{
+				mat.Uv1Scale = new Vector3(uvScale.Value.X, uvScale.Value.Y, 1);
+			}
+			
+			// Apply color tint if provided (for crop variation)
+			if (tintColor.HasValue)
+			{
+				mat.AlbedoColor = tintColor.Value;
+			}
+		}
+		else
+		{
+			mat.AlbedoColor = tintColor ?? new Color(0.5f, 0.5f, 0.5f);
+		}
+		
+		meshInstance.Mesh = mesh;
+		meshInstance.Position = pos;
+		meshInstance.MaterialOverride = mat;
+		
+		// Apply rotation around Y-axis for proper texture orientation
+		if (rotationDegrees != 0.0f)
+		{
+			meshInstance.RotateY(Mathf.DegToRad(rotationDegrees));
+		}
+
+		// Collision (flat box shape)
+		var staticBody = new StaticBody3D();
+		var collisionShape = new CollisionShape3D();
+		var shape = new BoxShape3D();
+		shape.Size = new Vector3(size.X, 0.1f, size.Y); // Thin vertical collision
+		collisionShape.Shape = shape;
+		staticBody.AddChild(collisionShape);
+		meshInstance.AddChild(staticBody);
+		
 		parent.AddChild(meshInstance);
 	}
 
@@ -544,6 +601,42 @@ public partial class MapBuilder : Node3D
 	}
 
 	private enum MapTileType { None, Field, Forest, Town, Lake, Road, Farm } 
+	
+	// Helper method to calculate forest cluster size using flood fill
+	private int CalculateForestClusterSize(MapTileType[,] grid, bool[,] processed, int startX, int startZ)
+	{
+		int gridSize = grid.GetLength(0);
+		int count = 0;
+		
+		List<Vector2I> toProcess = new List<Vector2I>();
+		toProcess.Add(new Vector2I(startX, startZ));
+		
+		while (toProcess.Count > 0)
+		{
+			Vector2I tile = toProcess[0];
+			toProcess.RemoveAt(0);
+			
+			// Skip if out of bounds or already processed
+			if (tile.X < 0 || tile.X >= gridSize || tile.Y < 0 || tile.Y >= gridSize)
+				continue;
+			if (processed[tile.X, tile.Y])
+				continue;
+			if (grid[tile.X, tile.Y] != MapTileType.Forest)
+				continue;
+			
+			// Mark as processed and count it
+			processed[tile.X, tile.Y] = true;
+			count++;
+			
+			// Add neighbors
+			toProcess.Add(new Vector2I(tile.X + 1, tile.Y));
+			toProcess.Add(new Vector2I(tile.X - 1, tile.Y));
+			toProcess.Add(new Vector2I(tile.X, tile.Y + 1));
+			toProcess.Add(new Vector2I(tile.X, tile.Y - 1));
+		}
+		
+		return count;
+	}
 
 	private void CreateFarmingLandscape(float halfSize)
 	{
@@ -582,6 +675,25 @@ public partial class MapBuilder : Node3D
 					continue;
 				}
 
+				// Check if tile is on highway
+				bool onHighway = false;
+				if (_highwayAxis == 0) // Highway runs East-West (along X-axis) at Z=0
+				{
+					// Check if tile center's Z coordinate is within highway width
+					onHighway = Mathf.Abs(center.Z) < (_highwayWidth / 2.0f + fieldSize / 2.0f);
+				}
+				else // Highway runs North-South (along Z-axis) at X=0
+				{
+					// Check if tile center's X coordinate is within highway width
+					onHighway = Mathf.Abs(center.X) < (_highwayWidth / 2.0f + fieldSize / 2.0f);
+				}
+
+				if (onHighway)
+				{
+					grid[x, z] = MapTileType.Road;
+					continue;
+				}
+
 				grid[x, z] = MapTileType.Field;
 			}
 		}
@@ -612,7 +724,21 @@ public partial class MapBuilder : Node3D
 		var matHedge = new StandardMaterial3D();
 		matHedge.AlbedoColor = new Color(0.1f, 0.4f, 0.1f);
 		
+		// Crop color palette for field variation (simulating different crops)
+		Color[] cropColors = new Color[]
+		{
+			new Color(0.4f, 0.7f, 0.3f),   // Green pasture
+			new Color(0.65f, 0.6f, 0.35f),  // Wheat/tan
+			new Color(0.45f, 0.35f, 0.25f), // Plowed earth/brown
+			new Color(0.35f, 0.6f, 0.3f),   // Darker green (barley)
+			new Color(0.55f, 0.7f, 0.4f),   // Light green
+			new Color(0.7f, 0.65f, 0.4f)    // Golden/hay
+		};
+		
 		Node parent = _regionField;
+
+		// Track which forest tiles have been processed to calculate forest cluster sizes
+		bool[,] processedForest = new bool[gridSize, gridSize];
 
 		for (int x = 0; x < gridSize; x++)
 		{
@@ -625,12 +751,26 @@ public partial class MapBuilder : Node3D
 				switch (grid[x, z])
 				{
 					case MapTileType.Forest:
-						 CreateStrip($"ForestFloor_{x}_{z}", center + Vector3.Up * 0.05f, new Vector3(fieldSize, 0.1f, fieldSize), _texForest, parent, new Vector2(4, 4));
-						 CreateForestTile(center, fieldSize, parent);
+						// Calculate forest cluster size to determine density
+						string density = "medium";
+						if (!processedForest[x, z])
+						{
+							int clusterSize = CalculateForestClusterSize(grid, processedForest, x, z);
+							
+							// Determine density based on cluster size
+							if (clusterSize <= 3)
+								density = "low"; // Small forests: 30-100 trees per tile
+							else if (clusterSize >= 8)
+								density = "high"; // Large forests: 400-1000 trees per tile
+							// else medium: 100-400 trees per tile
+						}
+						
+						CreatePlane($"ForestFloor_{x}_{z}", center + Vector3.Up * 0.05f, new Vector2(fieldSize, fieldSize), _texForest, parent, new Vector2(4, 4));
+						CreateForestTile(center, fieldSize, parent, density);
 						break;
 						
 					case MapTileType.Road:
-						 CreateStrip($"C_Hwy_{x}_{z}", center + Vector3.Up * 0.05f, new Vector3(fieldSize, 0.1f, fieldSize), _texTownRoad, parent, new Vector2(4, 4));
+						 CreatePlane($"C_Hwy_{x}_{z}", center + Vector3.Up * 0.05f, new Vector2(fieldSize, fieldSize), _texTownRoad, parent, new Vector2(4, 4));
 						break;
 						
 					case MapTileType.Farm:
@@ -638,6 +778,10 @@ public partial class MapBuilder : Node3D
 						break;
 						
 					case MapTileType.Field:
+						// Apply random crop color for variation
+						Color cropColor = cropColors[GD.RandRange(0, cropColors.Length - 1)];
+						CreatePlane($"Field_{x}_{z}", center + Vector3.Up * 0.02f, new Vector2(fieldSize, fieldSize), _texGrass, parent, new Vector2(4, 4), 0.0f, cropColor);
+						
 						if (GD.Randf() < hedgeProbability)
 						{
 							 Vector3 edgePos = center + new Vector3(fieldSize/2, 0, 0);
@@ -739,18 +883,39 @@ public partial class MapBuilder : Node3D
 		}
 	}
 
-	private void CreateForestTile(Vector3 center, float size, Node parent)
+	private void CreateForestTile(Vector3 center, float size, Node parent, string density = "medium")
 	{
-		int treeCount = GD.RandRange(10, 20); 
+		// Calculate tree count based on density and tile size
+		int treeCount;
+		float spacing;
+		
+		switch (density.ToLower())
+		{
+			case "low":
+				treeCount = GD.RandRange(30, 100);
+				spacing = 3.0f; // More spread out
+				break;
+			case "high":
+				treeCount = GD.RandRange(400, 1000);
+				spacing = 1.0f; // Very dense
+				break;
+			case "medium":
+			default:
+				treeCount = GD.RandRange(100, 400);
+				spacing = 1.5f; // Moderate density
+				break;
+		}
+		
 		var mat = new StandardMaterial3D();
 		mat.AlbedoColor = new Color(0, 0.5f, 0); 
 
 		for (int i = 0; i < treeCount; i++)
 		{
-			 float rX = (float)GD.RandRange(-size/2 + 2, size/2 - 2);
-			 float rZ = (float)GD.RandRange(-size/2 + 2, size/2 - 2);
-			 Vector3 pos = center + new Vector3(rX, 0, rZ);
-			 CreateTree(pos, mat, parent);
+			// Use tighter spacing for denser forests
+			float rX = (float)GD.RandRange(-size/2 + spacing, size/2 - spacing);
+			float rZ = (float)GD.RandRange(-size/2 + spacing, size/2 - spacing);
+			Vector3 pos = center + new Vector3(rX, 0, rZ);
+			CreateTree(pos, mat, parent);
 		}
 	}
 
@@ -758,16 +923,17 @@ public partial class MapBuilder : Node3D
 	{
 		float length = direction.Length();
 		Vector3 dirNorm = direction.Normalized();
-		int treeCount = (int)(length / 4.0f); 
+		int treeCount = (int)(length / 6.0f); // Increased from 4.0f for wider spacing
 		
 		for(int i=0; i<treeCount; i++)
 		{
-			if (GD.Randf() > 0.8f) continue; 
+			if (GD.Randf() > 0.65f) continue; // Reduced from 0.8f for more gaps
 			
-			float d = (i * 4.0f) - (length/2.0f);
+			float d = (i * 6.0f) - (length/2.0f); // Match spacing increase
 			Vector3 pos = center + dirNorm * d;
 			
-			pos += new Vector3(GD.Randf()*2-1, 0, GD.Randf()*2-1);
+			// Increased random offset for more irregular appearance
+			pos += new Vector3(GD.Randf()*6-3, 0, GD.Randf()*6-3);
 			
 			CreateTree(pos, mat, parent);
 		}
