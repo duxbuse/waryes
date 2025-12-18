@@ -38,6 +38,12 @@ public static class DataLoader
                 {
                     data.Id = Path.GetFileNameWithoutExtension(file);
                 }
+                
+                // Ensure Tags is initialized
+                if (data.Tags == null) data.Tags = new HashSet<string>();
+                
+                // BACKWARDS COMPATIBILITY: Infer Tags from ID if not present
+                PopulateTagsFromId(ref data);
 
                 if (!units.ContainsKey(data.Id))
                 {
@@ -57,6 +63,31 @@ public static class DataLoader
         
         GD.Print($"DataLoader: Loaded {units.Count} units.");
         return units;
+    }
+    
+    private static void PopulateTagsFromId(ref UnitData data)
+    {
+        string id = data.Id.ToLower();
+        var tags = data.Tags;
+
+        // Broad Category Tags
+        if (id.Contains("infantry") || id.Contains("soldier") || id.Contains("trooper") || id.Contains("squad") || id.Contains("rifle") || id.Contains("engineer") || id.Contains("grenadier")) tags.Add("infantry");
+        if (id.Contains("tank") || id.Contains("mbt")) tags.Add("tank");
+        if (id.Contains("walker")) tags.Add("walker");
+        if (id.Contains("vehicle") || data.Fuel.HasValue) tags.Add("vehicle");
+        if (id.Contains("air") || id.Contains("gunship") || id.Contains("vtol") || id.Contains("heli") || id.Contains("jet")) tags.Add("air");
+        
+        // Specific Type Tags
+        if (id.Contains("recon") || id.Contains("scout")) tags.Add("recon");
+        if (id.Contains("artillery") || id.Contains("mortar") || id.Contains("howitzer") || id.Contains("mlrs")) tags.Add("artillery");
+        if (id.Contains("aa") || id.Contains("anti-air") || id.Contains("flak") || id.Contains("sam")) tags.Add("anti_air");
+        if (id.Contains("at") || id.Contains("anti-tank")) tags.Add("anti_tank");
+        if (id.Contains("transport") || id.Contains("apc") || id.Contains("ifv") || id.Contains("truck")) tags.Add("transport");
+        if (id.Contains("supply") || id.Contains("log")) tags.Add("supply");
+        
+        // Capabilities
+        if (data.ForwardDeploy > 0) tags.Add("forward_deploy");
+        if (data.IsCommander) tags.Add("commander");
     }
 
     public static Dictionary<string, DivisionData> LoadDivisions()

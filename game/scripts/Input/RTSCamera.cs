@@ -16,16 +16,19 @@ public partial class RTSCamera : Camera3D
     public float MinHeight = 5.0f;
 
     [Export]
-    public float MaxHeight = 50.0f;
+    public float MaxHeight = 150.0f;
 
     [Export]
     public float MinZoom = 5.0f;
     
     [Export] 
-    public float MaxZoom = 40.0f;
+    public float MaxZoom = 150.0f;
 
     [Export]
     public float EdgePanMargin = 20.0f;
+
+    [Export]
+    public float ReferenceHeight = 40.0f;
 
     [Export]
     public float DragSensitivity = 1.0f;
@@ -99,19 +102,19 @@ public partial class RTSCamera : Camera3D
         // Check window focus to prevent panning when tabbed out (though _Process usually pauses, good practice)
         if (DisplayServer.WindowIsFocused())
         {
-            if (mousePos.X < EdgePanMargin)
+            if (mousePos.X >= 0 && mousePos.X < EdgePanMargin)
             {
                 direction += Vector3.Left;
             }
-            if (mousePos.X > size.X - EdgePanMargin)
+            if (mousePos.X <= size.X && mousePos.X > size.X - EdgePanMargin)
             {
                 direction += Vector3.Right;
             }
-            if (mousePos.Y < EdgePanMargin)
+            if (mousePos.Y >= 0 && mousePos.Y < EdgePanMargin)
             {
                 direction += Vector3.Forward; // Up on screen is Forward in 3D usually (Z-) assuming looking down
             }
-            if (mousePos.Y > size.Y - EdgePanMargin)
+            if (mousePos.Y <= size.Y && mousePos.Y > size.Y - EdgePanMargin)
             {
                 direction += Vector3.Back; // Down on screen is Back in 3D (Z+)
             }
@@ -142,12 +145,17 @@ public partial class RTSCamera : Camera3D
         {
             direction = direction.Normalized();
             
+            // Zoom-dependent speed scaling
+            // Calculate ratio based on current height vs reference height
+            // If we are at 80m height (2x ref), we move 2x faster
+            float zoomFactor = Position.Y / ReferenceHeight;
+            
             // Move relative to global coordinates but flattened on XZ plane
             Vector3 globalMove = (GlobalTransform.Basis.Z * direction.Z + GlobalTransform.Basis.X * direction.X);
             globalMove.Y = 0;
             globalMove = globalMove.Normalized();
 
-            Position += globalMove * PanSpeed * delta;
+            Position += globalMove * PanSpeed * zoomFactor * delta;
         }
     }
 }

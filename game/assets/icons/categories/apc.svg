@@ -1,8 +1,0 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <!-- APC Body (Boxy) -->
-  <path d="M8 20 L56 20 L52 44 L12 44 Z" fill="white" stroke="black" stroke-width="4"/>
-  <!-- Tracks / Wheels indication -->
-  <rect x="10" y="44" width="44" height="6" rx="2" fill="white" stroke="black" stroke-width="3"/>
-  <!-- Hatch / small turret -->
-  <rect x="24" y="14" width="16" height="6" rx="1" fill="white" stroke="black" stroke-width="3"/>
-</svg>

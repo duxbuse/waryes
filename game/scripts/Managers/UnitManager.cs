@@ -75,4 +75,27 @@ public partial class UnitManager : Node
         }
         return _activeUnits;
     }
+
+    public Vector3? GetNearestReinforcePoint(Vector3 targetPos, string team)
+    {
+        var points = GetTree().GetNodesInGroup("ReinforcePoints");
+        
+        Node3D bestPoint = null;
+        float minDstSq = float.MaxValue;
+        
+        foreach (Node node in points)
+        {
+            if (node is ReinforcePoint rp && rp.Team == team)
+            {
+                float d = rp.GlobalPosition.DistanceSquaredTo(targetPos);
+                if (d < minDstSq)
+                {
+                    minDstSq = d;
+                    bestPoint = rp;
+                }
+            }
+        }
+        
+        return bestPoint?.GlobalPosition;
+    }
 }

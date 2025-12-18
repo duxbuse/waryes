@@ -6,6 +6,7 @@
     },
     "penetration": 0,
     "damage": "0.2 HE",
+    "suppression": 15,
     "rate_of_fire": 600,
     "accuracy": {
         "static": 40,

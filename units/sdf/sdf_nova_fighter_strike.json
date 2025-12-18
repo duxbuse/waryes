@@ -1,38 +1,38 @@
 {
-    "id":  "sdf_nova_fighter_strike",
-    "name":  "Nova Fighter Strike",
-    "cost":  140,
-    "icon":  "assets/icons/units/sdf/sdf_nova_fighter_strike.png",
-    "health":  5,
-    "speed":  {
-                  "road":  750,
-                  "off_road":  750
-              },
-    "armor":  {
-                  "front":  20,
-                  "side":  20,
-                  "rear":  20,
-                  "top":  20
-              },
-    "fuel":  2000,
-    "autonomy":  {
-                     "road":  2000,
-                     "off_road":  2000
-                 },
-    "optics":  "Good",
-    "stealth":  "Poor",
-    "forward_deploy":  0,
-    "weapons":  [
-                    {
-                        "weapon_id":  "sdf_auto_cannon_30mm_air",
-                        "count":  2,
-                        "max_ammo":  10
-                    },
-                    {
-                        "weapon_id":  "pdf_hellstrike_missile",
-                        "count":  4,
-                        "max_ammo":  10
-                    }
-                ],
-    "category":  "AIR"
+    "id": "sdf_nova_fighter_strike",
+    "name": "Nova Fighter Strike",
+    "cost": 140,
+    "icon": "assets/icons/units/sdf/sdf_nova_fighter_strike.png",
+    "health": 5,
+    "speed": {
+        "road": 750,
+        "off_road": 750
+    },
+    "armor": {
+        "front": 20,
+        "side": 20,
+        "rear": 20,
+        "top": 20
+    },
+    "fuel": 2000,
+    "autonomy": {
+        "road": 2000,
+        "off_road": 2000
+    },
+    "optics": "Good",
+    "stealth": "Poor",
+    "forward_deploy": 0,
+    "weapons": [
+        {
+            "weapon_id": "sdf_auto_cannon_30mm_air",
+            "count": 2,
+            "max_ammo": 10
+        },
+        {
+            "weapon_id": "sdf_hellstrike_missile",
+            "count": 4,
+            "max_ammo": 10
+        }
+    ],
+    "category": "AIR"
 }

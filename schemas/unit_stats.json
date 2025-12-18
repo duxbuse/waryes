@@ -35,6 +35,10 @@
         "off_road": {
           "type": "integer",
           "minimum": 0
+        },
+        "rotation_speed": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "required": [
@@ -72,12 +76,18 @@
       "description": "Armor thickness in mm RHAe."
     },
     "fuel": {
-      "type": "integer",
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0,
       "description": "Fuel capacity in Liters. Optional for infantry."
     },
     "autonomy": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "road": {
           "type": "integer",
@@ -117,6 +127,15 @@
       "minimum": 0,
       "default": 0,
       "description": "Max deployment distance outside zone in meters."
+    },
+    "category": {
+      "type": "string",
+      "description": "Unit category (TNK, INF, HEL, etc)."
+    },
+    "is_commander": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this unit functions as a commander."
     },
     "weapons": {
       "type": "array",

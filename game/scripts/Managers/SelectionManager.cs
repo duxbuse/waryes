@@ -108,6 +108,15 @@ public partial class SelectionManager : Node2D
             
             if (mb.Pressed)
             {
+                if (mb.DoubleClick)
+                {
+                    GD.Print("SelectionManager: Double click selection");
+                    SelectSameTypeVisible(mb.Position);
+                    _isDragging = false; 
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
                 _isDragging = true;
                 _dragStart = mb.Position;
                 _dragEnd = mb.Position;
@@ -159,10 +168,54 @@ public partial class SelectionManager : Node2D
         bool shift = Input.IsKeyPressed(Key.Shift);
         if (!shift) ClearSelection();
         
-        // ... Raycast logic ...
+        Unit unit = GetUnitAt(screenPos);
+        
+        if (unit != null)
+        {
+            AddUnit(unit);
+        }
+
+        OnSelectionChanged?.Invoke();
+    }
+    
+    private void SelectSameTypeVisible(Vector2 screenPos)
+    {
+        Unit targetUnit = GetUnitAt(screenPos);
+        if (targetUnit == null) return;
+        
+        bool shift = Input.IsKeyPressed(Key.Shift);
+        if (!shift) ClearSelection();
         
         var camera = GetViewport().GetCamera3D();
         if (camera == null) return;
+        var viewportRect = GetViewport().GetVisibleRect();
+        
+        string targetId = targetUnit.Data.Id;
+        
+        foreach (var unit in UnitManager.Instance.GetActiveUnits())
+        {
+             if (!IsInstanceValid(unit) || unit.IsQueuedForDeletion()) continue;
+             
+             if (unit.Data.Id != targetId) continue;
+             
+             // Check visibility
+             if (camera.IsPositionBehind(unit.GlobalPosition)) continue;
+             Vector2 uScreenPos = camera.UnprojectPosition(unit.GlobalPosition);
+             
+             // Check if within viewport
+             if (viewportRect.HasPoint(uScreenPos))
+             {
+                 AddUnit(unit);
+             }
+        }
+        
+        OnSelectionChanged?.Invoke();
+    }
+
+    private Unit GetUnitAt(Vector2 screenPos)
+    {
+        var camera = GetViewport().GetCamera3D();
+        if (camera == null) return null;
 
         var from = camera.ProjectRayOrigin(screenPos);
         var to = from + camera.ProjectRayNormal(screenPos) * 1000.0f;
@@ -170,23 +223,13 @@ public partial class SelectionManager : Node2D
         var spaceState = GetViewport().World3D.DirectSpaceState;
         var query = PhysicsRayQueryParameters3D.Create(from, to, 0xFFFFFFFF); // All masks
         
-        // Raycast
         var result = spaceState.IntersectRay(query);
         if (result.Count > 0)
         {
             var collider = result["collider"].As<Node>();
-            
-            // Travel up to find Unit class (in case we hit a child shape)
-            Unit unit = GetUnitFromCollider(collider);
-            
-            if (unit != null)
-            {
-                AddUnit(unit);
-            }
+            return GetUnitFromCollider(collider);
         }
-        // If we didn't hit anything and not shift, clear? SelectAt called ClearSelection above.
-        
-        OnSelectionChanged?.Invoke();
+        return null;
     }
     
     private void SelectInRect(Vector2 start, Vector2 end)

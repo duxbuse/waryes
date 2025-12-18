@@ -14,6 +14,7 @@ namespace WarYes.UI
         private Sprite3D[] _vetChevrons;
         private Sprite3D _commanderAuraIcon;
         private Sprite3D _moraleOverlay; 
+        private Sprite3D _transportIcon; // New Icon
         private Sprite3D _hpBar; // Segmented
         private ShaderMaterial _hpMaterial;
         
@@ -127,7 +128,21 @@ namespace WarYes.UI
             _commanderAuraIcon.Position = new Vector3(0.9f, 2.5f, 0); // Side of HP bar
             _commanderAuraIcon.Visible = false;
             _commanderAuraIcon.NoDepthTest = true;
+            _commanderAuraIcon.NoDepthTest = true;
             AddChild(_commanderAuraIcon);
+            
+            // Transport Icon
+            _transportIcon = new Sprite3D();
+            _transportIcon.Name = "TransportIcon";
+            _transportIcon.Texture = chevTex; // Reuse or use specific icon (e.g. circle?)
+            _transportIcon.Modulate = Colors.Blue; // Blue for Loaded
+            _transportIcon.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+            _transportIcon.PixelSize = 0.01f;
+            _transportIcon.Scale = new Vector3(8, 8, 1);
+            _transportIcon.Position = new Vector3(-0.9f, 2.5f, 0); // Left Side of HP bar
+            _transportIcon.Visible = false;
+            _transportIcon.NoDepthTest = true;
+            AddChild(_transportIcon);
             
             // Initial State Update
             SetSelected(false);
@@ -204,6 +219,11 @@ namespace WarYes.UI
         public void SetBuffStatus(bool buffed)
         {
             if (_commanderAuraIcon != null) _commanderAuraIcon.Visible = buffed;
+        }
+
+        public void SetTransportIcon(bool loaded)
+        {
+            if (_transportIcon != null) _transportIcon.Visible = loaded;
         }
 
         public void SetSelected(bool selected)

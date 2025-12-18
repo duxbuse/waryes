@@ -17,26 +17,48 @@ public partial class CombatManager : Node
 
         GD.Print("CombatManager: Spawning Enemies...");
         
+        // Check if we're in setup phase to freeze units
+        bool isSetupPhase = GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Setup;
+        
         // Placed close (10,0,10) to be visible immediately for testing FOW/Spawning
         var e1 = UnitManager.Instance.SpawnUnit("enemy_sdf_bastion_mbt", new Vector3(20, 0, 10)); // Closer
-        if (e1 != null) { e1.Team = "Enemy"; } // Force Team just in case
+        if (e1 != null) 
+        { 
+            e1.Team = "Enemy"; // Force Team just in case
+            if (isSetupPhase) e1.SetFrozen(true);
+        }
         
         var e2 = UnitManager.Instance.SpawnUnit("enemy_sdf_trooper", new Vector3(35, 0, 32));
-        if (e2 != null) { e2.Team = "Enemy"; }
+        if (e2 != null) 
+        { 
+            e2.Team = "Enemy";
+            if (isSetupPhase) e2.SetFrozen(true);
+        }
         
-        UnitManager.Instance.SpawnUnit("enemy_sdf_trooper", new Vector3(25, 0, 35));
+        var e3 = UnitManager.Instance.SpawnUnit("enemy_sdf_trooper", new Vector3(25, 0, 35));
+        if (e3 != null && isSetupPhase) e3.SetFrozen(true);
         
         // Additional enemies spread out for LOS testing
-        UnitManager.Instance.SpawnUnit("enemy_sdf_trooper", new Vector3(50, 0, -50));
-        UnitManager.Instance.SpawnUnit("enemy_sdf_scout_walker", new Vector3(-40, 0, -10));
-        var eAir = UnitManager.Instance.SpawnUnit("enemy_sdf_osprey_gunship", new Vector3(-20, 0, 40));
-        if (eAir != null) eAir.Team = "Enemy";
+        var e4 = UnitManager.Instance.SpawnUnit("enemy_sdf_trooper", new Vector3(50, 0, -50));
+        if (e4 != null && isSetupPhase) e4.SetFrozen(true);
+        
+        var e5 = UnitManager.Instance.SpawnUnit("enemy_sdf_scout_walker", new Vector3(-40, 0, -10));
+        if (e5 != null && isSetupPhase) e5.SetFrozen(true);
+        
+        var eAir = UnitManager.Instance.SpawnUnit("enemy_sdf_falcon_gunship_rotary", new Vector3(-20, 0, 40));
+        if (eAir != null) 
+        { 
+            eAir.Team = "Enemy";
+            if (isSetupPhase) eAir.SetFrozen(true);
+        }
         
         // Far away enemy
-        UnitManager.Instance.SpawnUnit("enemy_sdf_bastion_mbt", new Vector3(80, 0, 0));
+        var e6 = UnitManager.Instance.SpawnUnit("enemy_sdf_bastion_mbt", new Vector3(80, 0, 0));
+        if (e6 != null && isSetupPhase) e6.SetFrozen(true);
         
         // Hide behind building (assuming town takes up 20,0,-20 area)
-        UnitManager.Instance.SpawnUnit("enemy_sdf_scout_walker", new Vector3(25, 0, -25));
+        var e7 = UnitManager.Instance.SpawnUnit("enemy_sdf_scout_walker", new Vector3(25, 0, -25));
+        if (e7 != null && isSetupPhase) e7.SetFrozen(true);
     }
     
     public override void _Process(double delta)
@@ -106,10 +128,9 @@ public partial class CombatManager : Node
             }
             
             // Update Visibility of VisualRoot
-            var visualRoot = enemy.GetNodeOrNull<Node3D>("VisualRoot");
-            if (visualRoot != null)
+            if (enemy.Visuals != null && enemy.Visuals.VisualRoot != null)
             {
-                visualRoot.Visible = isVisible;
+                enemy.Visuals.VisualRoot.Visible = isVisible;
             }
         }
     }

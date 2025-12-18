@@ -1,0 +1,50 @@
+[gd_scene load_steps=3 format=3 uid="uid://er6um02c2suc"]
+
+[ext_resource type="Script" path="res://scripts/UI/Components/SettingsMenu.cs" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/icons/ui/cog.svg" id="2_icon"]
+
+[node name="SettingsMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -70.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 70.0
+grow_horizontal = 0
+script = ExtResource("1_script")
+
+[node name="SettingsButton" type="TextureButton" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture_normal = ExtResource("2_icon")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="MenuPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -160.0
+offset_top = 70.0
+offset_right = 0.0
+offset_bottom = 146.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MenuPanel"]
+layout_mode = 2
+
+[node name="HotkeysButton" type="Button" parent="MenuPanel/VBoxContainer"]
+layout_mode = 2
+text = "Show Hotkeys"
+
+[node name="QuitButton" type="Button" parent="MenuPanel/VBoxContainer"]
+layout_mode = 2
+text = "Quit"

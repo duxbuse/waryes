@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Collections.Generic;
 
 namespace WarYes.Data
 {
@@ -9,6 +10,9 @@ namespace WarYes.Data
         public int Cost { get; set; }
         public string Category { get; set; } // e.g. "INF", "TNK", "LOG"
         public string Icon { get; set; }
+        
+        public HashSet<string> Tags { get; set; }
+
         public int Health { get; set; }
 
         public SpeedData Speed { get; set; }

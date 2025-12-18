@@ -96,7 +96,9 @@ public partial class Weapon : Node
         var stats = UnitManager.Instance.GetWeaponStats(weaponId);
         if (stats != null)
         {
-             Range = stats.Range.Ground; // Default to Ground range for now
+             float groundRange = stats.Range.Ground ?? 0;
+         float airRange = stats.Range.Air ?? 0;
+         Range = System.Math.Max(groundRange, airRange);
              AP = stats.Penetration;
              
              // Parse Damage "0.3 HE"
@@ -248,7 +250,7 @@ public partial class Weapon : Node
             if (CurrentAmmo <= 0)
             {
                 StopEngaging();
-                _owner.CheckAmmoStatus();
+                _owner.CheckAmmoStatus(true);
                 // GD.Print($"{_owner.Name} is out of ammo for {WeaponId}!");
             }
         }

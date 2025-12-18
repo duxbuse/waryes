@@ -54,7 +54,7 @@ namespace WarYes.Utils
                 basePath = basePath.Substring(0, basePath.Length - extension.Length);
             }
 
-            string[] extensions = { ".png", ".jpg", ".jpeg" };
+            string[] extensions = { ".png", ".jpg", ".jpeg", ".svg" };
             foreach (var ext in extensions)
             {
                 string path = basePath + ext;

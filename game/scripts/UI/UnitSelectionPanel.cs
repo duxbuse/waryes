@@ -12,6 +12,7 @@ public partial class UnitSelectionPanel : Control
     private Control _primaryCard;
     private TextureRect _unitIcon;
     private Label _unitName;
+    private TextureRect _veterancyIcon;
     private ProgressBar _hpBar;
 
     private RichTextLabel _detailsLabel; // Replaces individual labels
@@ -94,10 +95,22 @@ public partial class UnitSelectionPanel : Control
         detailsVBox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         cardHBox.AddChild(detailsVBox);
         
+        // Header (Name + Vet)
+        var headerHBox = new HBoxContainer();
+        detailsVBox.AddChild(headerHBox);
+        
         _unitName = new Label();
         _unitName.Text = "UNIT NAME";
         _unitName.AddThemeFontSizeOverride("font_size", 24);
-        detailsVBox.AddChild(_unitName);
+        _unitName.SizeFlagsHorizontal = SizeFlags.ExpandFill; 
+        headerHBox.AddChild(_unitName);
+
+        // Veterancy Icon
+        _veterancyIcon = new TextureRect();
+        _veterancyIcon.CustomMinimumSize = new Vector2(32, 24); 
+        _veterancyIcon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+        _veterancyIcon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+        headerHBox.AddChild(_veterancyIcon);
         
         // HP
         _hpBar = new ProgressBar();
@@ -151,13 +164,15 @@ public partial class UnitSelectionPanel : Control
             _unitName.Text = primary.Data.Id.ToUpper().Replace("SDF_", "").Replace("_", " ");
             
             // Icon Logic (Reuse UnitUI logic or similar)
-            // Icon Logic (Reuse UnitUI logic or similar)
             _unitIcon.Texture = IconLoader.LoadUnitIcon(primary.Data);
+
+            // Veterancy
+            _veterancyIcon.Texture = IconLoader.LoadVeterancyIcon(primary.Rank);
             
             // Stats
             float speed = primary.Data.Speed.Road > 0 ? primary.Data.Speed.Road : 30;
             
-            string text = $"Speed: {speed} km/h | Rank: {primary.Rank}\n";
+            string text = $"Speed: {speed} km/h\n";
             
             // Weapons
             if (primary.Data.Weapons != null)
@@ -168,7 +183,14 @@ public partial class UnitSelectionPanel : Control
                      if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
                      string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
                      
-                     text += $"[img=20]{iconPath}[/img] {w.WeaponId} ";
+                     if (ResourceLoader.Exists(iconPath))
+                     {
+                        text += $"[img=20]{iconPath}[/img] {w.WeaponId} ";
+                     }
+                     else
+                     {
+                        text += $"{w.WeaponId} ";
+                     }
                 }
             }
             

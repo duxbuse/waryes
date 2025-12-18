@@ -5,8 +5,9 @@
         "air": null
     },
     "penetration": 0,
-    "damage": "0.2 HE",
-    "rate_of_fire": 600,
+    "damage": "0.15 HE",
+    "suppression": 10,
+    "rate_of_fire": 500,
     "accuracy": {
         "static": 25,
         "moving": 10

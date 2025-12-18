@@ -5,8 +5,10 @@ using WarYes.Data;
 public partial class DeploymentUI : Control
 {
     private HBoxContainer _cardContainer;
+
     private HBoxContainer _tabContainer;
     private Label _creditsLabel;
+    private Button _launchButton;
     
     // Categories matching Wargame/Warno style
     private readonly string[] _categories = { "LOG", "INF", "TNK", "REC", "AA", "ART", "HEL", "AIR" };
@@ -14,17 +16,24 @@ public partial class DeploymentUI : Control
 
     public override void _Ready()
     {
-        var viewportSize = GetViewportRect().Size;
-
-        // 1. Credits Label (Top Right or integrated?) - Let's put it Top Right for now
+        Vector2 viewportSize = GetViewportRect().Size;
+        // 1. Credits Label
         _creditsLabel = new Label();
-        _creditsLabel.Position = new Vector2(viewportSize.X - 200, 20);
+        _creditsLabel.Position = new Vector2(viewportSize.X - 350, 25);
         AddChild(_creditsLabel);
+
+        // Terminate / Launch Button
+        _launchButton = new Button();
+        _launchButton.Text = "Launch Battle";
+        _launchButton.Position = new Vector2(viewportSize.X - 220, 20); // Moved Left to clear Settings (TopRight)
+        _launchButton.Size = new Vector2(130, 40);
+        _launchButton.Pressed += OnLaunchPressed;
+        AddChild(_launchButton);
 
         // 2. Tab Container (Top Left)
         _tabContainer = new HBoxContainer();
         _tabContainer.Position = new Vector2(20, 20);
-        _tabContainer.Size = new Vector2(viewportSize.X - 250, 40);
+        _tabContainer.Size = new Vector2(viewportSize.X - 400, 40); // Reduced width to avoid overlapping Credits/Launch
         _tabContainer.AddThemeConstantOverride("separation", 10);
         AddChild(_tabContainer);
         
@@ -134,8 +143,75 @@ public partial class DeploymentUI : Control
     {
         var button = new Button();
         button.CustomMinimumSize = new Vector2(100, 120);
-        button.FocusMode = FocusModeEnum.None; // Prevent Tab Index stealing
-        UpdateButtonText(button, card);
+        button.FocusMode = FocusModeEnum.None;
+        button.ClipContents = true; // Ensure image doesn't spill
+        
+        // Background / Icon
+        var icon = new TextureRect();
+        icon.Name = "Icon";
+        icon.Texture = WarYes.Utils.IconLoader.LoadUnitIcon(card.Data);
+        icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+        icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered;
+        icon.SetAnchorsPreset(LayoutPreset.FullRect);
+        icon.MouseFilter = MouseFilterEnum.Ignore;
+        button.AddChild(icon);
+        
+        // Dimmer Gradient (Optional, but good for text contrast)
+        var dimmer = new Panel();
+        dimmer.MouseFilter = MouseFilterEnum.Ignore;
+        dimmer.SetAnchorsPreset(LayoutPreset.FullRect);
+        var style = new StyleBoxFlat();
+        style.BgColor = new Color(0, 0, 0, 0.4f);
+        dimmer.AddThemeStyleboxOverride("panel", style);
+        button.AddChild(dimmer);
+
+        // Cost (Top Left)
+        var costLabel = new Label();
+        costLabel.Name = "CostLabel";
+        costLabel.Text = card.Cost.ToString();
+        costLabel.Position = new Vector2(5, 5);
+        costLabel.AddThemeColorOverride("font_color", Colors.Yellow);
+        costLabel.AddThemeFontSizeOverride("font_size", 14);
+        costLabel.MouseFilter = MouseFilterEnum.Ignore;
+        button.AddChild(costLabel);
+
+        // Veterancy (Top Right)
+        var vetIcon = new TextureRect();
+        vetIcon.Name = "VetIcon";
+        vetIcon.Texture = WarYes.Utils.IconLoader.LoadVeterancyIcon(card.Veterancy);
+        vetIcon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+        vetIcon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+        vetIcon.SetAnchorsPreset(LayoutPreset.TopRight);
+        vetIcon.Size = new Vector2(24, 20);
+        vetIcon.Position = new Vector2(100 - 24 - 2, 2); // Manual offset or use anchors
+        vetIcon.MouseFilter = MouseFilterEnum.Ignore;
+        button.AddChild(vetIcon);
+
+        // Name (Bottom Center/Left)
+        var nameLabel = new Label();
+        nameLabel.Name = "NameLabel";
+        nameLabel.Text = card.UnitId.Replace("sdf_", "").Replace("_", " ").ToUpper();
+        nameLabel.SetAnchorsPreset(LayoutPreset.BottomWide);
+        nameLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        nameLabel.VerticalAlignment = VerticalAlignment.Bottom;
+        nameLabel.AddThemeFontSizeOverride("font_size", 12);
+        nameLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        nameLabel.MouseFilter = MouseFilterEnum.Ignore;
+        // Move up slightly to make room for Count? Or Count overlays?
+        // Let's put Name at bottom, Count above it or overlaid.
+        button.AddChild(nameLabel);
+
+        // Count (Center? Or Overlay?)
+        var countLabel = new Label();
+        countLabel.Name = "CountLabel";
+        // Logic will be in UpdateButtonVisuals
+        countLabel.SetAnchorsPreset(LayoutPreset.Center);
+        countLabel.AddThemeFontSizeOverride("font_size", 24);
+        countLabel.MouseFilter = MouseFilterEnum.Ignore;
+        button.AddChild(countLabel);
+
+        UpdateCardVisualsInternal(button, card);
+        
         button.Pressed += () => OnCardPressed(card);
         _cardContainer.AddChild(button);
         _cardButtons[card] = button;
@@ -145,16 +221,27 @@ public partial class DeploymentUI : Control
     {
         if (_cardButtons.ContainsKey(card))
         {
-            UpdateButtonText(_cardButtons[card], card);
+            UpdateCardVisualsInternal(_cardButtons[card], card);
         }
     }
 
-    private void UpdateButtonText(Button but, UnitCard card)
+    private void UpdateCardVisualsInternal(Button but, UnitCard card)
     {
-        but.Text = $"{card.UnitId}\n{card.Cost} Cr\n{card.AvailableCount}/{card.MaxCount}";
+        var countLabel = but.GetNode<Label>("CountLabel");
+        
         if (card.AvailableCount <= 0)
         {
             but.Disabled = true;
+            but.Modulate = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            countLabel.Text = "0";
+            countLabel.AddThemeColorOverride("font_color", Colors.Red);
+        }
+        else
+        {
+            but.Disabled = false;
+            but.Modulate = Colors.White;
+            countLabel.Text = $"{card.AvailableCount}"; // Just show remaining count prominently
+            countLabel.RemoveThemeColorOverride("font_color");
         }
     }
 
@@ -168,4 +255,27 @@ public partial class DeploymentUI : Control
             GameManager.Instance.SelectedCardForPlacement = card;
         }
     }
+    private void OnLaunchPressed()
+    {
+         GD.Print("DeploymentUI: Launch Button Pressed!");
+         if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Setup)
+         {
+             GameManager.Instance.StartBattle();
+         }
+         else
+         {
+             GD.Print($"DeploymentUI: Launch Ignored. GM: {GameManager.Instance}, Phase: {GameManager.Instance?.CurrentPhase}");
+         }
+    }
+    
+    public void OnBattleStarted()
+    {
+        if (_launchButton != null)
+        {
+            _launchButton.Visible = false; // Disable or Hide
+            // _launchButton.Text = "Battle Active";
+            // _launchButton.Disabled = true;
+        }
+    }
+    
 }

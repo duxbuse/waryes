@@ -43,7 +43,7 @@ namespace WarYes.Data
 
     public class WeaponRange
     {
-        public int Ground { get; set; }
+        public int? Ground { get; set; }
         public int? Air { get; set; }
     }
 

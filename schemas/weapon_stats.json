@@ -89,6 +89,16 @@
             "type": "integer",
             "minimum": 0,
             "description": "Logistics supply consumed per salvo."
+        },
+        "is_guided": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the projectile tracks targets."
+        },
+        "projectile_speed": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Speed of the projectile in m/s."
         }
     },
     "required": [
