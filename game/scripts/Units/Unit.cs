@@ -43,7 +43,7 @@ public partial class Unit : CharacterBody3D
     public enum MoveMode { Normal, Reverse, Fast, Hunt, Unload }
     public class Command
     {
-        public enum Type { Move, AttackUnit, UnloadAt, Sell, Garrison }
+        public enum Type { Move, AttackUnit, UnloadAt, Sell, Garrison, Mount, TransportPickUp }
         public Type CommandType;
         public Vector3 TargetPosition;
         public Unit TargetUnit;
@@ -52,6 +52,7 @@ public partial class Unit : CharacterBody3D
         public Vector3? FinalFacing;
     }
     private Queue<Command> _commandQueue = new Queue<Command>();
+    public Queue<Command> CommandQueue => _commandQueue;
     private Command _currentCommand;
     public MoveMode CurrentMoveMode => _currentCommand != null ? _currentCommand.MoveMode : MoveMode.Normal;
 
@@ -158,12 +159,19 @@ public partial class Unit : CharacterBody3D
         GD.Print($"{Name} exited building at {exitPos}, visible={Visuals != null}");
     }
     
-    public void Garrison(GarrisonableBuilding building)
+    public void Garrison(GarrisonableBuilding building, bool queue = false)
     {
          var cmd = new Command { CommandType = Command.Type.Garrison, TargetBuilding = building, MoveMode = MoveMode.Fast };
-         _commandQueue.Clear();
-         _currentCommand = cmd;
-         Movement?.MoveTo(building.GlobalPosition);
+         if (queue)
+         {
+             _commandQueue.Enqueue(cmd);
+         }
+         else
+         {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd); // Need to make sure ExecuteCommand handles Garrison (it doesn't seem to yet in the previous view, let me check)
+         }
     }
     
     public void Die()
@@ -207,20 +215,34 @@ public partial class Unit : CharacterBody3D
     }
     
     // Command Interface
-    public void MoveTo(Vector3 position, MoveMode mode = MoveMode.Normal)
+    public void MoveTo(Vector3 position, MoveMode mode = MoveMode.Normal, bool queue = false)
     {
          var cmd = new Command { CommandType = Command.Type.Move, TargetPosition = position, MoveMode = mode };
-         _commandQueue.Clear();
-         _currentCommand = cmd;
-         if (Movement != null) Movement.MoveTo(position); 
+         if (queue)
+         {
+             _commandQueue.Enqueue(cmd);
+         }
+         else
+         {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd);
+         } 
     }
     
-    public void Attack(Unit target)
+    public void Attack(Unit target, bool queue = false)
     {
          var cmd = new Command { CommandType = Command.Type.AttackUnit, TargetUnit = target };
-         _commandQueue.Clear();
-         _currentCommand = cmd;
-         if (Movement != null) Movement.MoveTo(target.GlobalPosition);
+         if (queue)
+         {
+             _commandQueue.Enqueue(cmd);
+         }
+         else
+         {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd);
+         }
     }
     
     public override void _PhysicsProcess(double delta)
@@ -256,6 +278,18 @@ public partial class Unit : CharacterBody3D
         else if (cmd.CommandType == Command.Type.Sell)
         {
              Movement.MoveTo(cmd.TargetPosition);
+        }
+        else if (cmd.CommandType == Command.Type.Garrison)
+        {
+             Movement.MoveTo(cmd.TargetBuilding.GlobalPosition);
+        }
+        else if (cmd.CommandType == Command.Type.Mount)
+        {
+             Movement.MoveTo(cmd.TargetUnit.GlobalPosition);
+        }
+        else if (cmd.CommandType == Command.Type.TransportPickUp)
+        {
+             Movement.MoveTo(cmd.TargetUnit.GlobalPosition);
         }
     }
     
@@ -327,5 +361,74 @@ public partial class Unit : CharacterBody3D
                  _currentCommand = null;
              }
          }
-    }    }
+    }    
+    else if (_currentCommand.CommandType == Command.Type.Mount)
+    {
+         // Infantry Logic: Move to Transport and Mount
+         var t = _currentCommand.TargetUnit;
+         if (!IsInstanceValid(t) || t.IsQueuedForDeletion())
+         {
+              _currentCommand = null;
+              Movement.Stop(); 
+              return;
+         }
+         
+         Movement.MoveTo(t.GlobalPosition); // Update target pos dynamically
+         
+         if (GlobalPosition.DistanceTo(t.GlobalPosition) < 8.0f) 
+         {
+              t.Mount(this);
+              // If successful, we are hidden/disabled, command irrelevant
+              _currentCommand = null; 
+         }
+    }
+    else if (_currentCommand.CommandType == Command.Type.TransportPickUp)
+    {
+         // Transport Logic: Move to Infantry
+         var p = _currentCommand.TargetUnit;
+         // Check validity
+         if (!IsInstanceValid(p) || p.IsQueuedForDeletion() || p.TransportUnit != null)
+         {
+              _currentCommand = null; // Passenger mounted or died
+              Movement.Stop();
+              return;
+         }
+         
+         Movement.MoveTo(p.GlobalPosition);
+         
+         // If close, we wait for them to mount (they should have a Mount command)
+         // Or we trigger it if we are super close?
+         if (GlobalPosition.DistanceTo(p.GlobalPosition) < 8.0f)
+         {
+             // We can force mount if we are the active mover
+             Mount(p);
+             if (Passengers.Contains(p)) _currentCommand = null; 
+         }
+    }
+    }
+    
+    public void MountTransport(Unit transport, bool queue = false)
+    {
+         var cmd = new Command { CommandType = Command.Type.Mount, TargetUnit = transport, MoveMode = MoveMode.Fast };
+         if (queue) _commandQueue.Enqueue(cmd);
+         else 
+         {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd);
+         }
+    }
+    
+    public void TransportPickUp(Unit passenger, bool queue = false)
+    {
+         var cmd = new Command { CommandType = Command.Type.TransportPickUp, TargetUnit = passenger, MoveMode = MoveMode.Fast };
+         // Transports usually just go do it immediately, but queueing supported
+         if (queue) _commandQueue.Enqueue(cmd);
+         else 
+         {
+             _commandQueue.Clear();
+             _currentCommand = cmd;
+             ExecuteCommand(cmd);
+         }
+    }
 }

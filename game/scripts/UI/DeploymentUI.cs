@@ -252,6 +252,10 @@ public partial class DeploymentUI : Control
         if (GameManager.Instance != null)
         {
             // If already selecting same card, maybe simple cancel?
+            if (SelectionManager.Instance != null)
+            {
+                 SelectionManager.Instance.ClearSelection();
+            }
             GameManager.Instance.SelectedCardForPlacement = card;
         }
     }

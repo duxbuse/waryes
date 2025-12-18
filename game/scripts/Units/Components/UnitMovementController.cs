@@ -20,7 +20,7 @@ namespace WarYes.Units.Components
         // Path visual update timing
         private float _pathUpdateTimer = 0.0f;
         private const float PATH_UPDATE_INTERVAL = 0.1f; // Update path every 0.1 seconds
-
+        
         public bool IsMoving { get; private set; } = false;
         
         public void Initialize(Unit unit, UnitData data)
@@ -45,6 +45,7 @@ namespace WarYes.Units.Components
             }
             
             _navAgent.MaxSpeed = speedMs;
+            _baseSpeed = speedMs;
             _navAgent.VelocityComputed += OnVelocityComputed;
             
             AddChild(_navAgent);
@@ -103,23 +104,108 @@ namespace WarYes.Units.Components
             float blinkerSpeed = 5.0f * (float)delta; 
             _laneOffset = Mathf.Lerp(_laneOffset, _targetLaneOffset, blinkerSpeed);
             
-            // Update path visuals periodically to reduce overhead and prevent persistence
-            _pathUpdateTimer += (float)delta;
-            if (_pathUpdateTimer >= PATH_UPDATE_INTERVAL)
-            {
-                _pathUpdateTimer = 0.0f;
-                UpdatePathVisuals();
-            }
+            // Update path visuals every tick for smoothness
+            UpdatePathVisuals();
+            CheckTerrain(); // Check terrain periodically
+        }
+
+        private float _baseSpeed = 10.0f; // Default, overwritten in Initialize
+        
+        private void CheckTerrain()
+        {
+             // Simple raycast to check ground type
+             var spaceState = GetWorld3D().DirectSpaceState;
+             var from = _unit.GlobalPosition + Vector3.Up * 0.5f;
+             var to = _unit.GlobalPosition + Vector3.Down * 2.0f;
+             var query = PhysicsRayQueryParameters3D.Create(from, to);
+             query.Exclude = new Godot.Collections.Array<Godot.Rid> { _unit.GetRid() };
+             
+             var result = spaceState.IntersectRay(query);
+             float multiplier = 0.8f; // Default offroad
+             
+             if (result.Count > 0)
+             {
+                 var col = result["collider"].As<Node>();
+                 if (col != null)
+                 {
+                     string name = col.Name.ToString();
+                     if (name.Contains("ForestFloor")) multiplier = 0.6f; // Slow in forest
+                     else if (name.Contains("Highway") || name.Contains("Road")) multiplier = 1.0f; // Fast on road
+                     else if (name.Contains("GroundBase")) multiplier = 0.8f; // Field
+                 }
+             }
+             
+             _navAgent.MaxSpeed = _baseSpeed * multiplier;
         }
         
         private void UpdatePathVisuals()
         {
             if (_unit == null || _unit.Visuals == null) return;
             
-            // Always update path visuals even if frozen (for setup phase planning)
-            // The path will still be generated even if unit can't move yet
+            // 1. Current Path
             Vector3[] path = _navAgent.GetCurrentNavigationPath();
-            _unit.Visuals.UpdatePathVisuals(path, _unit.CurrentMoveMode);
+            
+            // 2. Queued Paths
+            List<(Vector3[], Unit.MoveMode)> queuedPathsList = new List<(Vector3[], Unit.MoveMode)>();
+            
+            if (_unit.CommandQueue.Count > 0)
+            {
+                Rid map = _navAgent.GetNavigationMap();
+                Vector3 currentEndPos = _navAgent.TargetPosition; // The end of the current move
+                
+                // If we aren't moving but have a queue (maybe just finished?), assume current pos?
+                if (!IsMoving && _unit.CommandQueue.Count > 0)
+                {
+                    currentEndPos = _unit.GlobalPosition;
+                }
+
+                foreach (var cmd in _unit.CommandQueue)
+                {
+                    Vector3 targetPos = Vector3.Zero;
+                    bool isMove = false;
+                    
+                    if (cmd.CommandType == Unit.Command.Type.Move || cmd.CommandType == Unit.Command.Type.UnloadAt || cmd.CommandType == Unit.Command.Type.Sell)
+                    {
+                        targetPos = cmd.TargetPosition;
+                        isMove = true;
+                    }
+                    else if (cmd.CommandType == Unit.Command.Type.AttackUnit && cmd.TargetUnit != null)
+                    {
+                        targetPos = cmd.TargetUnit.GlobalPosition;
+                        isMove = true;
+                    }
+                    else if (cmd.CommandType == Unit.Command.Type.Mount && cmd.TargetUnit != null)
+                    {
+                        targetPos = cmd.TargetUnit.GlobalPosition;
+                        isMove = true;
+                    }
+                    else if (cmd.CommandType == Unit.Command.Type.TransportPickUp && cmd.TargetUnit != null)
+                    {
+                         targetPos = cmd.TargetUnit.GlobalPosition;
+                         isMove = true;
+                    }
+                    else if (cmd.CommandType == Unit.Command.Type.Garrison && cmd.TargetBuilding != null)
+                    {
+                        targetPos = cmd.TargetBuilding.GlobalPosition;
+                        isMove = true;
+                    }
+                    
+                    if (isMove)
+                    {
+                        // Calculate full path for this segment
+                        // optimize = true
+                        Vector3[] segmentPath = NavigationServer3D.MapGetPath(map, currentEndPos, targetPos, true);
+                        
+                        if (segmentPath != null && segmentPath.Length > 0)
+                        {
+                            queuedPathsList.Add((segmentPath, cmd.MoveMode));
+                            currentEndPos = targetPos;
+                        }
+                    }
+                }
+            }
+            
+            _unit.Visuals.UpdatePathVisuals(path, _unit.CurrentMoveMode, queuedPathsList);
         }
         
         private void OnVelocityComputed(Vector3 safeVelocity)

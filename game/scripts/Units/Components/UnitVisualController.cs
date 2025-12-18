@@ -17,8 +17,12 @@ namespace WarYes.Units.Components
         private UnitUI _unitUI;
         private Node3D _commanderAura;
         private Sprite3D _tacticalIcon;
+        private Sprite3D _tacticalRing;
         private MeshInstance3D _selectionData;
         private Sprite3D _ammoIcon;
+        
+        private bool _inTacticalView = false;
+        private bool _isSelected = false;
         
         // Path Visuals
         private MeshInstance3D _pathMeshInstance;
@@ -48,11 +52,28 @@ namespace WarYes.Units.Components
             CreateAmmoIcon();
             CreateTacticalIcon();
             CreateAimIndicator(); // Prepare root
+            
+            // Immediate Sync
+            var camera = GetViewport().GetCamera3D() as RTSCamera;
+            if (camera != null && camera.InTacticalView)
+            {
+                SetTacticalView(true);
+            }
         }
         
         public override void _Process(double delta)
         {
             if (_unit == null) return;
+            
+            // Sync with Camera State
+            var camera = GetViewport().GetCamera3D() as RTSCamera;
+            if (camera != null)
+            {
+                if (_inTacticalView != camera.InTacticalView)
+                {
+                    SetTacticalView(camera.InTacticalView);
+                }
+            }
             
             if (_tacticalIcon != null && _tacticalIcon.Visible)
             {
@@ -65,12 +86,14 @@ namespace WarYes.Units.Components
 
         public void SetTacticalView(bool active)
         {
+            _inTacticalView = active;
+            
             if (_tacticalIcon == null) CreateTacticalIcon();
             if (_tacticalIcon != null) _tacticalIcon.Visible = active;
             
             if (_visuals != null) _visuals.Visible = !active;
             
-            // Should we hide UI? Unit.cs comment said: "_unitUI remains visible"
+            UpdateSelectionVisuals();
         }
         
         public void SetVisualsVisible(bool visible)
@@ -250,9 +273,26 @@ namespace WarYes.Units.Components
         
         public void SetSelected(bool selected)
         {
-            if (_selectionData != null) _selectionData.Visible = selected;
+            _isSelected = selected;
+            UpdateSelectionVisuals();
             // Don't hide path on deselection - let UpdatePathVisuals control visibility
             // This allows paths to remain visible during setup phase for planning
+        }
+
+        private void UpdateSelectionVisuals()
+        {
+            if (_selectionData != null)
+                _selectionData.Visible = _isSelected && !_inTacticalView;
+                
+            if (_isSelected && _inTacticalView)
+            {
+                if (_tacticalRing == null) CreateTacticalRing();
+                if (_tacticalRing != null) _tacticalRing.Visible = true;
+            }
+            else
+            {
+                 if (_tacticalRing != null) _tacticalRing.Visible = false;
+            }
         }
         
         private void UpdatePathVisibility(bool visible)
@@ -321,6 +361,61 @@ namespace WarYes.Units.Components
             _tacticalIcon.Position = new Vector3(0, 2.0f, 0);
         }
 
+        private void CreateTacticalRing()
+        {
+             if (_tacticalRing != null) return;
+             if (_tacticalIcon == null) CreateTacticalIcon();
+             
+             _tacticalRing = new Sprite3D();
+             _tacticalRing.Name = "TacticalRing";
+             _tacticalRing.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+             _tacticalRing.NoDepthTest = true;
+             _tacticalRing.Modulate = new Color(1, 1, 1); // White
+             
+             // Create Ring Texture
+             int size = 128;
+             if (_tacticalIcon.Texture != null)
+             {
+                 Vector2 texSize = _tacticalIcon.Texture.GetSize();
+                 size = (int)Mathf.Max(texSize.X, texSize.Y);
+             }
+             // Clamp size to reasonable limits
+             size = Mathf.Clamp(size, 64, 512);
+             
+             var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+             
+             float center = size / 2.0f;
+             float radiusOuter = size * 0.48f;
+             float radiusInner = size * 0.40f;
+             
+             for(int x=0; x<size; x++)
+                for(int y=0; y<size; y++)
+                {
+                    float dist = Mathf.Sqrt((x-center)*(x-center) + (y-center)*(y-center));
+                    if (dist < radiusOuter && dist > radiusInner)
+                    {
+                        // Anti-aliasing edges roughly
+                        float alpha = 1.0f;
+                        if (dist > radiusOuter - 1.0f) alpha = radiusOuter - dist;
+                        if (dist < radiusInner + 1.0f) alpha = dist - radiusInner;
+                        
+                        image.SetPixel(x, y, new Color(1, 1, 1, alpha));
+                    }
+                }
+                
+             var tex = ImageTexture.CreateFromImage(image);
+             _tacticalRing.Texture = tex;
+             _tacticalRing.PixelSize = 0.03f; // Same as icon (0.03f in CreateTacticalIcon)
+             // Parent to icon to inherit scale
+             _tacticalIcon.AddChild(_tacticalRing);
+             
+             // Ensure it's behind the icon? 
+             // Sprite3D sorting is tricky. Move slightly back in Z?
+             // Since it's billboarded, Z might be view depth.
+             // Render priority might help.
+             _tacticalRing.RenderPriority = -1;
+        }
+
         private string GetCategoryIconName()
         {
             // Use Tags!
@@ -380,72 +475,137 @@ namespace WarYes.Units.Components
             AddChild(_pathArrow);
         }
         
-        public void UpdatePathVisuals(Vector3[] pathPoints, Unit.MoveMode mode)
+        public void UpdatePathVisuals(Vector3[] pathPoints, Unit.MoveMode mode, List<(Vector3[] Path, Unit.MoveMode Mode)> queuedPaths = null)
         {
              if (_pathMesh == null || _pathMeshInstance == null) 
              {
-                 GD.PrintErr($"Path mesh not initialized for {_unit?.Name}");
                  return;
              }
              
              _pathMesh.ClearSurfaces();
              
-             // Don't render if no path
-             if (pathPoints == null || pathPoints.Length < 2)
+             bool hasCurrentPath = (pathPoints != null && pathPoints.Length >= 2);
+             // Ensure we check queued paths validity
+             bool hasQueuedPaths = (queuedPaths != null && queuedPaths.Count > 0);
+             
+             // Phase 1: Collect Vertices for Current Path
+             List<Vector3> currentDrawPoints = new List<Vector3>();
+             
+             if (hasCurrentPath)
+             {
+                 Vector3 currentPos = _unit.GlobalPosition;
+                 currentDrawPoints.Add(currentPos + Vector3.Up * 0.5f);
+                 
+                 // "Closest Segment" logic
+                 int bestSegmentIdx = 0;
+                 float minSegmentDistSq = float.MaxValue;
+                 
+                 for (int i = 0; i < pathPoints.Length - 1; i++)
+                 {
+                     Vector3 pA = pathPoints[i];
+                     Vector3 pB = pathPoints[i+1];
+                     Vector3 ab = pB - pA;
+                     Vector3 ap = currentPos - pA;
+                     float t = ab.LengthSquared() > 0.001f ? ap.Dot(ab) / ab.LengthSquared() : 0.0f;
+                     t = Mathf.Clamp(t, 0.0f, 1.0f);
+                     Vector3 closestOnSegment = pA + ab * t;
+                     float dstSq = currentPos.DistanceSquaredTo(closestOnSegment);
+                     
+                     if (dstSq < minSegmentDistSq)
+                     {
+                         minSegmentDistSq = dstSq;
+                         bestSegmentIdx = i;
+                     }
+                 }
+                 
+                 int startDrawingIdx = bestSegmentIdx + 1;
+                 if (startDrawingIdx >= pathPoints.Length) startDrawingIdx = pathPoints.Length - 1;
+
+                 for (int i = startDrawingIdx; i < pathPoints.Length; i++)
+                 {
+                     Vector3 point = pathPoints[i];
+                     Vector3 toPoint = point - currentPos;
+                     if (toPoint.LengthSquared() > 0.1f) 
+                     {
+                         currentDrawPoints.Add(point + Vector3.Up * 0.5f);
+                     }
+                 }
+             }
+
+             // Phase 2: Check total vertex count
+             int queuedVertexCount = 0;
+             if (hasQueuedPaths)
+             {
+                  foreach(var q in queuedPaths)
+                  {
+                      if (q.Path != null && q.Path.Length >= 2)
+                          queuedVertexCount += q.Path.Length;
+                  }
+             }
+             
+             // If we don't have enough vertices for a line (need at least 2), abort
+             if (currentDrawPoints.Count + queuedVertexCount < 2)
              {
                  _pathMeshInstance.Visible = false;
                  return;
              }
+
+             // Phase 3: Draw
+             _pathMeshInstance.Visible = true;
+
+             if (_pathShaderMat != null)
+             {
+                 _pathShaderMat.SetShaderParameter("color", new Color(1, 1, 1, 1));
+             }
              
-             // Determine color based on move mode
-             Color pathColor;
+             _pathMesh.SurfaceBegin(Mesh.PrimitiveType.LineStrip);
+             
+             // Draw Current Path
+             if (currentDrawPoints.Count > 0)
+             {
+                 Color segmentColor = GetColorForMode(mode);
+                 _pathMesh.SurfaceSetColor(segmentColor);
+                 foreach(var v in currentDrawPoints)
+                 {
+                     _pathMesh.SurfaceAddVertex(v);
+                 }
+             }
+             
+             // Draw Queued Paths
+             if (hasQueuedPaths)
+             {
+                 foreach (var item in queuedPaths)
+                 {
+                     if (item.Path == null || item.Path.Length < 2) continue;
+                     
+                     Color segmentColor = GetColorForMode(item.Mode);
+                     _pathMesh.SurfaceSetColor(segmentColor);
+                     
+                     foreach (var point in item.Path)
+                     {
+                         _pathMesh.SurfaceAddVertex(point + Vector3.Up * 0.5f);
+                     }
+                 }
+             }
+             
+             _pathMesh.SurfaceEnd();
+        }
+
+        private Color GetColorForMode(Unit.MoveMode mode)
+        {
              switch (mode)
              {
                  case Unit.MoveMode.Fast:
-                     pathColor = new Color(1, 1, 0, 0.7f); // Yellow
-                     break;
+                     return new Color(1, 1, 0, 0.7f); // Yellow
                  case Unit.MoveMode.Reverse:
-                     pathColor = new Color(1, 0.5f, 0, 0.7f); // Orange
-                     break;
+                     return new Color(1, 0.5f, 0, 0.7f); // Orange
                  case Unit.MoveMode.Hunt:
-                     pathColor = new Color(1, 0, 0, 0.7f); // Red
-                     break;
+                     return new Color(1, 0, 0, 0.7f); // Red
                  case Unit.MoveMode.Unload:
-                     pathColor = new Color(0, 1, 1, 0.7f); // Cyan
-                     break;
+                     return new Color(0, 1, 1, 0.7f); // Cyan
                  default:
-                     pathColor = new Color(0, 1, 0, 0.7f); // Green
-                     break;
+                     return new Color(0, 1, 0, 0.7f); // Green
              }
-             
-             // Update shader color if available
-             if (_pathShaderMat != null)
-             {
-                 _pathShaderMat.SetShaderParameter("color", pathColor);
-             }
-             
-             // Draw path as line strip starting from unit's current position
-             // This ensures no trailing lines behind the unit
-             _pathMesh.SurfaceBegin(Mesh.PrimitiveType.LineStrip);
-             
-             // Always start from the unit's current position
-             Vector3 currentPosition = _unit.GlobalPosition;
-             _pathMesh.SurfaceAddVertex(currentPosition + Vector3.Up * 0.5f);
-             
-             // Add remaining path points, skipping any that are behind the current position
-             foreach (var point in pathPoints)
-             {
-                 // Only add points that are ahead in the path (not behind the unit)
-                 Vector3 toPoint = point - currentPosition;
-                 if (toPoint.LengthSquared() > 0.1f) // Skip points too close to current position
-                 {
-                     _pathMesh.SurfaceAddVertex(point + Vector3.Up * 0.5f);
-                 }
-             }
-             _pathMesh.SurfaceEnd();
-             
-             // Ensure path is visible if we have a valid path
-             _pathMeshInstance.Visible = true;
         }
 
         private void CreateAimIndicator()

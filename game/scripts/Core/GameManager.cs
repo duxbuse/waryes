@@ -22,7 +22,21 @@ public partial class GameManager : Node
 
 	// UI
 	public DeploymentUI DeploymentUI;
-	public UnitCard SelectedCardForPlacement;
+	public event System.Action<UnitCard?> OnDeploymentSelectionChanged;
+	
+	private UnitCard _selectedCardForPlacement;
+	public UnitCard SelectedCardForPlacement 
+	{ 
+		get => _selectedCardForPlacement;
+		set
+		{
+			if (_selectedCardForPlacement != value)
+			{
+				_selectedCardForPlacement = value;
+				OnDeploymentSelectionChanged?.Invoke(_selectedCardForPlacement);
+			}
+		}
+	}
 
 	public enum GamePhase { Setup, Battle }
 	public GamePhase CurrentPhase { get; private set; } = GamePhase.Setup;

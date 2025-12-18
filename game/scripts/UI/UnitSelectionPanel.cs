@@ -43,6 +43,11 @@ public partial class UnitSelectionPanel : Control
             SelectionManager.Instance.OnSelectionChanged += UpdatePanel;
         }
         
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnDeploymentSelectionChanged += (card) => UpdatePanel();
+        }
+        
         SetupUI();
         UpdatePanel(); // Initial State
     }
@@ -52,6 +57,11 @@ public partial class UnitSelectionPanel : Control
         if (SelectionManager.Instance != null)
         {
             SelectionManager.Instance.OnSelectionChanged -= UpdatePanel;
+        }
+        
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnDeploymentSelectionChanged -= (card) => UpdatePanel();
         }
     }
 
@@ -137,20 +147,33 @@ public partial class UnitSelectionPanel : Control
         {
              _hpBar.Value = _currentUnit.Health;
              _hpBar.MaxValue = _currentUnit.Data.Health > 0 ? _currentUnit.Data.Health : 10;
-             
-             // Update Ammo if firing
-             // Aggregate ammo? Or just primary?
-             // Show "Ammo: OK" or "Low"?
-             // Let's show first weapon ammo for now
-             // Accessing Unit.Weapons is private private List<Weapon> _weapons
-             // Unit needs to expose it or a summary.
-             // For now, let's just update HP.
+        }
+        else if (GameManager.Instance != null && GameManager.Instance.SelectedCardForPlacement != null)
+        {
+             // Previewing Card: Show Full HP
+             // Assuming Data.Health is available
+             var data = GameManager.Instance.SelectedCardForPlacement.Data;
+             _hpBar.MaxValue = data.Health > 0 ? data.Health : 10;
+             _hpBar.Value = _hpBar.MaxValue;
         }
     }
 
     private void UpdatePanel()
     {
         GD.Print("UnitSelectionPanel: UpdatePanel called.");
+        
+        // 1. Check Deployment Selection
+        if (GameManager.Instance != null && GameManager.Instance.SelectedCardForPlacement != null)
+        {
+            _currentUnit = null; // No physical unit
+            DisplayData(GameManager.Instance.SelectedCardForPlacement.Data, GameManager.Instance.SelectedCardForPlacement.Veterancy);
+             // Clear Group List
+             foreach(var child in _groupListContainer.GetChildren()) child.QueueFree();
+             _groupButtons.Clear();
+             Visible = true;
+             return;
+        }
+    
         if (SelectionManager.Instance == null) return;
         
         var primary = SelectionManager.Instance.GetPrimaryUnit();
@@ -161,40 +184,7 @@ public partial class UnitSelectionPanel : Control
             Visible = true;
             _currentUnit = primary;
             
-            _unitName.Text = primary.Data.Id.ToUpper().Replace("SDF_", "").Replace("_", " ");
-            
-            // Icon Logic (Reuse UnitUI logic or similar)
-            _unitIcon.Texture = IconLoader.LoadUnitIcon(primary.Data);
-
-            // Veterancy
-            _veterancyIcon.Texture = IconLoader.LoadVeterancyIcon(primary.Rank);
-            
-            // Stats
-            float speed = primary.Data.Speed.Road > 0 ? primary.Data.Speed.Road : 30;
-            
-            string text = $"Speed: {speed} km/h\n";
-            
-            // Weapons
-            if (primary.Data.Weapons != null)
-            {
-                foreach(var w in primary.Data.Weapons)
-                {
-                     string faction = "vanguard";
-                     if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
-                     string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
-                     
-                     if (ResourceLoader.Exists(iconPath))
-                     {
-                        text += $"[img=20]{iconPath}[/img] {w.WeaponId} ";
-                     }
-                     else
-                     {
-                        text += $"{w.WeaponId} ";
-                     }
-                }
-            }
-            
-            _detailsLabel.Text = text;
+            DisplayData(primary.Data, primary.Rank);
             
             // Update Group List
             UpdateGroupList();
@@ -202,10 +192,47 @@ public partial class UnitSelectionPanel : Control
         else
         {
             GD.Print("UnitSelectionPanel: No primary unit. Hiding.");
-            // For debugging, don't hide? No, user needs to see it work.
             Visible = false;
             _currentUnit = null;
         }
+    }
+
+    private void DisplayData(UnitData data, int rank)
+    {
+        _unitName.Text = data.Id.ToUpper().Replace("SDF_", "").Replace("_", " ");
+        
+        // Icon Logic
+        _unitIcon.Texture = IconLoader.LoadUnitIcon(data);
+
+        // Veterancy
+        _veterancyIcon.Texture = IconLoader.LoadVeterancyIcon(rank);
+        
+        // Stats
+        float speed = data.Speed.Road > 0 ? data.Speed.Road : 30;
+        
+        string text = $"Speed: {speed} km/h\n";
+        
+        // Weapons
+        if (data.Weapons != null)
+        {
+            foreach(var w in data.Weapons)
+            {
+                 string faction = "vanguard";
+                 if (w.WeaponId.ToLower().StartsWith("sdf")) faction = "sdf";
+                 string iconPath = $"res://assets/icons/weapons/{faction}/{w.WeaponId}.svg";
+                 
+                 if (ResourceLoader.Exists(iconPath))
+                 {
+                    text += $"[img=20]{iconPath}[/img] {w.WeaponId} ";
+                 }
+                 else
+                 {
+                    text += $"{w.WeaponId} ";
+                 }
+            }
+        }
+        
+        _detailsLabel.Text = text;
     }
     
     private void UpdateGroupList()

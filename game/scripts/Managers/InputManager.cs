@@ -194,6 +194,8 @@ public partial class InputManager : Node
         var selectedUnits = SelectionManager.Instance?.SelectedUnits;
         if (selectedUnits == null || selectedUnits.Count == 0) return;
         
+        bool queue = Input.IsKeyPressed(Key.Shift);
+        
         var pos = GetGroundPosition(mb.Position);
         if (pos.HasValue)
         {
@@ -202,7 +204,78 @@ public partial class InputManager : Node
              
              if (target is Unit u && u.Team == "Enemy" && (mode == Unit.MoveMode.Normal || mode == Unit.MoveMode.Hunt))
              {
-                 foreach(var sel in selectedUnits) sel.Attack(u); 
+                 foreach(var sel in selectedUnits) sel.Attack(u, queue); 
+                 GetViewport().SetInputAsHandled();
+                 return;
+             }
+             else if (target is Unit uTarget && uTarget.Team == "Player" && uTarget.TransportCapacity > 0)
+             {
+                 // MOUNT Logic
+                 // 1. Separate selected units into Transports and Passengers
+                 var potentialPassengers = selectedUnits.Where(u => u.Data.Tags.Contains("infantry")).ToList();
+                 var selectedTransports = selectedUnits.Where(u => u.TransportCapacity > 0).ToList();
+                 
+                 // If we clicked a transport that wasn't selected, add it to the pool of available transports?
+                 // Design: The target transport is definitely "available". 
+                 // If we have selected multiple transports, we might want to load into ALL of them.
+                 // Steps:
+                 // A. Targeted Transport is Primary
+                 // B. If other transports are selected, they are also candidates.
+                 
+                 var availableTransports = new List<Unit>();
+                 if (selectedTransports.Contains(uTarget)) availableTransports.AddRange(selectedTransports);
+                 else availableTransports.Add(uTarget); // Target is the only one if not part of selection
+                 
+                 // Remove duplicates just in case
+                 availableTransports = availableTransports.Distinct().ToList();
+
+                 // Check if we even have passengers
+                 if (potentialPassengers.Count == 0)
+                 {
+                      GD.Print("No infantry selected to mount.");
+                      return;
+                 }
+                 
+                 // C. Greedy Assignment
+                 // For each transport, find closest unassigned passenger
+                 var unassignedPassengers = new List<Unit>(potentialPassengers);
+                 
+                 foreach (var transport in availableTransports)
+                 {
+                     if (unassignedPassengers.Count == 0) break;
+                     
+                     // How many can fit? (Assuming capacity 1 for now, but loop handles N)
+                     int space = transport.TransportCapacity - transport.Passengers.Count;
+                     
+                     for (int s=0; s<space; s++)
+                     {
+                         if (unassignedPassengers.Count == 0) break;
+                         
+                         Unit bestP = null;
+                         float minD = float.MaxValue;
+                         
+                         foreach(var p in unassignedPassengers)
+                         {
+                             float d = transport.GlobalPosition.DistanceSquaredTo(p.GlobalPosition);
+                             if (d < minD)
+                             {
+                                 minD = d;
+                                 bestP = p;
+                             }
+                         }
+                         
+                         if (bestP != null)
+                         {
+                             // Order Pair
+                             bestP.MountTransport(transport, queue);
+                             transport.TransportPickUp(bestP, queue);
+                             
+                             unassignedPassengers.Remove(bestP);
+                             GD.Print($"Pairing {transport.Name} with {bestP.Name}");
+                         }
+                     }
+                 }
+                 
                  GetViewport().SetInputAsHandled();
                  return;
              }
@@ -212,7 +285,7 @@ public partial class InputManager : Node
                  var infantry = selectedUnits.Where(unit => unit.Data.Tags.Contains("infantry")).ToList();
                  if (infantry.Count > 0)
                  {
-                     foreach(var sel in infantry) sel.Garrison(building);
+                     foreach(var sel in infantry) sel.Garrison(building, queue);
                      GD.Print($"{infantry.Count} infantry units ordered to garrison in {building.Name}");
                      GetViewport().SetInputAsHandled();
                  }
@@ -252,7 +325,7 @@ public partial class InputManager : Node
 
                     if (bestUnit != null)
                     {
-                        bestUnit.MoveTo(targetPos, mode); 
+                        bestUnit.MoveTo(targetPos, mode, queue); 
                         availableIndices.RemoveAt(bestIndexIdx);
                     }
                  }
@@ -370,7 +443,7 @@ public partial class InputManager : Node
             
             if (bestUnit != null)
             {
-                bestUnit.MoveTo(target, Unit.MoveMode.Normal);
+                bestUnit.MoveTo(target, Unit.MoveMode.Normal, Input.IsKeyPressed(Key.Shift));
                 availableIndices.RemoveAt(bestIdxIdx);
             }
         }

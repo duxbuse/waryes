@@ -38,7 +38,7 @@ public partial class RTSCamera : Camera3D
 
     private float _targetHeight;
     private bool _isDragging = false;
-    private bool _inTacticalView = false;
+    public bool InTacticalView { get; private set; } = false;
 
     public override void _Ready()
     {
@@ -172,9 +172,9 @@ public partial class RTSCamera : Camera3D
         bool shouldBeInTacticalView = Position.Y >= TacticalViewDistanceThreshold;
 
         // Only update if state has changed
-        if (shouldBeInTacticalView != _inTacticalView)
+        if (shouldBeInTacticalView != InTacticalView)
         {
-            _inTacticalView = shouldBeInTacticalView;
+            InTacticalView = shouldBeInTacticalView;
 
             // Toggle tactical view for all units
             if (UnitManager.Instance != null)
@@ -184,7 +184,7 @@ public partial class RTSCamera : Camera3D
                 {
                     if (unit != null && unit.Visuals != null)
                     {
-                        unit.Visuals.SetTacticalView(_inTacticalView);
+                        unit.Visuals.SetTacticalView(InTacticalView);
                     }
                 }
             }

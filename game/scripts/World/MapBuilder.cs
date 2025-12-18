@@ -122,7 +122,7 @@ public partial class MapBuilder : Node3D
 		Vector2 highwayUV = new Vector2(40, 2); // UV is now consistent, rotation handles orientation
 		CreatePlane("Highway", Vector3.Up * 0.05f, highwayPlaneSize, _texHighway, _regionHighway, highwayUV, highwayRotation); 
 		
-		CreateRoadLines(Vector3.Up * 0.16f, _highwayAxis == 0 ? mapSize : mapSize, _highwayWidth, _regionHighway, _highwayAxis == 1); 
+		CreateRoadLines(Vector3.Up * 0.05f, _highwayAxis == 0 ? mapSize : mapSize, _highwayWidth, _regionHighway, _highwayAxis == 1); 
 
 		// Spawn Points
 		GenerateSpawnPoints(_highwayAxis, halfSize, _regionField);
@@ -233,12 +233,12 @@ public partial class MapBuilder : Node3D
 			if (rotated)
 			{
 				float z = -length / 2 + i * 4;
-				meshInstance.Position = center + new Vector3(0, 0.08f, z);
+				meshInstance.Position = center + new Vector3(0, 0.01f, z);
 			}
 			else
 			{
 				float x = -length / 2 + i * 4;
-				meshInstance.Position = center + new Vector3(x, 0.08f, 0);
+				meshInstance.Position = center + new Vector3(x, 0.01f, 0);
 			}
 			root.AddChild(meshInstance);
 		}
@@ -439,6 +439,34 @@ public partial class MapBuilder : Node3D
 			building.AddChild(collisionShape);
 			
 			root.AddChild(building);
+		}
+
+		// Add sparse suburban trees
+		int treeCount = GD.RandRange(1, 3);
+		var tMat = new StandardMaterial3D { AlbedoColor = new Color(0.1f, 0.35f, 0.1f) };
+		
+		for (int t = 0; t < treeCount; t++)
+		{
+			Vector3 tPos = center + new Vector3(GD.Randf() * 16 - 8, 0, GD.Randf() * 16 - 8);
+			bool clash = false;
+			
+			foreach(Node child in root.GetChildren())
+			{
+				if (child is Node3D b)
+				{
+					// Simple distance check to avoid clipping buildings
+					if (b.Position.DistanceTo(tPos) < 4.0f)
+					{
+						clash = true;
+						break;
+					}
+				}
+			}
+			
+			if (!clash)
+			{
+				CreateTree(tPos, tMat, root);
+			}
 		}
 	}
 
@@ -663,7 +691,10 @@ public partial class MapBuilder : Node3D
 				int worldIdxZ = z - gridOffset;
 				Vector3 center = new Vector3(worldIdxX * fieldSize, 0, worldIdxZ * fieldSize);
 
-				if (center.Length() < 70.0f) 
+				// Recalculate town center (same logic as CreateTown)
+				Vector3 townCenter = (_highwayAxis == 0) ? new Vector3(0, 0, 60) : new Vector3(60, 0, 0);
+
+				if (center.DistanceTo(townCenter) < 80.0f) 
 				{
 					grid[x, z] = MapTileType.Town;
 					continue;
@@ -765,12 +796,21 @@ public partial class MapBuilder : Node3D
 							// else medium: 100-400 trees per tile
 						}
 						
+						// Determine open edges for natural forest shaping
+						bool[] openEdges = new bool[4];
+						// 0: Top (Z-), 1: Bottom (Z+), 2: Left (X-), 3: Right (X+)
+						openEdges[0] = (z == 0 || grid[x, z-1] != MapTileType.Forest);
+						openEdges[1] = (z == gridSize - 1 || grid[x, z+1] != MapTileType.Forest);
+						openEdges[2] = (x == 0 || grid[x-1, z] != MapTileType.Forest);
+						openEdges[3] = (x == gridSize - 1 || grid[x+1, z] != MapTileType.Forest);
+
 						CreatePlane($"ForestFloor_{x}_{z}", center + Vector3.Up * 0.05f, new Vector2(fieldSize, fieldSize), _texForest, parent, new Vector2(4, 4));
-						CreateForestTile(center, fieldSize, parent, density);
+						CreateForestTile(center, fieldSize, parent, density, openEdges);
 						break;
 						
 					case MapTileType.Road:
-						 CreatePlane($"C_Hwy_{x}_{z}", center + Vector3.Up * 0.05f, new Vector2(fieldSize, fieldSize), _texTownRoad, parent, new Vector2(4, 4));
+						// Do nothing for road tiles as the main highway strip covers this area.
+						// Creating a plane here would cause z-fighting.
 						break;
 						
 					case MapTileType.Farm:
@@ -883,7 +923,7 @@ public partial class MapBuilder : Node3D
 		}
 	}
 
-	private void CreateForestTile(Vector3 center, float size, Node parent, string density = "medium")
+	private void CreateForestTile(Vector3 center, float size, Node parent, string density = "medium", bool[] openEdges = null)
 	{
 		// Calculate tree count based on density and tile size
 		int treeCount;
@@ -908,12 +948,48 @@ public partial class MapBuilder : Node3D
 		
 		var mat = new StandardMaterial3D();
 		mat.AlbedoColor = new Color(0, 0.5f, 0); 
+		
+		float margin = size * 0.4f; // Margin for edge tapering
 
 		for (int i = 0; i < treeCount; i++)
 		{
-			// Use tighter spacing for denser forests
+			// Generate random position
 			float rX = (float)GD.RandRange(-size/2 + spacing, size/2 - spacing);
 			float rZ = (float)GD.RandRange(-size/2 + spacing, size/2 - spacing);
+			
+			// Apply organic edge tapering if neighbors are open
+			if (openEdges != null)
+			{
+				bool skip = false;
+				
+				// Top (Z-)
+				if (openEdges[0])
+				{
+					float threshold = -size/2 + (float)GD.RandRange(0, margin);
+					if (rZ < threshold) skip = true;
+				}
+				// Bottom (Z+)
+				if (openEdges[1])
+				{
+					float threshold = size/2 - (float)GD.RandRange(0, margin);
+					if (rZ > threshold) skip = true;
+				}
+				// Left (X-)
+				if (openEdges[2])
+				{
+					float threshold = -size/2 + (float)GD.RandRange(0, margin);
+					if (rX < threshold) skip = true;
+				}
+				// Right (X+)
+				if (openEdges[3])
+				{
+					float threshold = size/2 - (float)GD.RandRange(0, margin);
+					if (rX > threshold) skip = true;
+				}
+				
+				if (skip) continue;
+			}
+			
 			Vector3 pos = center + new Vector3(rX, 0, rZ);
 			CreateTree(pos, mat, parent);
 		}
@@ -941,9 +1017,7 @@ public partial class MapBuilder : Node3D
 
 	private void CreateTree(Vector3 pos, StandardMaterial3D mat, Node parent)
 	{
-		var staticBody = new StaticBody3D();
-		staticBody.Position = pos;
-
+		// Trees are now purely visual (no collision) to allow unit movement
 		var meshInstance = new MeshInstance3D();
 		var mesh = new CylinderMesh(); 
 		mesh.TopRadius = 0.5f;
@@ -951,16 +1025,9 @@ public partial class MapBuilder : Node3D
 		mesh.Height = 3.0f + (float)GD.RandRange(0, 2);
 		meshInstance.Mesh = mesh;
 		meshInstance.MaterialOverride = mat;
-		staticBody.AddChild(meshInstance);
+		meshInstance.Position = pos;
 		
-		var collisionShape = new CollisionShape3D();
-		var shape = new CylinderShape3D();
-		shape.Height = mesh.Height;
-		shape.Radius = mesh.TopRadius;
-		collisionShape.Shape = shape;
-		staticBody.AddChild(collisionShape);
-		
-		parent.AddChild(staticBody);
+		parent.AddChild(meshInstance);
 	}
 
 	private void CreateKidneyLake(Vector3 pos, Node parent)

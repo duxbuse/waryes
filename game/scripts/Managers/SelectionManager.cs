@@ -176,6 +176,13 @@ public partial class SelectionManager : Node2D
         }
 
         OnSelectionChanged?.Invoke();
+        
+        // Cancel Deployment Mode if we selected something (or even if we didn't but clicked?)
+        // If we clicked a unit, we definitely want to stop placing.
+        if (SelectedUnits.Count > 0 && GameManager.Instance != null)
+        {
+             GameManager.Instance.SelectedCardForPlacement = null;
+        }
     }
     
     private void SelectSameTypeVisible(Vector2 screenPos)
@@ -213,12 +220,53 @@ public partial class SelectionManager : Node2D
         }
         
         OnSelectionChanged?.Invoke();
+        
+        if (SelectedUnits.Count > 0 && GameManager.Instance != null)
+        {
+             GameManager.Instance.SelectedCardForPlacement = null;
+        }
     }
 
     private Unit GetUnitAt(Vector2 screenPos)
     {
         var camera = GetViewport().GetCamera3D();
         if (camera == null) return null;
+
+        // Tactical Selection
+        var rtsCamera = camera as RTSCamera;
+        if (rtsCamera != null && rtsCamera.InTacticalView)
+        {
+            float closestDistSq = 1600.0f; // 40px radius squared (40*40)
+            Unit bestUnit = null;
+
+            foreach(var unit in UnitManager.Instance.GetActiveUnits())
+            {
+                 if (!IsInstanceValid(unit) || unit.IsQueuedForDeletion()) continue;
+                 
+                 // Ignore garrisoned units
+                 if (unit.IsGarrisoned || unit.TransportUnit != null) continue;
+                 
+                 // Calculate icon position logic matching UnitVisualController
+                 float yOffset = 2.0f;
+                 if (unit.Data.Tags.Contains("air")) yOffset += 8.0f; // Air units offset
+                 
+                 Vector3 iconPos = unit.GlobalPosition + new Vector3(0, yOffset, 0);
+                 
+                 if (camera.IsPositionBehind(iconPos)) continue;
+                 
+                 Vector2 unitScreenPos = camera.UnprojectPosition(iconPos);
+                 float distSq = unitScreenPos.DistanceSquaredTo(screenPos);
+                 
+                 if (distSq < closestDistSq)
+                 {
+                     closestDistSq = distSq;
+                     bestUnit = unit;
+                 }
+            }
+            
+            if (bestUnit != null) return bestUnit;
+            // Fallback to raycast if no icon clicked (maybe clicked ground near base?)
+        }
 
         var from = camera.ProjectRayOrigin(screenPos);
         var to = from + camera.ProjectRayNormal(screenPos) * 1000.0f;
@@ -269,6 +317,11 @@ public partial class SelectionManager : Node2D
         }
         
         OnSelectionChanged?.Invoke();
+
+        if (SelectedUnits.Count > 0 && GameManager.Instance != null)
+        {
+             GameManager.Instance.SelectedCardForPlacement = null;
+        }
     }
     
     private Rect2 GetScreenRect(Vector2 start, Vector2 end)
@@ -293,7 +346,7 @@ public partial class SelectionManager : Node2D
         return null;
     }
 
-    private void ClearSelection()
+    public void ClearSelection()
     {
         foreach (var unit in SelectedUnits)
         {

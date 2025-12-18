@@ -81,7 +81,7 @@ func bindv(caller_args: Array) -> Callable:
 
 
 @warning_ignore("untyped_declaration", "native_method_override", "unused_parameter")
-func call(arg0=null,
+func call(method: StringName = &"",
 	arg1=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
 	arg2=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
 	arg3=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,

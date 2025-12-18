@@ -59,6 +59,7 @@ namespace WarYes.Units.Components
         public void TakeDamage(float amount, Vector3 sourcePos)
         {
             if (_unit.IsGarrisoned) amount *= 0.5f;
+            else amount *= GetTerrainCoverModifier();
             
             Health -= amount;
             
@@ -107,6 +108,14 @@ namespace WarYes.Units.Components
            if (UnitManager.Instance == null) return;
            
            List<Unit> candidates = new List<Unit>();
+
+           // Restrict shooting from transports
+           if (_unit.TransportUnit != null) 
+           {
+               foreach (var w in _weapons) w.StopEngaging();
+               return;
+           }
+
            float maxUnitRange = 0;
            foreach(var w in _weapons) if(w.Range > maxUnitRange) maxUnitRange = w.Range;
            float maxRangeSq = maxUnitRange * maxUnitRange;
@@ -199,5 +208,26 @@ namespace WarYes.Units.Components
         }
 
         public List<Weapon> GetWeapons() => _weapons;
+        
+        private float GetTerrainCoverModifier()
+        {
+             var spaceState = GetWorld3D().DirectSpaceState;
+             var from = _unit.GlobalPosition + Vector3.Up * 0.5f;
+             var to = _unit.GlobalPosition + Vector3.Down * 2.0f;
+             var query = PhysicsRayQueryParameters3D.Create(from, to);
+             query.Exclude = new Godot.Collections.Array<Godot.Rid> { _unit.GetRid() };
+             
+             var result = spaceState.IntersectRay(query);
+             if (result.Count > 0)
+             {
+                 var col = result["collider"].As<Node>();
+                 if (col != null)
+                 {
+                     string name = col.Name.ToString();
+                     if (name.Contains("ForestFloor")) return 0.8f; // 20% damage reduction in forest
+                 }
+             }
+             return 1.0f;
+        }
     }
 }
