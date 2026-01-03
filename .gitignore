@@ -1,0 +1,18 @@
+# Claude Code local state files
+.claude/*.local.md
+
+# Node.js / Web project
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+web/playwright-report/
+web/test-results/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

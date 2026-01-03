@@ -71,6 +71,14 @@ namespace WarYes.Units.Components
         
         public override void _PhysicsProcess(double delta)
         {
+            // Update path visuals periodically regardless of movement state (allows planning in Setup phase)
+            _pathUpdateTimer -= (float)delta;
+            if (_pathUpdateTimer <= 0)
+            {
+                _pathUpdateTimer = PATH_UPDATE_INTERVAL;
+                UpdatePathVisuals();
+            }
+
             if (_unit == null || _unit.IsFrozen) return;
             if (!IsMoving) return;
             
@@ -79,10 +87,10 @@ namespace WarYes.Units.Components
                 IsMoving = false;
                 _unit.Velocity = Vector3.Zero;
                 // Clear path visuals when navigation finishes
-                if (_unit.Visuals != null)
-                {
-                    _unit.Visuals.UpdatePathVisuals(null, _unit.CurrentMoveMode);
-                }
+                // We don't clear immediately here to allow "finished" state to be seen, 
+                // but UpdatePathVisuals handles clearing if path is empty/unit stops.
+                // However, let's trigger one last update to ensure it clears if needed.
+                UpdatePathVisuals(); 
                 return;
             }
             
@@ -104,8 +112,6 @@ namespace WarYes.Units.Components
             float blinkerSpeed = 5.0f * (float)delta; 
             _laneOffset = Mathf.Lerp(_laneOffset, _targetLaneOffset, blinkerSpeed);
             
-            // Update path visuals every tick for smoothness
-            UpdatePathVisuals();
             CheckTerrain(); // Check terrain periodically
         }
 
@@ -144,6 +150,14 @@ namespace WarYes.Units.Components
             
             // 1. Current Path
             Vector3[] path = _navAgent.GetCurrentNavigationPath();
+            // GD.Print($"[Debug] UpdatePathVisuals for {_unit.Name}: Path Length = {path?.Length ?? 0}, IsFrozen={_unit.IsFrozen}, IsMoving={IsMoving}");
+            
+            // Fallback: If current path is empty but we have a target and are frozen/not moving, force calculation
+            if ((path == null || path.Length == 0) && !IsNavigationFinished())
+            {
+                 // GD.Print($"[Debug] Force calculating path for {_unit.Name} to {_navAgent.TargetPosition}");
+                 path = NavigationServer3D.MapGetPath(_navAgent.GetNavigationMap(), _unit.GlobalPosition, _navAgent.TargetPosition, true);
+            }
             
             // 2. Queued Paths
             List<(Vector3[], Unit.MoveMode)> queuedPathsList = new List<(Vector3[], Unit.MoveMode)>();

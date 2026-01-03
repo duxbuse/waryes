@@ -104,6 +104,12 @@ public partial class SelectionManager : Node2D
                 return; 
             }
 
+            // Fix: Ignore selection input if we are in placement mode
+            if (GameManager.Instance != null && GameManager.Instance.SelectedCardForPlacement != null)
+            {
+                return;
+            }
+
             GD.Print($"SelectionManager: Left mouse button, Pressed={mb.Pressed}, Dragging={_isDragging}");
             
             if (mb.Pressed)

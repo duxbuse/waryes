@@ -80,23 +80,23 @@ func bindv(caller_args: Array) -> Callable:
 	return _cb
 
 
-@warning_ignore("untyped_declaration", "native_method_override", "unused_parameter")
-func call(method: StringName = &"",
-	arg1=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg2=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg3=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg4=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg5=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg6=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg7=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg8=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
-	arg9=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE) -> Variant:
-
-	# This is a placeholder function signanture without any functionallity!
-	# It is used by the function doubler to double function signature of Callable:call()
-	# The doubled function calls direct _cb.callv(<arguments>) see GdUnitSpyFunctionDoubler:TEMPLATE_CALLABLE_CALL template
-	assert(false)
-	return null
+#@warning_ignore("untyped_declaration", "native_method_override", "unused_parameter")
+#func call(method: StringName = &"",
+#	arg1=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg2=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg3=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg4=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg5=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg6=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg7=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg8=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE,
+#	arg9=GdObjects.TYPE_VARARG_PLACEHOLDER_VALUE) -> Variant:
+#
+#	# This is a placeholder function signanture without any functionallity!
+#	# It is used by the function doubler to double function signature of Callable:call()
+#	# The doubled function calls direct _cb.callv(<arguments>) see GdUnitSpyFunctionDoubler:TEMPLATE_CALLABLE_CALL template
+#	assert(false)
+#	return null
 
 
 # Is not supported, see class description

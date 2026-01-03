@@ -132,24 +132,39 @@ public partial class InputManager : Node
             }
         }
         
-        if (@event is InputEventKey key && key.Pressed)
+        if (@event is InputEventKey key)
         {
-            if (key.Keycode == Key.Q)
+            if (key.Pressed)
             {
-                UnloadSelectedImmediate();
-                GetViewport().SetInputAsHandled();
-            }
-            else if (key.Keycode == Key.L)
-            {
-                SellSelected();
-                GetViewport().SetInputAsHandled();
-            }
-            else if (key.Keycode == Key.Enter)
-            {
-                if (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Setup)
+                if (key.Keycode == Key.Q)
                 {
-                    GameManager.Instance.StartBattle();
+                    UnloadSelectedImmediate();
                     GetViewport().SetInputAsHandled();
+                }
+                else if (key.Keycode == Key.L)
+                {
+                    SellSelected();
+                    GetViewport().SetInputAsHandled();
+                }
+                else if (key.Keycode == Key.Enter)
+                {
+                    if (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Setup)
+                    {
+                        GameManager.Instance.StartBattle();
+                        GetViewport().SetInputAsHandled();
+                    }
+                }
+            }
+            else // Released
+            {
+                if (key.Keycode == Key.Shift)
+                {
+                    if (GameManager.Instance.SelectedCardForPlacement != null)
+                    {
+                        GameManager.Instance.SelectedCardForPlacement = null;
+                        GD.Print("Shift released: Placement Cancelled");
+                        GetViewport().SetInputAsHandled();
+                    }
                 }
             }
         }

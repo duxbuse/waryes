@@ -1,0 +1,220 @@
+/**
+ * SelectionManager - Manages unit selection state and visualization
+ *
+ * Responsibilities:
+ * - Track selected units
+ * - Update selection visuals (rings, UI)
+ * - Handle selection operations (add, remove, clear, cycle)
+ */
+
+import type { Game } from '../../core/Game';
+import type { Unit } from '../units/Unit';
+
+export class SelectionManager {
+  private readonly game: Game;
+  private selectedUnits: Unit[] = [];
+  private selectedTypes: string[] = [];
+  private currentTypeIndex = 0;
+
+  // UI Elements
+  private selectionPanel: HTMLElement | null = null;
+  private selectionHeader: HTMLElement | null = null;
+  private selectionStats: HTMLElement | null = null;
+
+  constructor(game: Game) {
+    this.game = game;
+  }
+
+  initialize(): void {
+    this.selectionPanel = document.getElementById('selection-panel');
+    this.selectionHeader = document.getElementById('selection-header');
+    this.selectionStats = document.getElementById('selection-stats');
+  }
+
+  /**
+   * Set selection to specific units (replaces existing)
+   */
+  setSelection(units: Unit[]): void {
+    // Deselect old units
+    for (const unit of this.selectedUnits) {
+      unit.setSelected(false);
+    }
+
+    // Select new units
+    this.selectedUnits = [...units];
+    for (const unit of this.selectedUnits) {
+      unit.setSelected(true);
+    }
+
+    this.updateSelectedTypes();
+    this.updateUI();
+  }
+
+  /**
+   * Add units to current selection
+   */
+  addToSelection(units: Unit[]): void {
+    for (const unit of units) {
+      if (!this.selectedUnits.includes(unit)) {
+        this.selectedUnits.push(unit);
+        unit.setSelected(true);
+      }
+    }
+
+    this.updateSelectedTypes();
+    this.updateUI();
+  }
+
+  /**
+   * Toggle unit in selection
+   */
+  toggleSelection(unit: Unit): void {
+    const index = this.selectedUnits.indexOf(unit);
+    if (index >= 0) {
+      this.selectedUnits.splice(index, 1);
+      unit.setSelected(false);
+    } else {
+      this.selectedUnits.push(unit);
+      unit.setSelected(true);
+    }
+
+    this.updateSelectedTypes();
+    this.updateUI();
+  }
+
+  /**
+   * Clear all selection
+   */
+  clearSelection(): void {
+    for (const unit of this.selectedUnits) {
+      unit.setSelected(false);
+    }
+    this.selectedUnits = [];
+    this.selectedTypes = [];
+    this.currentTypeIndex = 0;
+    this.updateUI();
+  }
+
+  /**
+   * Select all units of a specific type
+   */
+  selectAllOfType(unitType: string): void {
+    const units = this.game.unitManager.getUnitsByType(unitType, 'player');
+    this.setSelection(units);
+  }
+
+  /**
+   * Select all player units
+   */
+  selectAllPlayerUnits(): void {
+    const units = this.game.unitManager.getAllUnits('player');
+    this.setSelection(units);
+  }
+
+  /**
+   * Cycle through different unit types in selection (Tab key)
+   */
+  cycleSelectionType(): void {
+    if (this.selectedTypes.length <= 1) return;
+
+    this.currentTypeIndex = (this.currentTypeIndex + 1) % this.selectedTypes.length;
+    const targetType = this.selectedTypes[this.currentTypeIndex];
+
+    if (targetType) {
+      // Filter selection to only the current type
+      const filteredUnits = this.selectedUnits.filter(u => u.unitType === targetType);
+      this.setSelection(filteredUnits);
+    }
+  }
+
+  /**
+   * Get currently selected units
+   */
+  getSelectedUnits(): Unit[] {
+    return [...this.selectedUnits];
+  }
+
+  /**
+   * Check if a unit is selected
+   */
+  isSelected(unit: Unit): boolean {
+    return this.selectedUnits.includes(unit);
+  }
+
+  /**
+   * Remove a unit from selection (e.g., when it dies)
+   */
+  removeFromSelection(unit: Unit): void {
+    const index = this.selectedUnits.indexOf(unit);
+    if (index >= 0) {
+      this.selectedUnits.splice(index, 1);
+      unit.setSelected(false);
+      this.updateSelectedTypes();
+      this.updateUI();
+    }
+  }
+
+  private updateSelectedTypes(): void {
+    const types = new Set<string>();
+    for (const unit of this.selectedUnits) {
+      types.add(unit.unitType);
+    }
+    this.selectedTypes = Array.from(types);
+    this.currentTypeIndex = 0;
+  }
+
+  private updateUI(): void {
+    if (!this.selectionPanel || !this.selectionHeader || !this.selectionStats) {
+      return;
+    }
+
+    if (this.selectedUnits.length === 0) {
+      this.selectionPanel.classList.remove('visible');
+      return;
+    }
+
+    this.selectionPanel.classList.add('visible');
+
+    // Update header
+    if (this.selectedUnits.length === 1) {
+      const unit = this.selectedUnits[0]!;
+      this.selectionHeader.textContent = unit.name;
+    } else {
+      this.selectionHeader.textContent = `${this.selectedUnits.length} units selected`;
+    }
+
+    // Update stats
+    if (this.selectedUnits.length === 1) {
+      const unit = this.selectedUnits[0]!;
+      this.selectionStats.innerHTML = `
+        <div>Type: ${unit.unitType}</div>
+        <div>Health: ${unit.health}/${unit.maxHealth}</div>
+        <div>Morale: ${Math.round(unit.morale)}%</div>
+        <div>Team: ${unit.team}</div>
+      `;
+    } else {
+      // Show breakdown by type
+      const typeCounts = new Map<string, number>();
+      let totalHealth = 0;
+      let totalMaxHealth = 0;
+
+      for (const unit of this.selectedUnits) {
+        typeCounts.set(unit.unitType, (typeCounts.get(unit.unitType) || 0) + 1);
+        totalHealth += unit.health;
+        totalMaxHealth += unit.maxHealth;
+      }
+
+      let statsHtml = '';
+      for (const [type, count] of typeCounts) {
+        statsHtml += `<div>${type}: ${count}</div>`;
+      }
+      statsHtml += `<div>Total HP: ${totalHealth}/${totalMaxHealth}</div>`;
+
+      this.selectionStats.innerHTML = statsHtml;
+    }
+  }
+
+  update(_dt: number): void {
+    // Could update selection visuals here if needed
+  }
+}

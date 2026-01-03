@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stellar Siege - Planetary Conflict</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a0a;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: #e0e0e0;
+      }
+
+      #game-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+      }
+
+      #game-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* UI Overlay Layer */
+      #ui-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      #ui-overlay > * {
+        pointer-events: auto;
+      }
+
+      /* Top Bar - Resources */
+      #top-bar {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 20px;
+        padding: 10px 20px;
+        background: rgba(0, 0, 0, 0.7);
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+      }
+
+      .resource {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+
+      .resource-value {
+        font-weight: bold;
+        color: #ffd700;
+      }
+
+      /* Score Display */
+      #score-display {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 10px 15px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+      }
+
+      .score-team {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin: 5px 0;
+      }
+
+      .team-blue { color: #4a9eff; }
+      .team-red { color: #ff4a4a; }
+
+      /* Selection Panel - Bottom Left */
+      #selection-panel {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        min-width: 200px;
+        max-width: 350px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        padding: 10px;
+        display: none;
+      }
+
+      #selection-panel.visible {
+        display: block;
+      }
+
+      .selection-header {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 8px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #333;
+      }
+
+      .selection-stats {
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      /* Deployment Panel - Right Side */
+      #deployment-panel {
+        position: absolute;
+        top: 60px;
+        right: 10px;
+        width: 250px;
+        max-height: calc(100% - 120px);
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        padding: 10px;
+        overflow-y: auto;
+        display: none;
+      }
+
+      #deployment-panel.visible {
+        display: block;
+      }
+
+      .unit-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        margin: 5px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .unit-card:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .unit-card.selected {
+        background: rgba(74, 158, 255, 0.3);
+        border: 1px solid #4a9eff;
+      }
+
+      .unit-icon {
+        width: 40px;
+        height: 40px;
+        background: #333;
+        border-radius: 4px;
+      }
+
+      .unit-info {
+        flex: 1;
+      }
+
+      .unit-name {
+        font-size: 12px;
+        font-weight: bold;
+      }
+
+      .unit-cost {
+        font-size: 11px;
+        color: #ffd700;
+      }
+
+      .unit-count {
+        font-size: 11px;
+        color: #888;
+      }
+
+      /* Minimap - Bottom Right */
+      #minimap {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 200px;
+        height: 200px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        border: 2px solid #333;
+      }
+
+      /* Phase Indicator */
+      #phase-indicator {
+        position: absolute;
+        top: 60px;
+        left: 10px;
+        padding: 8px 15px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      .phase-setup { color: #ffd700; }
+      .phase-battle { color: #4aff4a; }
+
+      /* Start Battle Button */
+      #start-battle-btn {
+        position: absolute;
+        bottom: 50%;
+        left: 50%;
+        transform: translate(-50%, 50%);
+        padding: 15px 40px;
+        font-size: 18px;
+        font-weight: bold;
+        background: linear-gradient(135deg, #4a9eff, #2070cc);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        display: none;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      #start-battle-btn:hover {
+        transform: translate(-50%, 50%) scale(1.05);
+        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+      }
+
+      #start-battle-btn.visible {
+        display: block;
+      }
+
+      /* Victory Screen */
+      #victory-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+
+      #victory-screen.visible {
+        display: flex;
+      }
+
+      .victory-text {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 20px;
+      }
+
+      .victory-blue { color: #4a9eff; }
+      .victory-red { color: #ff4a4a; }
+
+      /* Loading Screen */
+      #loading-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0a0a0a;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        z-index: 1000;
+      }
+
+      #loading-screen.hidden {
+        display: none;
+      }
+
+      .loading-title {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        color: #4a9eff;
+      }
+
+      .loading-bar {
+        width: 300px;
+        height: 4px;
+        background: #333;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .loading-progress {
+        height: 100%;
+        background: #4a9eff;
+        width: 0%;
+        transition: width 0.3s;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="ui-overlay">
+        <!-- Top Resource Bar -->
+        <div id="top-bar">
+          <div class="resource">
+            <span>Credits:</span>
+            <span class="resource-value" id="credits-value">1500</span>
+          </div>
+          <div class="resource">
+            <span>Income:</span>
+            <span class="resource-value" id="income-value">+10/tick</span>
+          </div>
+        </div>
+
+        <!-- Score Display -->
+        <div id="score-display">
+          <div class="score-team">
+            <span class="team-blue">Blue:</span>
+            <span class="team-blue" id="score-blue">0</span>
+          </div>
+          <div class="score-team">
+            <span class="team-red">Red:</span>
+            <span class="team-red" id="score-red">0</span>
+          </div>
+          <div style="font-size: 11px; color: #666; margin-top: 5px;">
+            First to 2000 wins
+          </div>
+        </div>
+
+        <!-- Phase Indicator -->
+        <div id="phase-indicator">
+          Phase: <span id="phase-text" class="phase-setup">SETUP</span>
+        </div>
+
+        <!-- Selection Panel -->
+        <div id="selection-panel">
+          <div class="selection-header" id="selection-header">No Selection</div>
+          <div class="selection-stats" id="selection-stats"></div>
+        </div>
+
+        <!-- Deployment Panel -->
+        <div id="deployment-panel">
+          <div style="font-weight: bold; margin-bottom: 10px;">Deploy Units</div>
+          <div id="unit-cards"></div>
+        </div>
+
+        <!-- Minimap -->
+        <div id="minimap">
+          <canvas id="minimap-canvas" width="200" height="200"></canvas>
+        </div>
+
+        <!-- Start Battle Button -->
+        <button id="start-battle-btn">START BATTLE</button>
+
+        <!-- Victory Screen -->
+        <div id="victory-screen">
+          <div class="victory-text" id="victory-text">VICTORY</div>
+          <button onclick="location.reload()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">
+            Play Again
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading Screen -->
+      <div id="loading-screen">
+        <div class="loading-title">STELLAR SIEGE</div>
+        <div class="loading-bar">
+          <div class="loading-progress" id="loading-progress"></div>
+        </div>
+        <div style="margin-top: 10px; color: #666;" id="loading-text">Initializing...</div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
