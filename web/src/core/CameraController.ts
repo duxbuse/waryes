@@ -19,6 +19,11 @@ export interface CameraConfig {
   edgePanThreshold: number;
   edgePanSpeed: number;
   smoothing: number;
+  // Map bounds - camera cannot pan outside these limits
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
 }
 
 const DEFAULT_CONFIG: CameraConfig = {
@@ -29,6 +34,11 @@ const DEFAULT_CONFIG: CameraConfig = {
   edgePanThreshold: 50, // pixels from edge
   edgePanSpeed: 30,
   smoothing: 0.1,
+  // Default bounds - will be updated based on map size
+  minX: -250,
+  maxX: 250,
+  minZ: -250,
+  maxZ: 250,
 };
 
 export class CameraController {
@@ -38,7 +48,8 @@ export class CameraController {
 
   // Input state
   private readonly keys = new Set<string>();
-  private mousePosition = { x: 0, y: 0 };
+  // Initialize to center of screen to prevent edge panning on startup
+  private mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   private isDragging = false;
   private lastDragPosition = { x: 0, y: 0 };
 
@@ -179,6 +190,18 @@ export class CameraController {
       }
     }
 
+    // Clamp target position to map bounds
+    this.targetPosition.x = THREE.MathUtils.clamp(
+      this.targetPosition.x,
+      this.config.minX,
+      this.config.maxX
+    );
+    this.targetPosition.z = THREE.MathUtils.clamp(
+      this.targetPosition.z,
+      this.config.minZ,
+      this.config.maxZ
+    );
+
     // Smooth camera movement
     const smoothing = 1 - Math.pow(this.config.smoothing, dt);
 
@@ -227,5 +250,17 @@ export class CameraController {
 
   get isTacticalView(): boolean {
     return this.camera.position.y > 60;
+  }
+
+  /**
+   * Set the camera bounds based on map dimensions
+   * Adds some padding so the camera can see the edges
+   */
+  setBounds(mapWidth: number, mapHeight: number): void {
+    const padding = 50; // Extra space beyond map edges
+    this.config.minX = -mapWidth / 2 - padding;
+    this.config.maxX = mapWidth / 2 + padding;
+    this.config.minZ = -mapHeight / 2 - padding;
+    this.config.maxZ = mapHeight / 2 + padding;
   }
 }

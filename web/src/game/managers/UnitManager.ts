@@ -176,6 +176,78 @@ export class UnitManager {
   }
 
   /**
+   * Issue fast move command to units (F + Right Click)
+   */
+  issueFastMoveCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+    if (units.length === 0) return;
+
+    const spacing = 4;
+    const unitsPerRow = Math.ceil(Math.sqrt(units.length));
+
+    units.forEach((unit, index) => {
+      const row = Math.floor(index / unitsPerRow);
+      const col = index % unitsPerRow;
+      const offsetX = (col - (unitsPerRow - 1) / 2) * spacing;
+      const offsetZ = row * spacing;
+      const unitTarget = target.clone().add(new THREE.Vector3(offsetX, 0, offsetZ));
+
+      if (queue) {
+        unit.queueFastMoveCommand(unitTarget);
+      } else {
+        unit.setFastMoveCommand(unitTarget);
+      }
+    });
+  }
+
+  /**
+   * Issue reverse command to units (R + Right Click)
+   */
+  issueReverseCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+    if (units.length === 0) return;
+
+    const spacing = 4;
+    const unitsPerRow = Math.ceil(Math.sqrt(units.length));
+
+    units.forEach((unit, index) => {
+      const row = Math.floor(index / unitsPerRow);
+      const col = index % unitsPerRow;
+      const offsetX = (col - (unitsPerRow - 1) / 2) * spacing;
+      const offsetZ = row * spacing;
+      const unitTarget = target.clone().add(new THREE.Vector3(offsetX, 0, offsetZ));
+
+      if (queue) {
+        unit.queueReverseCommand(unitTarget);
+      } else {
+        unit.setReverseCommand(unitTarget);
+      }
+    });
+  }
+
+  /**
+   * Issue attack-move command to units (A + Right Click)
+   */
+  issueAttackMoveCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+    if (units.length === 0) return;
+
+    const spacing = 4;
+    const unitsPerRow = Math.ceil(Math.sqrt(units.length));
+
+    units.forEach((unit, index) => {
+      const row = Math.floor(index / unitsPerRow);
+      const col = index % unitsPerRow;
+      const offsetX = (col - (unitsPerRow - 1) / 2) * spacing;
+      const offsetZ = row * spacing;
+      const unitTarget = target.clone().add(new THREE.Vector3(offsetX, 0, offsetZ));
+
+      if (queue) {
+        unit.queueAttackMoveCommand(unitTarget);
+      } else {
+        unit.setAttackMoveCommand(unitTarget);
+      }
+    });
+  }
+
+  /**
    * Sell selected units (refund credits)
    */
   sellSelected(): void {
@@ -195,6 +267,18 @@ export class UnitManager {
     for (const unit of this.units.values()) {
       unit.setFrozen(false);
     }
+  }
+
+  /**
+   * Destroy all units
+   */
+  destroyAllUnits(): void {
+    for (const unit of this.units.values()) {
+      this.game.scene.remove(unit.mesh);
+      unit.dispose();
+    }
+    this.units.clear();
+    this.game.selectionManager.clearSelection();
   }
 
   /**

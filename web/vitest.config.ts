@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
-import { resolve } from 'path';
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
     include: ['tests/unit/**/*.test.ts'],
+    pool: 'forks',
+    isolate: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -15,12 +16,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@core': resolve(__dirname, 'src/core'),
-      '@game': resolve(__dirname, 'src/game'),
-      '@ui': resolve(__dirname, 'src/ui'),
-      '@data': resolve(__dirname, 'src/data'),
-      '@utils': resolve(__dirname, 'src/utils'),
+      '@': './src',
+      '@core': './src/core',
+      '@game': './src/game',
+      '@ui': './src/ui',
+      '@data': './src/data',
+      '@utils': './src/utils',
     },
   },
 });

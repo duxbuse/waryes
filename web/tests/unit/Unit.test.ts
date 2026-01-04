@@ -11,6 +11,7 @@ import type { Game } from '../../src/core/Game';
 const mockGame = {
   unitManager: {
     destroyUnit: vi.fn(),
+    getAllUnits: vi.fn().mockReturnValue([]),
   },
   selectionManager: {
     removeFromSelection: vi.fn(),

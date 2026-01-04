@@ -25,6 +25,13 @@ export interface InputState {
     ctrl: boolean;
     alt: boolean;
   };
+  // Movement mode modifiers (Key + Right Click)
+  movementModifiers: {
+    reverse: boolean;    // R key - reverse/back up
+    fast: boolean;       // F key - fast move
+    attackMove: boolean; // A key - attack move
+    unload: boolean;     // E key - unload at position
+  };
 }
 
 export class InputManager {
@@ -49,6 +56,12 @@ export class InputManager {
         shift: false,
         ctrl: false,
         alt: false,
+      },
+      movementModifiers: {
+        reverse: false,
+        fast: false,
+        attackMove: false,
+        unload: false,
       },
     };
   }
@@ -166,7 +179,12 @@ export class InputManager {
     // Handle specific keys
     switch (event.code) {
       case 'Escape':
-        this.game.selectionManager.clearSelection();
+        // During battle phases, ESC toggles pause menu
+        if (this.game.phase === GamePhase.Setup || this.game.phase === GamePhase.Battle) {
+          this.game.togglePause();
+        } else {
+          this.game.selectionManager.clearSelection();
+        }
         break;
 
       case 'Enter':
@@ -181,11 +199,33 @@ export class InputManager {
         break;
 
       case 'KeyA':
-        // Select all player units
+        // Select all player units (Ctrl+A) or attack-move modifier
         if (event.ctrlKey) {
           event.preventDefault();
           this.game.selectionManager.selectAllPlayerUnits();
+        } else {
+          this.state.movementModifiers.attackMove = true;
         }
+        break;
+
+      case 'KeyR':
+        // Reverse movement modifier
+        this.state.movementModifiers.reverse = true;
+        break;
+
+      case 'KeyF':
+        // Fast move modifier
+        this.state.movementModifiers.fast = true;
+        break;
+
+      case 'KeyE':
+        // Unload at position modifier
+        this.state.movementModifiers.unload = true;
+        break;
+
+      case 'KeyZ':
+        // Toggle return-fire-only mode for selected units
+        this.toggleReturnFireOnly();
         break;
 
       case 'Delete':
@@ -202,6 +242,29 @@ export class InputManager {
     this.state.modifiers.shift = event.shiftKey;
     this.state.modifiers.ctrl = event.ctrlKey;
     this.state.modifiers.alt = event.altKey;
+
+    // Reset movement modifiers on key release
+    switch (event.code) {
+      case 'KeyA':
+        this.state.movementModifiers.attackMove = false;
+        break;
+      case 'KeyR':
+        this.state.movementModifiers.reverse = false;
+        break;
+      case 'KeyF':
+        this.state.movementModifiers.fast = false;
+        break;
+      case 'KeyE':
+        this.state.movementModifiers.unload = false;
+        break;
+    }
+  }
+
+  private toggleReturnFireOnly(): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    for (const unit of selectedUnits) {
+      unit.setReturnFireOnly(!unit.returnFireOnly);
+    }
   }
 
   private handleClickSelection(event: MouseEvent): void {
@@ -231,26 +294,34 @@ export class InputManager {
     const selectedUnits = this.game.selectionManager.getSelectedUnits();
     if (selectedUnits.length === 0) return;
 
+    const queue = this.state.modifiers.shift;
+
     // Check if clicked on an enemy
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
     const targetUnit = hits.length > 0 ? this.findUnitFromMesh(hits[0]!) : null;
 
     if (targetUnit && targetUnit.team !== 'player') {
       // Attack command
-      this.game.unitManager.issueAttackCommand(
-        selectedUnits,
-        targetUnit,
-        this.state.modifiers.shift // queue command
-      );
+      this.game.unitManager.issueAttackCommand(selectedUnits, targetUnit, queue);
     } else {
-      // Move command
+      // Movement command - check for movement modifiers
       const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
-      if (worldPos) {
-        this.game.unitManager.issueMoveCommand(
-          selectedUnits,
-          worldPos,
-          this.state.modifiers.shift // queue command
-        );
+      if (!worldPos) return;
+
+      const { reverse, fast, attackMove } = this.state.movementModifiers;
+
+      if (attackMove) {
+        // A + Right Click = Attack Move
+        this.game.unitManager.issueAttackMoveCommand(selectedUnits, worldPos, queue);
+      } else if (reverse) {
+        // R + Right Click = Reverse
+        this.game.unitManager.issueReverseCommand(selectedUnits, worldPos, queue);
+      } else if (fast) {
+        // F + Right Click = Fast Move
+        this.game.unitManager.issueFastMoveCommand(selectedUnits, worldPos, queue);
+      } else {
+        // Normal move
+        this.game.unitManager.issueMoveCommand(selectedUnits, worldPos, queue);
       }
     }
   }

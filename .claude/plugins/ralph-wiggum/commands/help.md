@@ -42,7 +42,7 @@ Start a Ralph loop in your current session.
 ```
 
 **Options:**
-- `--max-iterations <n>` - Max iterations before auto-stop
+- `--max-iterations <n>` - Max iterations before auto-stop (default: 10, use 0 for unlimited)
 - `--completion-promise <text>` - Promise phrase to signal completion
 
 **How it works:**

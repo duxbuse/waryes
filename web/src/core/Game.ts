@@ -6,6 +6,7 @@
  * - Game loop (update/render)
  * - All game managers
  * - Game state and phases
+ * - Screen management
  */
 
 import * as THREE from 'three';
@@ -13,9 +14,19 @@ import { InputManager } from '../game/managers/InputManager';
 import { CameraController } from './CameraController';
 import { SelectionManager } from '../game/managers/SelectionManager';
 import { UnitManager } from '../game/managers/UnitManager';
+import { DeploymentManager } from '../game/managers/DeploymentManager';
+import { EconomyManager } from '../game/managers/EconomyManager';
+import { CombatManager } from '../game/managers/CombatManager';
+import { ScreenManager, ScreenType } from './ScreenManager';
+import { MapGenerator } from '../game/map/MapGenerator';
+import { MapRenderer } from '../game/map/MapRenderer';
+import type { GameMap, DeckData, MapSize } from '../data/types';
 
 export enum GamePhase {
   Loading = 'loading',
+  MainMenu = 'mainMenu',
+  DeckBuilder = 'deckBuilder',
+  SkirmishSetup = 'skirmishSetup',
   Setup = 'setup',
   Battle = 'battle',
   Victory = 'victory',
@@ -32,18 +43,33 @@ export class Game {
   public readonly inputManager: InputManager;
   public readonly selectionManager: SelectionManager;
   public readonly unitManager: UnitManager;
+  public readonly deploymentManager: DeploymentManager;
+  public readonly economyManager: EconomyManager;
+  public readonly combatManager: CombatManager;
+  public readonly screenManager: ScreenManager;
+  public mapRenderer: MapRenderer | null = null;
 
   // Game state
   private _phase: GamePhase = GamePhase.Loading;
   private _isRunning = false;
   private _lastTime = 0;
+  private _isPaused = false;
+
+  // Pause menu elements
+  private pauseMenu: HTMLElement | null = null;
 
   // Fixed timestep for game logic
   private readonly FIXED_TIMESTEP = 1 / 60; // 60 Hz
   private _accumulator = 0;
 
+  // Current map
+  public currentMap: GameMap | null = null;
+
   // Ground plane for raycasting
   public readonly groundPlane: THREE.Mesh;
+
+  // Victory callback
+  private onVictoryCallback: ((winner: 'player' | 'enemy') => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     // Initialize Three.js renderer
@@ -72,7 +98,7 @@ export class Game {
     this.camera.position.set(0, 50, 50);
     this.camera.lookAt(0, 0, 0);
 
-    // Create ground plane
+    // Create ground plane (will be replaced by map terrain)
     const groundGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
     const groundMaterial = new THREE.MeshStandardMaterial({
       color: 0x2d4a3e,
@@ -85,22 +111,52 @@ export class Game {
     this.groundPlane.name = 'ground';
     this.scene.add(this.groundPlane);
 
-    // Add grid helper for visual reference
-    const gridHelper = new THREE.GridHelper(500, 100, 0x444444, 0x333333);
-    gridHelper.position.y = 0.01;
-    this.scene.add(gridHelper);
-
     // Initialize managers
     this.cameraController = new CameraController(this.camera, canvas);
     this.inputManager = new InputManager(this);
     this.selectionManager = new SelectionManager(this);
     this.unitManager = new UnitManager(this);
+    this.deploymentManager = new DeploymentManager(this);
+    this.economyManager = new EconomyManager(this);
+    this.combatManager = new CombatManager(this);
+    this.screenManager = new ScreenManager();
+    this.mapRenderer = new MapRenderer(this.scene);
 
     // Setup lighting
     this.setupLighting();
 
     // Handle window resize
     window.addEventListener('resize', this.onResize.bind(this));
+
+    // Setup pause menu
+    this.setupPauseMenu();
+  }
+
+  private setupPauseMenu(): void {
+    this.pauseMenu = document.getElementById('pause-menu');
+
+    // Resume button
+    document.getElementById('pause-resume-btn')?.addEventListener('click', () => {
+      this.togglePause();
+    });
+
+    // Settings button
+    document.getElementById('pause-settings-btn')?.addEventListener('click', () => {
+      // Could open settings from pause - for now just resume
+      this.togglePause();
+    });
+
+    // Surrender button
+    document.getElementById('pause-surrender-btn')?.addEventListener('click', () => {
+      this.togglePause();
+      this.onVictory('enemy');
+    });
+
+    // Quit to Menu button
+    document.getElementById('pause-quit-btn')?.addEventListener('click', () => {
+      this.togglePause();
+      this.returnToMainMenu();
+    });
   }
 
   private setupLighting(): void {
@@ -138,32 +194,13 @@ export class Game {
     this.inputManager.initialize();
     this.selectionManager.initialize();
     this.unitManager.initialize();
+    this.combatManager.initialize();
 
-    // Set initial phase
-    this.setPhase(GamePhase.Setup);
+    // Setup victory callback
+    this.economyManager.setVictoryCallback(this.onVictory.bind(this));
 
-    // Spawn some test units
-    this.spawnTestUnits();
-  }
-
-  private spawnTestUnits(): void {
-    // Spawn player units
-    for (let i = 0; i < 5; i++) {
-      this.unitManager.spawnUnit({
-        position: new THREE.Vector3(-20 + i * 10, 0, -30),
-        team: 'player',
-        unitType: 'infantry',
-      });
-    }
-
-    // Spawn enemy units
-    for (let i = 0; i < 3; i++) {
-      this.unitManager.spawnUnit({
-        position: new THREE.Vector3(-10 + i * 10, 0, 30),
-        team: 'enemy',
-        unitType: 'tank',
-      });
-    }
+    // Set initial phase - go to main menu
+    this.setPhase(GamePhase.MainMenu);
   }
 
   start(): void {
@@ -206,8 +243,11 @@ export class Game {
    * Fixed timestep update for game logic
    */
   private fixedUpdate(dt: number): void {
+    if (this._isPaused) return;
+
     if (this._phase === GamePhase.Battle) {
       this.unitManager.fixedUpdate(dt);
+      this.combatManager.processCombat(dt);
     }
   }
 
@@ -215,10 +255,21 @@ export class Game {
    * Variable timestep update for visuals
    */
   private update(dt: number): void {
-    this.cameraController.update(dt);
-    this.inputManager.update(dt);
-    this.selectionManager.update(dt);
-    this.unitManager.update(dt);
+    // Only update game systems in appropriate phases (and not paused)
+    if (!this._isPaused && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
+      this.cameraController.update(dt);
+      this.inputManager.update(dt);
+      this.selectionManager.update(dt);
+      this.unitManager.update(dt);
+    }
+
+    if (!this._isPaused && this._phase === GamePhase.Battle) {
+      this.economyManager.update(dt);
+      this.combatManager.update(dt);
+    }
+
+    // Screen manager always updates
+    this.screenManager.update(dt);
   }
 
   private render(): void {
@@ -235,6 +286,25 @@ export class Game {
     this.renderer.setSize(width, height);
   }
 
+  // Pause management
+  get isPaused(): boolean {
+    return this._isPaused;
+  }
+
+  togglePause(): void {
+    if (this._phase !== GamePhase.Setup && this._phase !== GamePhase.Battle) {
+      return; // Only allow pause during gameplay
+    }
+
+    this._isPaused = !this._isPaused;
+
+    if (this.pauseMenu) {
+      this.pauseMenu.classList.toggle('visible', this._isPaused);
+    }
+
+    console.log(`Game ${this._isPaused ? 'paused' : 'resumed'}`);
+  }
+
   // Phase management
   get phase(): GamePhase {
     return this._phase;
@@ -244,31 +314,143 @@ export class Game {
     const oldPhase = this._phase;
     this._phase = phase;
 
-    // Update UI
+    // Update UI elements
+    this.updatePhaseUI(phase);
+
+    console.log(`Phase changed: ${oldPhase} -> ${phase}`);
+  }
+
+  private updatePhaseUI(phase: GamePhase): void {
     const phaseText = document.getElementById('phase-text');
     const startButton = document.getElementById('start-battle-btn');
-    const deploymentPanel = document.getElementById('deployment-panel');
+    const topBar = document.getElementById('top-bar');
+    const scoreDisplay = document.getElementById('score-display');
+    const phaseIndicator = document.getElementById('phase-indicator');
+    const minimap = document.getElementById('minimap');
+
+    // Hide/show UI based on phase
+    const inBattle = phase === GamePhase.Setup || phase === GamePhase.Battle;
+
+    if (topBar) topBar.style.display = inBattle ? 'flex' : 'none';
+    if (scoreDisplay) scoreDisplay.style.display = inBattle ? 'block' : 'none';
+    if (phaseIndicator) phaseIndicator.style.display = inBattle ? 'block' : 'none';
+    if (minimap) minimap.style.display = inBattle ? 'block' : 'none';
 
     if (phaseText) {
-      phaseText.textContent = phase.toUpperCase();
-      phaseText.className = `phase-${phase}`;
+      if (phase === GamePhase.Setup) {
+        phaseText.textContent = 'DEPLOYMENT';
+        phaseText.className = 'phase-setup';
+      } else if (phase === GamePhase.Battle) {
+        phaseText.textContent = 'BATTLE';
+        phaseText.className = 'phase-battle';
+      }
     }
 
     if (startButton) {
       startButton.classList.toggle('visible', phase === GamePhase.Setup);
     }
+  }
 
-    if (deploymentPanel) {
-      deploymentPanel.classList.toggle('visible', phase === GamePhase.Setup);
+  /**
+   * Start a skirmish battle with the given configuration
+   */
+  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number): void {
+    // Generate map
+    const generator = new MapGenerator(mapSeed, mapSize);
+    this.currentMap = generator.generate();
+
+    // Render map
+    if (this.mapRenderer) {
+      this.mapRenderer.render(this.currentMap);
     }
 
-    console.log(`Phase changed: ${oldPhase} -> ${phase}`);
+    // Set camera bounds based on map size
+    this.cameraController.setBounds(this.currentMap.width, this.currentMap.height);
+
+    // Hide ground plane (map terrain replaces it)
+    this.groundPlane.visible = false;
+
+    // Initialize economy with capture zones
+    this.economyManager.initialize(this.currentMap.captureZones);
+
+    // Find player deployment zone
+    const playerZone = this.currentMap.deploymentZones.find(z => z.team === 'player');
+    if (playerZone) {
+      this.deploymentManager.initialize(deck, playerZone);
+    }
+
+    // Position camera at player deployment zone
+    if (playerZone) {
+      const centerX = (playerZone.minX + playerZone.maxX) / 2;
+      const centerZ = (playerZone.minZ + playerZone.maxZ) / 2;
+      this.cameraController.setPosition(centerX, centerZ);
+    }
+
+    // Spawn AI units for enemy team
+    this.spawnEnemyUnits();
+
+    // Enter setup phase
+    this.setPhase(GamePhase.Setup);
+    this.screenManager.switchTo(ScreenType.Battle);
+  }
+
+  private spawnEnemyUnits(): void {
+    if (!this.currentMap) return;
+
+    const enemyZone = this.currentMap.deploymentZones.find(z => z.team === 'enemy');
+    if (!enemyZone) return;
+
+    // Spawn some enemy units for testing
+    const enemyUnits = [
+      'vanguard_marines',
+      'vanguard_marines',
+      'vanguard_marines',
+      'vanguard_predator',
+      'vanguard_predator',
+    ];
+
+    enemyUnits.forEach((unitType, i) => {
+      const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.2 + 0.15 * i);
+      const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
+
+      this.unitManager.spawnUnit({
+        position: new THREE.Vector3(x, 0, z),
+        team: 'enemy',
+        unitType,
+      });
+    });
   }
 
   startBattle(): void {
     if (this._phase !== GamePhase.Setup) return;
+
+    // Hide deployment UI
+    this.deploymentManager.hide();
+
+    // Start battle
     this.setPhase(GamePhase.Battle);
     this.unitManager.unfreezeAll();
+  }
+
+  private onVictory(winner: 'player' | 'enemy'): void {
+    this.setPhase(GamePhase.Victory);
+
+    // Show victory screen
+    const victoryScreen = document.getElementById('victory-screen');
+    const victoryText = document.getElementById('victory-text');
+
+    if (victoryScreen && victoryText) {
+      if (winner === 'player') {
+        victoryText.textContent = 'VICTORY!';
+        victoryText.className = 'victory-text victory-blue';
+      } else {
+        victoryText.textContent = 'DEFEAT';
+        victoryText.className = 'victory-text victory-red';
+      }
+      victoryScreen.classList.add('visible');
+    }
+
+    this.onVictoryCallback?.(winner);
   }
 
   /**
@@ -282,8 +464,18 @@ export class Game {
     );
 
     raycaster.setFromCamera(mouse, this.camera);
-    const intersects = raycaster.intersectObject(this.groundPlane);
 
+    // Check map terrain first
+    if (this.mapRenderer) {
+      const mapGroup = this.mapRenderer.getMapGroup();
+      const intersects = raycaster.intersectObject(mapGroup, true);
+      if (intersects.length > 0) {
+        return intersects[0]!.point;
+      }
+    }
+
+    // Fall back to ground plane
+    const intersects = raycaster.intersectObject(this.groundPlane);
     if (intersects.length > 0) {
       return intersects[0]!.point;
     }
@@ -305,5 +497,29 @@ export class Game {
 
     const unitMeshes = this.unitManager.getAllUnitMeshes();
     return raycaster.intersectObjects(unitMeshes, true).map(i => i.object);
+  }
+
+  /**
+   * Return to main menu
+   */
+  returnToMainMenu(): void {
+    // Clean up current game state
+    this.unitManager.destroyAllUnits();
+
+    if (this.mapRenderer) {
+      this.mapRenderer.clear();
+    }
+
+    this.currentMap = null;
+    this.groundPlane.visible = true;
+
+    // Hide victory screen
+    const victoryScreen = document.getElementById('victory-screen');
+    if (victoryScreen) {
+      victoryScreen.classList.remove('visible');
+    }
+
+    this.setPhase(GamePhase.MainMenu);
+    this.screenManager.switchTo(ScreenType.MainMenu);
   }
 }
