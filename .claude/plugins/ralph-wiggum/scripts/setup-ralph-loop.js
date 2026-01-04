@@ -104,7 +104,7 @@ function main() {
         ? `"${completionPromise}"`
         : 'null';
 
-    // Get current time as Unix timestamp (milliseconds) - more reliable than ISO strings
+    // Get current time as Unix timestamp (milliseconds)
     const startedAtMs = Date.now();
 
     // Create state file

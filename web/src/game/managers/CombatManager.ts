@@ -197,6 +197,21 @@ export class CombatManager {
 
     // Apply damage
     if (result.damage > 0) {
+      // Register attack for kill attribution (find attacker by team)
+      const attackers = this.game.unitManager.getAllUnits(proj.sourceTeam);
+      if (attackers.length > 0) {
+        // Find closest attacker as the likely shooter
+        let closest = attackers[0]!;
+        let closestDist = closest.position.distanceTo(proj.start);
+        for (const attacker of attackers) {
+          const dist = attacker.position.distanceTo(proj.start);
+          if (dist < closestDist) {
+            closest = attacker;
+            closestDist = dist;
+          }
+        }
+        this.game.unitManager.registerAttack(closest, proj.targetUnit);
+      }
       proj.targetUnit.takeDamage(result.damage);
     }
 

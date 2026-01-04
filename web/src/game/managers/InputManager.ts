@@ -74,6 +74,7 @@ export class InputManager {
     canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
     canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
     canvas.addEventListener('dblclick', this.onDoubleClick.bind(this));
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Keyboard events
     window.addEventListener('keydown', this.onKeyDown.bind(this));
@@ -233,6 +234,24 @@ export class InputManager {
         // Sell/delete selected units (setup phase only)
         if (this.game.phase === GamePhase.Setup) {
           this.game.unitManager.sellSelected();
+        }
+        break;
+
+      // Control groups 1-9
+      case 'Digit1': case 'Digit2': case 'Digit3':
+      case 'Digit4': case 'Digit5': case 'Digit6':
+      case 'Digit7': case 'Digit8': case 'Digit9':
+        {
+          const groupNumber = parseInt(event.code.replace('Digit', ''));
+          if (event.ctrlKey) {
+            // Ctrl+Number: Assign control group
+            event.preventDefault();
+            this.game.selectionManager.assignControlGroup(groupNumber);
+          } else {
+            // Number: Recall control group
+            event.preventDefault();
+            this.game.selectionManager.recallControlGroup(groupNumber);
+          }
         }
         break;
     }

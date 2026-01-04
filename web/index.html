@@ -351,11 +351,172 @@
       .victory-text {
         font-size: 48px;
         font-weight: bold;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
       }
 
       .victory-blue { color: #4a9eff; }
       .victory-red { color: #ff4a4a; }
+
+      .victory-subtitle {
+        font-size: 18px;
+        color: #888;
+        margin-bottom: 30px;
+        font-style: italic;
+      }
+
+      .victory-stats {
+        background: rgba(30, 30, 50, 0.9);
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 20px 40px;
+        margin-bottom: 30px;
+        min-width: 400px;
+      }
+
+      .victory-stats h3 {
+        color: #4a9eff;
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 10px;
+      }
+
+      .victory-score {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .victory-score-value {
+        font-size: 28px;
+        font-weight: bold;
+      }
+
+      .victory-score-label {
+        font-size: 12px;
+        color: #888;
+      }
+
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 14px;
+      }
+
+      .stat-row .stat-label {
+        color: #aaa;
+      }
+
+      .stat-row .stat-value {
+        color: #fff;
+        font-weight: bold;
+      }
+
+      .victory-highlights {
+        display: flex;
+        gap: 15px;
+        margin: 15px 0;
+      }
+
+      .highlight-card {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+      }
+
+      .hero-card {
+        border: 1px solid rgba(255, 215, 0, 0.5);
+      }
+
+      .efficient-card {
+        border: 1px solid rgba(74, 255, 74, 0.5);
+      }
+
+      .highlight-title {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+      }
+
+      .highlight-unit {
+        font-size: 14px;
+        font-weight: bold;
+        color: #e0e0e0;
+        margin-bottom: 3px;
+      }
+
+      .highlight-stat {
+        font-size: 12px;
+        color: #ffd700;
+      }
+
+      .top-killers-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .killer-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 10px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+        font-size: 13px;
+      }
+
+      .killer-rank {
+        color: #888;
+        width: 20px;
+      }
+
+      .killer-name {
+        flex: 1;
+        color: #e0e0e0;
+      }
+
+      .killer-kills {
+        color: #ffd700;
+      }
+
+      .victory-buttons {
+        display: flex;
+        gap: 15px;
+      }
+
+      .victory-btn {
+        padding: 12px 30px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+
+      .victory-btn-primary {
+        background: linear-gradient(135deg, #4a9eff, #2070cc);
+        color: white;
+        border: none;
+      }
+
+      .victory-btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+      }
+
+      .victory-btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e0e0e0;
+        border: 1px solid #555;
+      }
+
+      .victory-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: #888;
+      }
 
       /* Loading Screen */
       #loading-screen {
@@ -473,9 +634,67 @@
         <!-- Victory Screen -->
         <div id="victory-screen">
           <div class="victory-text" id="victory-text">VICTORY</div>
-          <button onclick="location.reload()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">
-            Play Again
-          </button>
+          <div class="victory-subtitle" id="victory-subtitle">"The Emperor Protects"</div>
+
+          <div class="victory-stats">
+            <div class="victory-score">
+              <div class="victory-score-value">
+                <span class="team-blue" id="victory-score-blue">0</span>
+                <span style="color: #666;"> vs </span>
+                <span class="team-red" id="victory-score-red">0</span>
+              </div>
+              <div class="victory-score-label">Final Score</div>
+            </div>
+
+            <div class="victory-highlights" id="victory-highlights">
+              <div class="highlight-card hero-card">
+                <div class="highlight-title">Hero of the Match</div>
+                <div class="highlight-unit" id="hero-unit-name">---</div>
+                <div class="highlight-stat" id="hero-kills">0 kills</div>
+              </div>
+              <div class="highlight-card efficient-card">
+                <div class="highlight-title">Most Cost Effective</div>
+                <div class="highlight-unit" id="efficient-unit-name">---</div>
+                <div class="highlight-stat" id="efficient-ratio">0 kills/100cr</div>
+              </div>
+            </div>
+
+            <h3>YOUR STATS</h3>
+            <div class="stat-row">
+              <span class="stat-label">Time:</span>
+              <span class="stat-value" id="victory-time">00:00</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Units Deployed:</span>
+              <span class="stat-value" id="victory-units-deployed">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Units Lost:</span>
+              <span class="stat-value" id="victory-units-lost">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Enemy Units Destroyed:</span>
+              <span class="stat-value" id="victory-units-destroyed">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Credits Earned:</span>
+              <span class="stat-value" id="victory-credits-earned">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Credits Spent:</span>
+              <span class="stat-value" id="victory-credits-spent">0</span>
+            </div>
+
+            <div id="top-killers-section" style="margin-top: 15px;">
+              <h3>TOP PERFORMERS</h3>
+              <div id="top-killers-list" class="top-killers-list"></div>
+            </div>
+          </div>
+
+          <div class="victory-buttons">
+            <button id="victory-play-again-btn" class="victory-btn victory-btn-primary">Play Again</button>
+            <button id="victory-main-menu-btn" class="victory-btn victory-btn-secondary">Main Menu</button>
+          </div>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { UnitManager } from '../game/managers/UnitManager';
 import { DeploymentManager } from '../game/managers/DeploymentManager';
 import { EconomyManager } from '../game/managers/EconomyManager';
 import { CombatManager } from '../game/managers/CombatManager';
+import { AIManager } from '../game/managers/AIManager';
 import { ScreenManager, ScreenType } from './ScreenManager';
 import { MapGenerator } from '../game/map/MapGenerator';
 import { MapRenderer } from '../game/map/MapRenderer';
@@ -46,6 +47,7 @@ export class Game {
   public readonly deploymentManager: DeploymentManager;
   public readonly economyManager: EconomyManager;
   public readonly combatManager: CombatManager;
+  public readonly aiManager: AIManager;
   public readonly screenManager: ScreenManager;
   public mapRenderer: MapRenderer | null = null;
 
@@ -57,6 +59,11 @@ export class Game {
 
   // Pause menu elements
   private pauseMenu: HTMLElement | null = null;
+
+  // Last skirmish config (for rematch)
+  private lastDeck: DeckData | null = null;
+  private lastMapSize: MapSize = 'medium';
+  private lastMapSeed: number = 0;
 
   // Fixed timestep for game logic
   private readonly FIXED_TIMESTEP = 1 / 60; // 60 Hz
@@ -70,6 +77,14 @@ export class Game {
 
   // Victory callback
   private onVictoryCallback: ((winner: 'player' | 'enemy') => void) | null = null;
+
+  // Game stats tracking
+  private gameStartTime = 0;
+  private unitsDeployed = 0;
+  private unitsLost = 0;
+  private unitsDestroyed = 0;
+  private creditsEarned = 0;
+  private creditsSpent = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     // Initialize Three.js renderer
@@ -119,6 +134,7 @@ export class Game {
     this.deploymentManager = new DeploymentManager(this);
     this.economyManager = new EconomyManager(this);
     this.combatManager = new CombatManager(this);
+    this.aiManager = new AIManager(this);
     this.screenManager = new ScreenManager();
     this.mapRenderer = new MapRenderer(this.scene);
 
@@ -127,36 +143,6 @@ export class Game {
 
     // Handle window resize
     window.addEventListener('resize', this.onResize.bind(this));
-
-    // Setup pause menu
-    this.setupPauseMenu();
-  }
-
-  private setupPauseMenu(): void {
-    this.pauseMenu = document.getElementById('pause-menu');
-
-    // Resume button
-    document.getElementById('pause-resume-btn')?.addEventListener('click', () => {
-      this.togglePause();
-    });
-
-    // Settings button
-    document.getElementById('pause-settings-btn')?.addEventListener('click', () => {
-      // Could open settings from pause - for now just resume
-      this.togglePause();
-    });
-
-    // Surrender button
-    document.getElementById('pause-surrender-btn')?.addEventListener('click', () => {
-      this.togglePause();
-      this.onVictory('enemy');
-    });
-
-    // Quit to Menu button
-    document.getElementById('pause-quit-btn')?.addEventListener('click', () => {
-      this.togglePause();
-      this.returnToMainMenu();
-    });
   }
 
   private setupLighting(): void {
@@ -198,6 +184,15 @@ export class Game {
 
     // Setup victory callback
     this.economyManager.setVictoryCallback(this.onVictory.bind(this));
+
+    // Wire up pause menu buttons
+    this.setupPauseMenu();
+
+    // Wire up victory screen buttons
+    this.setupVictoryScreen();
+
+    // Wire up start battle button
+    this.setupStartBattleButton();
 
     // Set initial phase - go to main menu
     this.setPhase(GamePhase.MainMenu);
@@ -266,6 +261,7 @@ export class Game {
     if (!this._isPaused && this._phase === GamePhase.Battle) {
       this.economyManager.update(dt);
       this.combatManager.update(dt);
+      this.aiManager.update(dt);
     }
 
     // Screen manager always updates
@@ -355,6 +351,14 @@ export class Game {
    * Start a skirmish battle with the given configuration
    */
   startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number): void {
+    // Save configuration for rematch
+    this.lastDeck = deck;
+    this.lastMapSize = mapSize;
+    this.lastMapSeed = mapSeed;
+
+    // Reset stats for new game
+    this.resetStats();
+
     // Generate map
     const generator = new MapGenerator(mapSeed, mapSize);
     this.currentMap = generator.generate();
@@ -385,6 +389,9 @@ export class Game {
       const centerZ = (playerZone.minZ + playerZone.maxZ) / 2;
       this.cameraController.setPosition(centerX, centerZ);
     }
+
+    // Initialize AI manager
+    this.aiManager.initialize('medium');
 
     // Spawn AI units for enemy team
     this.spawnEnemyUnits();
@@ -427,6 +434,9 @@ export class Game {
     // Hide deployment UI
     this.deploymentManager.hide();
 
+    // Record battle start time
+    this.gameStartTime = performance.now();
+
     // Start battle
     this.setPhase(GamePhase.Battle);
     this.unitManager.unfreezeAll();
@@ -435,18 +445,97 @@ export class Game {
   private onVictory(winner: 'player' | 'enemy'): void {
     this.setPhase(GamePhase.Victory);
 
+    // Calculate game time
+    const gameTime = (performance.now() - this.gameStartTime) / 1000;
+    const minutes = Math.floor(gameTime / 60);
+    const seconds = Math.floor(gameTime % 60);
+    const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    // Get scores
+    const scores = this.economyManager.getScore();
+    const blueScore = scores.player;
+    const redScore = scores.enemy;
+
+    // Get kill stats
+    const killStats = this.unitManager.getKillStats('player');
+
     // Show victory screen
     const victoryScreen = document.getElementById('victory-screen');
     const victoryText = document.getElementById('victory-text');
+    const victorySubtitle = document.getElementById('victory-subtitle');
 
     if (victoryScreen && victoryText) {
       if (winner === 'player') {
         victoryText.textContent = 'VICTORY!';
         victoryText.className = 'victory-text victory-blue';
+        if (victorySubtitle) victorySubtitle.textContent = '"The Emperor Protects"';
       } else {
         victoryText.textContent = 'DEFEAT';
         victoryText.className = 'victory-text victory-red';
+        if (victorySubtitle) victorySubtitle.textContent = '"We shall return..."';
       }
+
+      // Update stats
+      const scoreBlue = document.getElementById('victory-score-blue');
+      const scoreRed = document.getElementById('victory-score-red');
+      const timeEl = document.getElementById('victory-time');
+      const unitsDeployedEl = document.getElementById('victory-units-deployed');
+      const unitsLostEl = document.getElementById('victory-units-lost');
+      const unitsDestroyedEl = document.getElementById('victory-units-destroyed');
+      const creditsEarnedEl = document.getElementById('victory-credits-earned');
+      const creditsSpentEl = document.getElementById('victory-credits-spent');
+
+      if (scoreBlue) scoreBlue.textContent = blueScore.toString();
+      if (scoreRed) scoreRed.textContent = redScore.toString();
+      if (timeEl) timeEl.textContent = timeString;
+      if (unitsDeployedEl) unitsDeployedEl.textContent = this.unitsDeployed.toString();
+      if (unitsLostEl) unitsLostEl.textContent = this.unitsLost.toString();
+      if (unitsDestroyedEl) unitsDestroyedEl.textContent = this.unitsDestroyed.toString();
+      if (creditsEarnedEl) creditsEarnedEl.textContent = this.creditsEarned.toString();
+      if (creditsSpentEl) creditsSpentEl.textContent = this.creditsSpent.toString();
+
+      // Update hero of match
+      const heroName = document.getElementById('hero-unit-name');
+      const heroKills = document.getElementById('hero-kills');
+      if (heroName && heroKills) {
+        if (killStats.heroOfMatch) {
+          heroName.textContent = killStats.heroOfMatch.name;
+          heroKills.textContent = `${killStats.heroOfMatch.kills} kills`;
+        } else {
+          heroName.textContent = '---';
+          heroKills.textContent = '0 kills';
+        }
+      }
+
+      // Update most cost effective
+      const efficientName = document.getElementById('efficient-unit-name');
+      const efficientRatio = document.getElementById('efficient-ratio');
+      if (efficientName && efficientRatio) {
+        if (killStats.mostCostEffective) {
+          efficientName.textContent = killStats.mostCostEffective.name;
+          efficientRatio.textContent = `${killStats.mostCostEffective.ratio.toFixed(1)} kills/100cr`;
+        } else {
+          efficientName.textContent = '---';
+          efficientRatio.textContent = '0 kills/100cr';
+        }
+      }
+
+      // Update top killers list
+      const topKillersList = document.getElementById('top-killers-list');
+      if (topKillersList) {
+        if (killStats.topKillers.length > 0) {
+          topKillersList.innerHTML = killStats.topKillers.map((unit, index) => `
+            <div class="killer-row">
+              <span class="killer-rank">${index + 1}.</span>
+              <span class="killer-name">${unit.name}</span>
+              <span class="killer-kills">${unit.kills} kills</span>
+            </div>
+          `).join('');
+        } else {
+          topKillersList.innerHTML = '<div class="killer-row"><span class="killer-name" style="color: #666;">No kills recorded</span></div>';
+        }
+      }
+
       victoryScreen.classList.add('visible');
     }
 
@@ -505,6 +594,7 @@ export class Game {
   returnToMainMenu(): void {
     // Clean up current game state
     this.unitManager.destroyAllUnits();
+    this.aiManager.clear();
 
     if (this.mapRenderer) {
       this.mapRenderer.clear();
@@ -521,5 +611,145 @@ export class Game {
 
     this.setPhase(GamePhase.MainMenu);
     this.screenManager.switchTo(ScreenType.MainMenu);
+  }
+
+  /**
+   * Reset stats for a new game
+   */
+  private resetStats(): void {
+    this.gameStartTime = 0;
+    this.unitsDeployed = 0;
+    this.unitsLost = 0;
+    this.unitsDestroyed = 0;
+    this.creditsEarned = 0;
+    this.creditsSpent = 0;
+  }
+
+  /**
+   * Increment units deployed counter
+   */
+  incrementUnitsDeployed(): void {
+    this.unitsDeployed++;
+  }
+
+  /**
+   * Increment units lost counter
+   */
+  incrementUnitsLost(): void {
+    this.unitsLost++;
+  }
+
+  /**
+   * Increment units destroyed counter
+   */
+  incrementUnitsDestroyed(): void {
+    this.unitsDestroyed++;
+  }
+
+  /**
+   * Track credits spent
+   */
+  trackCreditsSpent(amount: number): void {
+    this.creditsSpent += amount;
+  }
+
+  /**
+   * Track credits earned
+   */
+  trackCreditsEarned(amount: number): void {
+    this.creditsEarned += amount;
+  }
+
+  /**
+   * Setup pause menu event handlers
+   */
+  private setupPauseMenu(): void {
+    this.pauseMenu = document.getElementById('pause-menu');
+
+    const resumeBtn = document.getElementById('pause-resume-btn');
+    const settingsBtn = document.getElementById('pause-settings-btn');
+    const surrenderBtn = document.getElementById('pause-surrender-btn');
+    const quitBtn = document.getElementById('pause-quit-btn');
+
+    if (resumeBtn) {
+      resumeBtn.addEventListener('click', () => {
+        this.togglePause();
+      });
+    }
+
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        // TODO: Open settings from pause menu
+        console.log('Settings from pause menu not yet implemented');
+      });
+    }
+
+    if (surrenderBtn) {
+      surrenderBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to surrender?')) {
+          this.togglePause(); // Unpause first
+          this.onVictory('enemy'); // Trigger defeat
+        }
+      });
+    }
+
+    if (quitBtn) {
+      quitBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to quit to main menu?')) {
+          this._isPaused = false; // Reset pause state
+          this.returnToMainMenu();
+        }
+      });
+    }
+
+    // ESC key to toggle pause
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle) {
+          this.togglePause();
+        }
+      }
+    });
+  }
+
+  /**
+   * Setup victory screen event handlers
+   */
+  private setupVictoryScreen(): void {
+    const playAgainBtn = document.getElementById('victory-play-again-btn');
+    const mainMenuBtn = document.getElementById('victory-main-menu-btn');
+
+    if (playAgainBtn) {
+      playAgainBtn.addEventListener('click', () => {
+        // Hide victory screen
+        const victoryScreen = document.getElementById('victory-screen');
+        if (victoryScreen) {
+          victoryScreen.classList.remove('visible');
+        }
+
+        // Restart with same settings
+        if (this.lastDeck) {
+          this.startSkirmish(this.lastDeck, this.lastMapSize, this.lastMapSeed);
+        }
+      });
+    }
+
+    if (mainMenuBtn) {
+      mainMenuBtn.addEventListener('click', () => {
+        this.returnToMainMenu();
+      });
+    }
+  }
+
+  /**
+   * Setup start battle button
+   */
+  private setupStartBattleButton(): void {
+    const startBtn = document.getElementById('start-battle-btn');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        this.startBattle();
+      });
+    }
   }
 }

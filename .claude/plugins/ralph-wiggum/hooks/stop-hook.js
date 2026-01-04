@@ -89,17 +89,16 @@ async function main() {
 
     // Helper function to format elapsed time from Unix timestamp (milliseconds)
     function formatElapsedTime(startMs) {
-        if (!startMs || typeof startMs !== 'number') return 'unknown';
+        if (!startMs || typeof startMs !== 'number') {
+            return 'unknown';
+        }
 
         const nowMs = Date.now();
         const elapsedMs = nowMs - startMs;
 
         // Sanity check: if elapsed time is negative or unreasonably large, something went wrong
-        if (elapsedMs < 0) {
-            return 'unknown (clock skew)';
-        }
-        if (elapsedMs > 86400000 * 7) { // More than 7 days
-            return 'unknown (start time too old)';
+        if (elapsedMs < 0 || elapsedMs > 86400000 * 7) {
+            return 'unknown';
         }
 
         const seconds = Math.floor(elapsedMs / 1000) % 60;
@@ -194,18 +193,52 @@ async function main() {
         if (promiseMatch) {
             const promiseText = promiseMatch[1].trim();
             if (promiseText === completionPromise) {
-                console.error('');
-                console.error('========================================');
-                console.error('        RALPH LOOP COMPLETE');
-                console.error('========================================');
-                console.error(`  Reason:     Promise fulfilled!`);
-                console.error(`  Promise:    "${completionPromise}"`);
-                console.error(`  Iterations: ${iteration}`);
-                console.error(`  Total time: ${formatElapsedTime(startedAtMs)}`);
-                console.error('========================================');
-                console.error('');
-                fs.unlinkSync(RALPH_STATE_FILE);
-                process.exit(0);
+                // CONTRADICTION CHECK: If the response contains phrases indicating incompleteness,
+                // reject the promise even if it was output. This catches cases where Claude
+                // says "features remain to be implemented" but still outputs the promise.
+                const contradictionPhrases = [
+                    /remain(?:s|ing)?\s+to\s+be\s+implement/i,
+                    /not\s+(?:yet\s+)?(?:fully\s+)?(?:complete|implemented|finished|done)/i,
+                    /still\s+(?:need(?:s|ed)?|missing|lacking|incomplete)/i,
+                    /missing\s+(?:features?|functionality|systems?)/i,
+                    /incomplete/i,
+                    /cannot\s+output.*<promise>/i,
+                    /should\s+not\s+output.*<promise>/i,
+                    /criteria\s+(?:are\s+)?not\s+(?:yet\s+)?met/i,
+                    /gaps?\s+(?:in|remain)/i,
+                    /todo|to-do|to\s+do/i,
+                    /next\s+steps?\s+(?:would|should|will)\s+be/i,
+                ];
+
+                const hasContradiction = contradictionPhrases.some(pattern => pattern.test(lastOutput));
+
+                if (hasContradiction) {
+                    console.error('');
+                    console.error('========================================');
+                    console.error('    RALPH LOOP: PROMISE REJECTED');
+                    console.error('========================================');
+                    console.error('  The response contains the completion');
+                    console.error('  promise but ALSO contains phrases');
+                    console.error('  indicating work is NOT complete.');
+                    console.error('');
+                    console.error('  Continuing loop...');
+                    console.error('========================================');
+                    console.error('');
+                    // Don't exit - fall through to continue the loop
+                } else {
+                    console.error('');
+                    console.error('========================================');
+                    console.error('        RALPH LOOP COMPLETE');
+                    console.error('========================================');
+                    console.error(`  Reason:     Promise fulfilled!`);
+                    console.error(`  Promise:    "${completionPromise}"`);
+                    console.error(`  Iterations: ${iteration}`);
+                    console.error(`  Total time: ${formatElapsedTime(startedAtMs)}`);
+                    console.error('========================================');
+                    console.error('');
+                    fs.unlinkSync(RALPH_STATE_FILE);
+                    process.exit(0);
+                }
             }
         }
     }

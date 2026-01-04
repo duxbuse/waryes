@@ -24,6 +24,9 @@ export class UnitManager {
   private readonly units: Map<string, Unit> = new Map();
   private nextUnitId = 1;
 
+  // Track last attacker for kill attribution
+  private lastAttackers: Map<string, Unit> = new Map();
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -59,9 +62,30 @@ export class UnitManager {
   }
 
   /**
+   * Register an attack for kill attribution
+   */
+  registerAttack(attacker: Unit, target: Unit): void {
+    this.lastAttackers.set(target.id, attacker);
+  }
+
+  /**
    * Remove a unit from the game
    */
   destroyUnit(unit: Unit): void {
+    // Attribute kill to last attacker
+    const killer = this.lastAttackers.get(unit.id);
+    if (killer && this.units.has(killer.id)) {
+      killer.addKill();
+    }
+    this.lastAttackers.delete(unit.id);
+
+    // Track game stats
+    if (unit.team === 'player') {
+      this.game.incrementUnitsLost();
+    } else {
+      this.game.incrementUnitsDestroyed();
+    }
+
     // Remove from selection
     this.game.selectionManager.removeFromSelection(unit);
 
@@ -297,5 +321,52 @@ export class UnitManager {
     for (const unit of this.units.values()) {
       unit.update(dt);
     }
+  }
+
+  /**
+   * Get unit kill stats for victory screen
+   */
+  getKillStats(team: 'player' | 'enemy'): {
+    heroOfMatch: { name: string; kills: number } | null;
+    mostCostEffective: { name: string; ratio: number } | null;
+    topKillers: { name: string; kills: number }[];
+  } {
+    const teamUnits = this.getAllUnits(team);
+
+    // Find hero of match (highest kills)
+    let heroOfMatch: { name: string; kills: number } | null = null;
+    let maxKills = 0;
+    for (const unit of teamUnits) {
+      if (unit.kills > maxKills) {
+        maxKills = unit.kills;
+        heroOfMatch = { name: unit.name, kills: unit.kills };
+      }
+    }
+
+    // Find most cost effective (best kills/cost ratio)
+    let mostCostEffective: { name: string; ratio: number } | null = null;
+    let bestRatio = 0;
+    for (const unit of teamUnits) {
+      if (unit.kills > 0 && unit.cost > 0) {
+        const ratio = (unit.kills / unit.cost) * 100; // kills per 100 credits
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          mostCostEffective = { name: unit.name, ratio };
+        }
+      }
+    }
+
+    // Get top 5 killers
+    const sortedByKills = teamUnits
+      .filter(u => u.kills > 0)
+      .sort((a, b) => b.kills - a.kills)
+      .slice(0, 5)
+      .map(u => ({ name: u.name, kills: u.kills }));
+
+    return {
+      heroOfMatch,
+      mostCostEffective,
+      topKillers: sortedByKills,
+    };
   }
 }

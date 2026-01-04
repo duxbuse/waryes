@@ -66,6 +66,10 @@ export class Unit {
   private fireCooldown: number = 0;
   private readonly fireRate: number = 1; // shots per second base
 
+  // Kill tracking
+  private _kills: number = 0;
+  public readonly cost: number;
+
   // State
   private _health: number;
   private _morale: number = 100;
@@ -126,10 +130,12 @@ export class Unit {
       this.armor = { ...this.unitData.armor };
       this.weapons = [...this.unitData.weapons];
       this.transportCapacity = this.unitData.transportCapacity;
+      this.cost = this.unitData.cost;
     } else {
       this.maxHealth = config.maxHealth;
       this.speed = config.speed;
       this.rotationSpeed = config.rotationSpeed;
+      this.cost = 100; // Default cost
     }
 
     this._health = this.maxHealth;
@@ -281,6 +287,15 @@ export class Unit {
   // Routing state
   get isRouting(): boolean {
     return this._isRouting;
+  }
+
+  // Kill tracking
+  get kills(): number {
+    return this._kills;
+  }
+
+  addKill(): void {
+    this._kills++;
   }
 
   // Selection

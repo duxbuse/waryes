@@ -64,9 +64,11 @@ export class DeploymentManager {
     if (!this.deploymentPanel) {
       this.deploymentPanel = document.createElement('div');
       this.deploymentPanel.id = 'deployment-panel';
-      this.deploymentPanel.className = 'visible';
       document.getElementById('ui-overlay')?.appendChild(this.deploymentPanel);
     }
+    // Make sure panel is visible
+    this.deploymentPanel.classList.remove('hidden');
+    this.deploymentPanel.classList.add('visible');
 
     this.deploymentPanel.innerHTML = `
       <div class="deployment-header">

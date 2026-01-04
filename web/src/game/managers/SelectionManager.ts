@@ -16,6 +16,9 @@ export class SelectionManager {
   private selectedTypes: string[] = [];
   private currentTypeIndex = 0;
 
+  // Control groups (1-9)
+  private controlGroups: Map<number, Unit[]> = new Map();
+
   // UI Elements
   private selectionPanel: HTMLElement | null = null;
   private selectionHeader: HTMLElement | null = null;
@@ -125,6 +128,41 @@ export class SelectionManager {
       const filteredUnits = this.selectedUnits.filter(u => u.unitType === targetType);
       this.setSelection(filteredUnits);
     }
+  }
+
+  /**
+   * Assign current selection to a control group (Ctrl+1-9)
+   */
+  assignControlGroup(groupNumber: number): void {
+    if (groupNumber < 1 || groupNumber > 9) return;
+    if (this.selectedUnits.length === 0) return;
+
+    // Filter out dead units
+    const aliveUnits = this.selectedUnits.filter(u => u.health > 0);
+    this.controlGroups.set(groupNumber, [...aliveUnits]);
+  }
+
+  /**
+   * Recall a control group (1-9)
+   */
+  recallControlGroup(groupNumber: number): void {
+    if (groupNumber < 1 || groupNumber > 9) return;
+
+    const group = this.controlGroups.get(groupNumber);
+    if (!group || group.length === 0) return;
+
+    // Filter out dead units
+    const aliveUnits = group.filter(u => u.health > 0);
+    if (aliveUnits.length === 0) {
+      this.controlGroups.delete(groupNumber);
+      return;
+    }
+
+    // Update group to only include alive units
+    this.controlGroups.set(groupNumber, aliveUnits);
+
+    // Select the group
+    this.setSelection(aliveUnits);
   }
 
   /**

@@ -1,47 +1,31 @@
 ---
 description: "Start Ralph Wiggum loop in current session"
 argument-hint: "PROMPT [--max-iterations N] [--completion-promise TEXT]"
-allowed-tools: ["Write"]
+allowed-tools: ["Bash"]
 hide-from-slash-command-tool: "true"
 ---
 
 # Ralph Loop Command
 
-Parse the arguments from `$ARGUMENTS`:
-- Everything not starting with `--` is the PROMPT
-- `--max-iterations N` sets max iterations (default: 10, use 0 for unlimited)
-- `--completion-promise "TEXT"` sets completion promise (default: null)
+Run the setup script to create the state file with accurate timestamps:
 
-Create the state file at path `.claude/ralph-loop.local.md` (relative to project root) with this content:
-
-```
----
-active: true
-iteration: 1
-max_iterations: [MAX_ITERATIONS, default 10]
-completion_promise: [PROMISE in quotes, or null]
-started_at: "[current ISO timestamp]"
----
-
-[THE PROMPT TEXT]
+```bash
+node ".claude/plugins/ralph-wiggum/scripts/setup-ralph-loop.js" $ARGUMENTS
 ```
 
-After creating the file, output:
+The setup script will:
+1. Parse the arguments (prompt, --max-iterations, --completion-promise)
+2. Create the state file with an accurate Unix timestamp
+3. Display the startup banner and instructions
 
-```
-========================================
-        RALPH LOOP STARTED
-========================================
-  Iteration:  1/[MAX] or 1 (unlimited)
-  Promise:    "[PROMISE]" or none
-========================================
+After the script runs successfully, immediately begin working on the task described in the prompt.
 
-Task: [PROMPT]
+When you try to exit/complete, the Ralph loop stop hook will:
+- Check if you output `<promise>COMPLETION_TEXT</promise>`
+- If found AND no contradictions detected, the loop ends
+- Otherwise, it feeds the same prompt back for the next iteration
 
-To complete: output <promise>[PROMISE]</promise>
-(ONLY when the statement is TRUE - do not lie!)
-```
-
-Then work on the task. When you try to exit, the Ralph loop will feed the SAME PROMPT back to you for the next iteration.
-
-CRITICAL RULE: If a completion promise is set, you may ONLY output it when the statement is completely and unequivocally TRUE. Do not output false promises to escape the loop.
+CRITICAL RULES:
+1. If a completion promise is set, you may ONLY output it when the statement is completely and unequivocally TRUE
+2. Do not output false promises to escape the loop
+3. If you say things like "features remain to be implemented" or "not yet complete", the promise will be REJECTED even if you output it
