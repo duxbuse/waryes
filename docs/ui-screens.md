@@ -12,18 +12,21 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                         MAIN MENU                                │
 │                            │                                     │
-│         ┌──────────────────┼──────────────────┐                  │
-│         ▼                  ▼                  ▼                  │
-│   [SKIRMISH]         [DECK BUILDER]      [SETTINGS]              │
-│         │                  │                  │                  │
-│         │            (Back to Menu)     (Back to Menu)           │
-│         ▼                                                        │
-│  [SKIRMISH SETUP]                                                │
-│    - Select deck                                                 │
-│    - Configure map                                               │
-│    - [START BATTLE] / [BACK]                                     │
-│         │                                                        │
-│         ▼                                                        │
+│      ┌─────────────────────┼─────────────────────┐               │
+│      ▼                     ▼                     ▼               │
+│  [SKIRMISH]          [JOIN GAME]           [DECK BUILDER]        │
+│      │                     │                     │               │
+│      ▼                     ▼               (Back to Menu)        │
+│  [SKIRMISH SETUP]    [GAME CODE ENTRY]                           │
+│    - Select deck           │                                     │
+│    - Configure map         ▼                                     │
+│    - [HOST ONLINE]   [GAME LOBBY]                                │
+│      generates code    - Select team                             │
+│         │              - Select deck                             │
+│         │              - [READY]                                 │
+│         │                  │                                     │
+│         └────────┬─────────┘                                     │
+│                  ▼                                               │
 │  [BATTLE: SETUP PHASE]                                           │
 │    - Deploy units                                                │
 │    - [ESC] → Pause Menu                                          │
@@ -58,6 +61,7 @@ PAUSE MENU (accessible via ESC during battle):
 │       Planetary Conflict            │
 │                                     │
 │       [ SKIRMISH ]                  │
+│       [ JOIN GAME ]                 │
 │       [ DECK BUILDER ]              │
 │       [ SETTINGS ]                  │
 │       [ QUIT ]                      │
@@ -66,6 +70,7 @@ PAUSE MENU (accessible via ESC during battle):
 
 **Requirements:**
 - All buttons must navigate to their respective screens
+- JOIN GAME opens the game code entry screen
 - Background: Animated 3D scene or static artwork
 - Title with faction insignias
 
@@ -139,12 +144,26 @@ PAUSE MENU (accessible via ESC during battle):
 
 **Deck Building Mechanics:**
 - **50 Activation Points** maximum per deck
-- **Progressive Slot Costs**: Each category has escalating costs per slot
-  - Example (Infantry Division): INF slots cost [1,1,1,1,2,2,3,3], TNK slots cost [2,3,4,5]
+- **Transports are FREE**: Transport selection does NOT count toward activation points
+- **Division-Specific Slot Costs**: Each division has different escalating costs per category
+  - Divisions specialize in certain unit types with cheaper slot costs
+  - Example: Armored Division has cheap TNK slots [1,2,3] but expensive INF slots [2,3,4]
+  - Example: Infantry Division has cheap INF slots [1,1,2,3] but expensive TNK slots [2,3,4,5]
 - **Unit Availability**: Cards give X units (e.g., "4x Guardsmen" or "2x Leman Russ")
 - **Veterancy Trade-off**: Higher vet = fewer units per card
 - **Commander Limit**: Max 1-2 commander cards per deck
-- **Transport Selection**: Popup for infantry to choose transport type
+- **Transport Selection**: Popup for infantry to choose transport type (free, doesn't add to AP)
+
+**Division Slot Cost Examples:**
+
+| Division | LOG | INF | TNK | REC | AA | ART | HEL | AIR |
+|----------|-----|-----|-----|-----|-----|-----|-----|-----|
+| 1st Garrison (PDF) | 1,2,3 | 1,2,3 | 2,3,4 | 1,2,2 | 1,2,3 | 2,3,4 | 2,3,4 | 3,4,5 |
+| Armored Fist (PDF) | 1,2,2 | 1,2,3 | 1,2,3 | 1,2,3 | 1,2,3 | 2,2,3 | 2,3,4 | 3,4,5 |
+| Strike Force (VG) | 1,2,3 | 1,2,3 | 2,3,4 | 1,2,3 | 2,2,3 | 2,3,4 | 2,3,4 | 3,4,5 |
+| Armored Spearhead (VG) | 1,2,3 | 2,2,3 | 1,2,3 | 1,2,2 | 2,2,3 | 1,2,3 | 2,3,4 | 3,4,5 |
+
+*Lower numbers = cheaper slots, specialization advantage*
 
 ### Screen 4: Skirmish Setup
 
@@ -194,6 +213,169 @@ PAUSE MENU (accessible via ESC during battle):
   - **CLOSED**: Remove this slot (for smaller matches)
 - **AI Auto-fill**: When starting, any OPEN slots become CPU (Medium)
 - **Minimum**: At least 1 player per team required
+
+### Multiplayer Game Code System
+
+Players can host or join multiplayer games using a simple game code:
+
+```
+HOSTING A GAME:
+┌──────────────────────────────────────────────────────────────────────────┐
+│  SKIRMISH SETUP                                              [BACK]     │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │  MULTIPLAYER                                                        │ │
+│  │                                                                     │ │
+│  │  Game Code:  [ XKCD-4829 ]  [COPY]                                 │ │
+│  │                                                                     │ │
+│  │  Share this code with friends to let them join your game           │ │
+│  │                                                                     │ │
+│  │  Status: Waiting for players... (2/10 connected)                   │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│  TEAM 1 (DEFENDERS)                 TEAM 2 (ATTACKERS)                  │
+│  ┌────────────────────────────┐     ┌────────────────────────────┐      │
+│  │ 1. [YOU]  [▼ Your Deck   ] │     │ 1. [OPEN] [Waiting...]     │      │
+│  │ 2. [Player2] [Their Deck ] │     │ 2. [OPEN] [Waiting...]     │      │
+│  │ 3. [OPEN] [Waiting...]     │     │ 3. [OPEN] [Waiting...]     │      │
+│  │ 4. [OPEN] [Waiting...]     │     │ 4. [OPEN] [Waiting...]     │      │
+│  │ 5. [OPEN] [Waiting...]     │     │ 5. [OPEN] [Waiting...]     │      │
+│  └────────────────────────────┘     └────────────────────────────┘      │
+│                                                                          │
+│              [ START BATTLE ]    [ CANCEL HOSTING ]                      │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+```
+JOINING A GAME:
+┌──────────────────────────────────────────────────────────────────────────┐
+│  JOIN GAME                                                   [BACK]     │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  JOIN BY CODE                                                            │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │  Game Code: [____________]                        [ JOIN ]         │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                          │
+│  OPEN GAMES                                          [ REFRESH ]        │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │  Code       │ Host      │ Map      │ Players │ Status   │         │ │
+│  ├─────────────┼───────────┼──────────┼─────────┼──────────┼─────────┤ │
+│  │  XKCD-4829  │ Player1   │ Medium   │  3/10   │ In Lobby │ [JOIN]  │ │
+│  │  ABCD-1234  │ StarLord  │ Large    │  7/10   │ In Lobby │ [JOIN]  │ │
+│  │  BETA-5678  │ WarChief  │ Small    │  2/10   │ In Lobby │ [JOIN]  │ │
+│  │  GAME-9012  │ TankGuy   │ Medium   │  5/10   │ Starting │ [FULL]  │ │
+│  │  ALFA-3456  │ Commander │ Large    │ 10/10   │ In Game  │ [SPEC]  │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│  Filter: [ ] Show Full Games   [ ] Show Games In Progress               │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Game Browser Features:**
+- Lists all open lobbies waiting for players
+- Auto-refreshes every 5 seconds (manual refresh button available)
+- Shows game code, host name, map size, player count, and status
+- Status types: "In Lobby" (joinable), "Starting" (about to begin), "In Game" (spectate only)
+- Filter options to show/hide full games or games in progress
+- [JOIN] button for open slots, [FULL] for full games, [SPEC] for spectating
+
+```
+LOBBY VIEW (after joining):
+┌──────────────────────────────────────────────────────────────────────────┐
+│  GAME LOBBY - XKCD-4829                                      [LEAVE]    │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Host: Player1                        Map: Medium, Seed: 12345          │
+│                                                                          │
+│  TEAM 1 (DEFENDERS)                 TEAM 2 (ATTACKERS)                  │
+│  ┌────────────────────────────┐     ┌────────────────────────────┐      │
+│  │ 1. Player1 (Host) [Ready]  │     │ 1. [YOU]  [▼ Your Deck   ] │      │
+│  │ 2. Player2        [Ready]  │     │ 2. [OPEN] [Waiting...]     │      │
+│  │ 3. [OPEN] [Waiting...]     │     │ 3. [OPEN] [Waiting...]     │      │
+│  └────────────────────────────┘     └────────────────────────────┘      │
+│                                                                          │
+│  Select your deck and team, then click Ready                            │
+│                                                                          │
+│  [ SWITCH TEAM ]    [ READY ]                                           │
+│                                                                          │
+│  MAP PREVIEW                                                             │
+│  ┌───────────────────────────────────────┐                              │
+│  │  (Map preview - read only for guests) │                              │
+│  └───────────────────────────────────────┘                              │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Game Code Format:**
+- Format: `XXXX-NNNN` (4 letters + 4 numbers)
+- Example: `XKCD-4829`, `GAME-1234`, `BETA-5678`
+- Case-insensitive input
+- Codes expire after lobby closes or game starts
+
+**Multiplayer Flow:**
+
+```
+MULTIPLAYER GAME FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  HOST FLOW:                           JOINER FLOW:                          │
+│  ───────────                          ────────────                          │
+│  Main Menu                            Main Menu                             │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  Skirmish Setup                       [ JOIN GAME ] button                  │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  [ HOST ONLINE ]                      Enter Game Code                       │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  Game Code Generated ◄─── share ───► Code Entered                          │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  Configure teams,                     Join Lobby                            │
+│  map, wait for                            │                                 │
+│  players                                  ▼                                 │
+│      │                                Select team,                          │
+│      │                                deck, ready up                        │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  All players ready ◄───────────────► All players ready                     │
+│      │                                    │                                 │
+│      ▼                                    ▼                                 │
+│  [ START BATTLE ]                     (Auto-start)                          │
+│      │                                    │                                 │
+│      └──────────────► BATTLE ◄────────────┘                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Host Privileges:**
+- Set map size and seed
+- Kick players from lobby
+- Assign players to teams (drag & drop)
+- Fill empty slots with CPU
+- Start game when at least 1 player per team is ready
+
+**Player States in Lobby:**
+| State | Display | Can Change Settings |
+|-------|---------|---------------------|
+| Joining | "Connecting..." | No |
+| Selecting | Player name, deck dropdown | Yes |
+| Ready | Player name + [Ready] badge | No (must unready first) |
+| Disconnected | "Disconnected" (grayed) | N/A |
+
+**Network Considerations:**
+- WebSocket connection to game server
+- Host creates lobby, server assigns code
+- Joiners connect via code lookup
+- Game state synchronized during battle
+- Reconnection support (30 second window)
 
 ### Screen 5: Battle Screen - Setup Phase
 

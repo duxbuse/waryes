@@ -1,30 +1,37 @@
 {
-    "id": "sdf_command_squad",
-    "name": "SDF Command Squad",
-    "cost": 120,
-    "icon": "assets/icons/units/sdf/sdf_command_squad.png",
-    "health": 10,
-    "speed": {
-        "road": 30,
-        "off_road": 25,
-        "rotation_speed": 180
-    },
-    "armor": {
-        "front": 0,
-        "side": 0,
-        "rear": 0,
-        "top": 0
-    },
-    "optics": "good",
-    "stealth": "poor",
-    "forward_deploy": 0,
-    "is_commander": true,
-    "weapons": [
-        {
-            "weapon_id": "sdf_laser_rifle",
-            "count": 4,
-            "max_ammo": 20
-        }
-    ],
-    "category": "LOG"
+  "id": "sdf_command_squad",
+  "name": "SDF Command Squad",
+  "cost": 120,
+  "icon": "assets/icons/units/sdf/sdf_command_squad.png",
+  "health": 10,
+  "speed": {
+    "road": 30,
+    "offRoad": 25,
+    "rotation": 180
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "optics": "good",
+  "stealth": "poor",
+  "forwardDeploy": 0,
+  "isCommander": true,
+  "weapons": [
+    {
+      "weaponId": "sdf_laser_rifle",
+      "count": 4,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "LOG",
+  "tags": [],
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
 }

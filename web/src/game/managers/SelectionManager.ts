@@ -49,6 +49,11 @@ export class SelectionManager {
       unit.setSelected(true);
     }
 
+    // Play selection sound if units were selected
+    if (units.length > 0) {
+      this.game.audioManager.playSound('unit_select');
+    }
+
     this.updateSelectedTypes();
     this.updateUI();
   }

@@ -43,7 +43,7 @@ function main() {
 
     // Parse arguments
     const promptParts = [];
-    let maxIterations = 10;  // Default to 10 for safety
+    let maxIterations = 20;  // Default to 20 for safety
     let completionPromise = 'null';
 
     let i = 0;

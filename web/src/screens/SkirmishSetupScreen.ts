@@ -6,6 +6,7 @@ import { ScreenType, type Screen } from '../core/ScreenManager';
 import type { DeckData, MapSize } from '../data/types';
 import { loadSavedDecks } from './DeckBuilderScreen';
 import { FACTIONS, getDivisionsByFaction } from '../data/factions';
+import { STARTER_DECKS } from '../data/starterDecks';
 
 // Create a default deck for quick start
 function createDefaultDeck(): DeckData {
@@ -21,10 +22,11 @@ function createDefaultDeck(): DeckData {
     units: [
       { unitId: 'pdf_infantry', veterancy: 0 },
       { unitId: 'pdf_infantry', veterancy: 0 },
-      { unitId: 'pdf_heavy_weapons', veterancy: 0 },
+      { unitId: 'pdf_infantry', veterancy: 0 },
+      { unitId: 'pdf_heavyweapons', veterancy: 0 },
       { unitId: 'pdf_leman_russ', veterancy: 0 },
     ],
-    activationPoints: 8,
+    activationPoints: 10,
   };
 }
 
@@ -48,10 +50,12 @@ export interface SkirmishConfig {
 export interface SkirmishSetupCallbacks {
   onBack: () => void;
   onStartBattle: (config: SkirmishConfig) => void;
+  onHostOnline: (config: SkirmishConfig) => void;
 }
 
 export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Screen {
-  let selectedDeck: DeckData | null = null;
+  // Default to Quick Start deck
+  let selectedDeck: DeckData | null = createDefaultDeck();
   let mapSize: MapSize = 'medium';
   let mapSeed = Math.floor(Math.random() * 999999);
 
@@ -133,6 +137,9 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       </div>
 
       <div class="skirmish-footer">
+        <button id="skirmish-host-online-btn" class="host-online-btn">
+          HOST ONLINE
+        </button>
         <button id="skirmish-start-btn" class="start-btn" disabled>
           START BATTLE
         </button>
@@ -321,6 +328,17 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       cursor: pointer;
     }
 
+    .deck-select {
+      padding: 3px 6px;
+      font-size: 10px;
+      background: #1a1a2a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      border-radius: 3px;
+      cursor: pointer;
+      max-width: 120px;
+    }
+
     .setup-section h3 {
       margin: 0 0 15px 0;
       font-size: 14px;
@@ -486,6 +504,30 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       color: #666;
       cursor: not-allowed;
     }
+
+    .skirmish-footer {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .host-online-btn {
+      padding: 15px 60px;
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+      border: none;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .host-online-btn:hover {
+      transform: scale(1.02);
+      box-shadow: 0 0 30px rgba(255, 152, 0, 0.4);
+    }
   `;
   document.head.appendChild(style);
 
@@ -495,7 +537,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     select.innerHTML = `
       <option value="">-- Select a deck --</option>
-      <option value="default">Quick Start (Default Deck)</option>
+      <option value="default" selected>Quick Start (Default Deck)</option>
       ${decks.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
     `;
   }
@@ -523,6 +565,10 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
                 <option value="Easy" ${slot.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
                 <option value="Medium" ${slot.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
                 <option value="Hard" ${slot.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
+              </select>
+              <select class="deck-select" data-team="${teamNum}" data-slot="${index}">
+                <option value="">Random Deck</option>
+                ${STARTER_DECKS.map(d => `<option value="${d.id}" ${slot.deckId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
               </select>
             ` : ''}
           </div>
@@ -577,6 +623,25 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         const slot = team[slotIndex];
         if (slot) {
           slot.difficulty = target.value as CPUDifficulty;
+        }
+      });
+    });
+
+    // Deck selects for CPUs
+    element.querySelectorAll('.deck-select').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        const teamNum = parseInt(target.dataset['team']!);
+        const slotIndex = parseInt(target.dataset['slot']!);
+
+        const team = teamNum === 1 ? team1 : team2;
+        const slot = team[slotIndex];
+        if (slot) {
+          if (target.value) {
+            slot.deckId = target.value;
+          } else {
+            delete slot.deckId;
+          }
         }
       });
     });
@@ -712,6 +777,60 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         ctx.lineWidth = 2;
         ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
       }
+
+      // Draw resupply points as directional arrows at map edges
+      for (const point of map.resupplyPoints) {
+        const screenX = (point.x + map.width / 2) * scale;
+        const screenY = (point.z + map.height / 2) * scale;
+        const r = point.radius * scale;
+
+        const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
+
+        // Arrow dimensions
+        const arrowLength = r * 2.5;
+        const arrowWidth = r * 1.0;
+        const arrowHeadWidth = r * 1.5;
+        const arrowHeadLength = r * 0.8;
+
+        // Offset arrow base outside the map edge
+        const outsideOffset = r * 0.5;
+        const baseY = point.team === 'player'
+          ? screenY - outsideOffset  // Player: offset up (outside top edge)
+          : screenY + outsideOffset; // Enemy: offset down (outside bottom edge)
+
+        // Save context and position at arrow base
+        ctx.save();
+        ctx.translate(screenX, baseY);
+
+        // Rotation: arrow shape points UP (-Y), flip based on team
+        // Player arrows point DOWN into battlefield, enemy arrows point UP
+        ctx.rotate(Math.PI - point.direction);
+
+        // Draw arrow shape (points UP in local space)
+        ctx.beginPath();
+        ctx.moveTo(-arrowWidth / 2, 0);
+        ctx.lineTo(-arrowWidth / 2, -arrowLength + arrowHeadLength);
+        ctx.lineTo(-arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+        ctx.lineTo(0, -arrowLength); // Arrow tip
+        ctx.lineTo(arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+        ctx.lineTo(arrowWidth / 2, -arrowLength + arrowHeadLength);
+        ctx.lineTo(arrowWidth / 2, 0);
+        ctx.closePath();
+
+        ctx.fillStyle = color + 'A0'; // Semi-transparent
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Draw circle at base (spawn point)
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.restore();
+      }
     });
   }
 
@@ -769,6 +888,18 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     element.querySelector('#skirmish-start-btn')?.addEventListener('click', () => {
       if (selectedDeck) {
         callbacks.onStartBattle({
+          deck: selectedDeck,
+          mapSize,
+          mapSeed,
+          team1,
+          team2,
+        });
+      }
+    });
+
+    element.querySelector('#skirmish-host-online-btn')?.addEventListener('click', () => {
+      if (selectedDeck) {
+        callbacks.onHostOnline({
           deck: selectedDeck,
           mapSize,
           mapSeed,

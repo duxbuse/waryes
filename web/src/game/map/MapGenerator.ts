@@ -16,6 +16,8 @@ import type {
   Building,
   CaptureZone,
   DeploymentZone,
+  EntryPoint,
+  ResupplyPoint,
   TerrainCell,
   TerrainType,
   CoverType,
@@ -100,6 +102,12 @@ export class MapGenerator {
     // Update terrain grid with all features
     this.updateTerrainWithFeatures(roads, buildings);
 
+    // Generate entry points for reinforcements
+    const entryPoints = this.generateEntryPoints(deploymentZones, roads);
+
+    // Generate resupply points for reinforcement spawning
+    const resupplyPoints = this.generateResupplyPoints(deploymentZones, roads);
+
     return {
       seed: this.seed,
       size: this.size,
@@ -110,6 +118,8 @@ export class MapGenerator {
       buildings,
       captureZones,
       deploymentZones,
+      entryPoints,
+      resupplyPoints,
     };
   }
 
@@ -628,5 +638,253 @@ export class MapGenerator {
       case 'full': return 0.8;
       default: return 0;
     }
+  }
+
+  /**
+   * Generate entry points for reinforcements
+   * Places 2-4 entry points per team at map edges where roads intersect
+   */
+  private generateEntryPoints(deploymentZones: DeploymentZone[], roads: Road[]): EntryPoint[] {
+    const entryPoints: EntryPoint[] = [];
+
+    for (const zone of deploymentZones) {
+      const zoneCenterX = (zone.minX + zone.maxX) / 2;
+      const zoneCenterZ = (zone.minZ + zone.maxZ) / 2;
+
+      // Find roads that intersect with deployment zone edges
+      const edgeRoads: Array<{ x: number; z: number; type: 'highway' | 'secondary' | 'dirt' }> = [];
+
+      for (const road of roads) {
+        // Check if road intersects zone edge
+        for (const point of road.points) {
+          const isAtEdge =
+            (Math.abs(point.x - zone.minX) < 10 || Math.abs(point.x - zone.maxX) < 10) ||
+            (Math.abs(point.z - zone.minZ) < 10 || Math.abs(point.z - zone.maxZ) < 10);
+
+          if (isAtEdge) {
+            let type: 'highway' | 'secondary' | 'dirt' = 'secondary';
+            if (road.width >= 8) type = 'highway';
+            else if (road.width < 5) type = 'dirt';
+
+            edgeRoads.push({ x: point.x, z: point.z, type });
+            break; // Only one point per road
+          }
+        }
+      }
+
+      // If we found roads, use them. Otherwise create default entry points
+      if (edgeRoads.length > 0) {
+        // Use up to 4 road entry points
+        const selectedRoads = edgeRoads.slice(0, 4);
+        selectedRoads.forEach((road, index) => {
+          entryPoints.push({
+            id: `${zone.team}_entry_${index}`,
+            team: zone.team,
+            x: road.x,
+            z: road.z,
+            type: road.type,
+            spawnRate: this.getSpawnRate(road.type),
+            queue: [],
+            rallyPoint: null,
+          });
+        });
+      } else {
+        // Create default entry points if no roads found
+        const defaultPositions = [
+          { x: zoneCenterX - 20, z: zoneCenterZ },
+          { x: zoneCenterX + 20, z: zoneCenterZ },
+          { x: zoneCenterX, z: zoneCenterZ - 20 },
+        ];
+
+        defaultPositions.forEach((pos, index) => {
+          entryPoints.push({
+            id: `${zone.team}_entry_${index}`,
+            team: zone.team,
+            x: pos.x,
+            z: pos.z,
+            type: 'secondary',
+            spawnRate: 3,
+            queue: [],
+            rallyPoint: null,
+          });
+        });
+      }
+
+      // Always add one air entry point at map edge center
+      const airX = zoneCenterX;
+      const airZ = zone.team === 'player' ? 0 : this.height;
+      entryPoints.push({
+        id: `${zone.team}_air_entry`,
+        team: zone.team,
+        x: airX,
+        z: airZ,
+        type: 'air',
+        spawnRate: 5, // Slower for air units
+        queue: [],
+        rallyPoint: null,
+      });
+    }
+
+    return entryPoints;
+  }
+
+  /**
+   * Get spawn rate based on entry point type
+   * Highway = fast (2s), Secondary = medium (3s), Dirt = slow (5s), Air = slow (5s)
+   */
+  private getSpawnRate(type: 'highway' | 'secondary' | 'dirt' | 'air'): number {
+    switch (type) {
+      case 'highway': return 2;
+      case 'secondary': return 3;
+      case 'dirt': return 5;
+      case 'air': return 5;
+      default: return 3;
+    }
+  }
+
+  /**
+   * Generate resupply points for reinforcement spawning
+   * Places 2-5 resupply points per team at the MAP EDGE, pointing into the battlefield
+   * Positions are based on actual terrain: roads, forest gaps, flanking paths
+   * NOT symmetric - each team gets positions based on their side's terrain
+   */
+  private generateResupplyPoints(deploymentZones: DeploymentZone[], roads: Road[]): ResupplyPoint[] {
+    const resupplyPoints: ResupplyPoint[] = [];
+    const sizeConfig = MAP_SIZES[this.size];
+
+    // Determine number of resupply points based on map size (2-5 per team)
+    const numPerTeam = sizeConfig.zones <= 3 ? 2 : sizeConfig.zones <= 5 ? 3 : 5;
+
+    for (const zone of deploymentZones) {
+      const team = zone.team;
+
+      // Position at map edge - player at bottom (negative Z), enemy at top (positive Z)
+      const edgeZ = team === 'player' ? -this.height / 2 : this.height / 2;
+      // Direction pointing INTO the battlefield
+      const direction = team === 'player' ? 0 : Math.PI;
+
+      // Collect candidate positions with scores
+      const candidates: { x: number; score: number; type: string }[] = [];
+
+      // 1. Find road intersections at this team's edge (highest priority)
+      for (const road of roads) {
+        for (let i = 0; i < road.points.length - 1; i++) {
+          const p1 = road.points[i]!;
+          const p2 = road.points[i + 1]!;
+
+          // Check if road segment crosses near the edge
+          const crossesEdge = (team === 'player')
+            ? (p1.z <= edgeZ + 30 || p2.z <= edgeZ + 30)
+            : (p1.z >= edgeZ - 30 || p2.z >= edgeZ - 30);
+
+          if (crossesEdge) {
+            // Interpolate to find x position at the edge
+            const t = (team === 'player')
+              ? Math.max(0, Math.min(1, (edgeZ - p1.z) / (p2.z - p1.z + 0.001)))
+              : Math.max(0, Math.min(1, (edgeZ - p1.z) / (p2.z - p1.z + 0.001)));
+            const x = p1.x + (p2.x - p1.x) * Math.max(0, Math.min(1, t));
+
+            // Score based on road width (highways best)
+            const score = 100 + road.width * 15;
+            candidates.push({ x, score, type: 'road' });
+          }
+        }
+      }
+
+      // 2. Find forest gaps / open terrain paths at edge
+      const cols = this.terrain[0]?.length ?? 0;
+      const edgeRow = team === 'player' ? 0 : this.terrain.length - 1;
+      const scanDepth = 5; // Check a few rows in from edge
+
+      for (let col = 0; col < cols; col++) {
+        const worldX = col * this.cellSize - this.width / 2;
+
+        // Check if this column has open terrain (not forest) near edge
+        let openCount = 0;
+        let forestCount = 0;
+        for (let d = 0; d < scanDepth && d < this.terrain.length; d++) {
+          const row = team === 'player' ? d : this.terrain.length - 1 - d;
+          const cell = this.terrain[row]?.[col];
+          if (cell) {
+            if (cell.type === 'forest') forestCount++;
+            else if (cell.type === 'field' || cell.type === 'road') openCount++;
+          }
+        }
+
+        // Open paths through otherwise forested areas are good flanking routes
+        if (openCount >= 3) {
+          // Check if surrounded by forest (making it a sneaky path)
+          const leftForest = col > 0 && this.terrain[edgeRow]?.[col - 1]?.type === 'forest';
+          const rightForest = col < cols - 1 && this.terrain[edgeRow]?.[col + 1]?.type === 'forest';
+          const isSneakyPath = leftForest || rightForest;
+
+          const score = isSneakyPath ? 70 : 40; // Sneaky paths get bonus
+          candidates.push({ x: worldX, score, type: isSneakyPath ? 'sneaky' : 'open' });
+        }
+      }
+
+      // 3. Add flanking positions at map edges (lower priority fallback)
+      const flankOffset = this.width * 0.35;
+      candidates.push({ x: -flankOffset, score: 50, type: 'flank' });
+      candidates.push({ x: flankOffset, score: 50, type: 'flank' });
+
+      // 4. Add center position as fallback
+      candidates.push({ x: 0, score: 30, type: 'center' });
+
+      // Sort by score (highest first)
+      candidates.sort((a, b) => b.score - a.score);
+
+      // Select positions with minimum spacing
+      const selectedPositions: { x: number; type: string }[] = [];
+      const minSpacing = this.width / (numPerTeam + 2); // Ensure spread
+
+      for (const candidate of candidates) {
+        if (selectedPositions.length >= numPerTeam) break;
+
+        // Clamp to map bounds
+        const clampedX = Math.max(-this.width / 2 + 10, Math.min(this.width / 2 - 10, candidate.x));
+
+        // Check spacing from existing selections
+        let tooClose = false;
+        for (const existing of selectedPositions) {
+          if (Math.abs(clampedX - existing.x) < minSpacing) {
+            tooClose = true;
+            break;
+          }
+        }
+
+        if (!tooClose) {
+          selectedPositions.push({ x: clampedX, type: candidate.type });
+        }
+      }
+
+      // Ensure we have at least 2 positions
+      if (selectedPositions.length < 2) {
+        // Add default spread positions
+        const defaultSpacing = this.width / 3;
+        if (!selectedPositions.some(p => p.x < 0)) {
+          selectedPositions.push({ x: -defaultSpacing / 2, type: 'default' });
+        }
+        if (!selectedPositions.some(p => p.x > 0)) {
+          selectedPositions.push({ x: defaultSpacing / 2, type: 'default' });
+        }
+      }
+
+      // Create resupply points
+      selectedPositions.forEach((pos, index) => {
+        resupplyPoints.push({
+          id: `${team}_resupply_${index}`,
+          x: pos.x,
+          z: edgeZ,
+          team,
+          radius: 10,
+          capacity: 2,
+          isActive: true,
+          direction,
+        });
+      });
+    }
+
+    return resupplyPoints;
   }
 }

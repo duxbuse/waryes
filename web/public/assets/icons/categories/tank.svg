@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <path d="M10 38 L10 54 L54 54 L54 38 Z M14 42 L50 42 L50 50 L14 50 Z" fill="white"/> <!-- Tracks -->
+  <path d="M14 26 L14 36 L50 36 L50 26 L40 26 L40 18 L58 18 L58 10 L40 10 L40 18 L24 18 L24 26 Z" fill="white"/> <!-- Body and Turret -->
+</svg>

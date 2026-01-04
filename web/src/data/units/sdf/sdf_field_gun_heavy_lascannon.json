@@ -1,0 +1,39 @@
+{
+  "id": "sdf_field_gun_heavy_lascannon",
+  "name": "Field Gun Heavy Lascannon",
+  "cost": 50,
+  "icon": "assets/icons/units/sdf/sdf_field_gun_heavy_lascannon.png",
+  "health": 15,
+  "speed": {
+    "road": 5,
+    "offRoad": 3,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 5,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Very Good",
+  "stealth": "Good",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_heavy_laser_cannon_tripod",
+      "count": 2,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

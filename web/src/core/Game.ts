@@ -18,10 +18,25 @@ import { DeploymentManager } from '../game/managers/DeploymentManager';
 import { EconomyManager } from '../game/managers/EconomyManager';
 import { CombatManager } from '../game/managers/CombatManager';
 import { AIManager } from '../game/managers/AIManager';
+import { ReinforcementManager } from '../game/managers/ReinforcementManager';
+import { FogOfWarManager } from '../game/managers/FogOfWarManager';
+import { MultiplayerManager } from '../game/managers/MultiplayerManager';
+import { MultiplayerBattleSync } from '../game/managers/MultiplayerBattleSync';
+import { BuildingManager } from '../game/managers/BuildingManager';
+import { TransportManager } from '../game/managers/TransportManager';
+import { SmokeManager } from '../game/managers/SmokeManager';
+import { DamageNumberManager } from '../game/effects/DamageNumbers';
+import { VisualEffectsManager } from '../game/effects/VisualEffects';
+import { AudioManager } from '../game/audio/AudioManager';
 import { ScreenManager, ScreenType } from './ScreenManager';
 import { MapGenerator } from '../game/map/MapGenerator';
 import { MapRenderer } from '../game/map/MapRenderer';
+import { MinimapRenderer } from '../game/ui/MinimapRenderer';
+import { PathRenderer } from '../game/rendering/PathRenderer';
 import type { GameMap, DeckData, MapSize } from '../data/types';
+import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
+import { STARTER_DECKS } from '../data/starterDecks';
+import { getUnitById } from '../data/factions';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -48,8 +63,20 @@ export class Game {
   public readonly economyManager: EconomyManager;
   public readonly combatManager: CombatManager;
   public readonly aiManager: AIManager;
+  public readonly reinforcementManager: ReinforcementManager;
+  public readonly fogOfWarManager: FogOfWarManager;
+  public readonly multiplayerManager: MultiplayerManager;
+  public readonly multiplayerBattleSync: MultiplayerBattleSync;
+  public readonly buildingManager: BuildingManager;
+  public readonly transportManager: TransportManager;
+  public readonly smokeManager: SmokeManager;
+  public readonly damageNumberManager: DamageNumberManager;
+  public readonly visualEffectsManager: VisualEffectsManager;
+  public readonly audioManager: AudioManager;
   public readonly screenManager: ScreenManager;
   public mapRenderer: MapRenderer | null = null;
+  public minimapRenderer: MinimapRenderer | null = null;
+  public pathRenderer: PathRenderer | null = null;
 
   // Game state
   private _phase: GamePhase = GamePhase.Loading;
@@ -64,6 +91,8 @@ export class Game {
   private lastDeck: DeckData | null = null;
   private lastMapSize: MapSize = 'medium';
   private lastMapSeed: number = 0;
+  private lastTeam1: PlayerSlot[] = [];
+  private lastTeam2: PlayerSlot[] = [];
 
   // Fixed timestep for game logic
   private readonly FIXED_TIMESTEP = 1 / 60; // 60 Hz
@@ -71,6 +100,9 @@ export class Game {
 
   // Current map
   public currentMap: GameMap | null = null;
+
+  // Pre-orders for setup phase (queued orders that execute when battle starts)
+  private preOrders: Map<string, { type: string; target: THREE.Vector3; targetUnit?: any }[]> = new Map();
 
   // Ground plane for raycasting
   public readonly groundPlane: THREE.Mesh;
@@ -92,6 +124,7 @@ export class Game {
       canvas,
       antialias: true,
       alpha: false,
+      stencil: true, // Required for capture circle overlap prevention
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -135,8 +168,20 @@ export class Game {
     this.economyManager = new EconomyManager(this);
     this.combatManager = new CombatManager(this);
     this.aiManager = new AIManager(this);
+    this.reinforcementManager = new ReinforcementManager(this);
+    this.fogOfWarManager = new FogOfWarManager(this);
+    this.multiplayerManager = new MultiplayerManager(this);
+    this.multiplayerBattleSync = new MultiplayerBattleSync(this);
+    this.buildingManager = new BuildingManager(this);
+    this.transportManager = new TransportManager(this);
+    this.smokeManager = new SmokeManager(this);
+    this.damageNumberManager = new DamageNumberManager(this);
+    this.visualEffectsManager = new VisualEffectsManager(this);
+    this.audioManager = new AudioManager();
     this.screenManager = new ScreenManager();
     this.mapRenderer = new MapRenderer(this.scene);
+    this.minimapRenderer = new MinimapRenderer(this);
+    this.pathRenderer = new PathRenderer(this.scene);
 
     // Setup lighting
     this.setupLighting();
@@ -193,6 +238,9 @@ export class Game {
 
     // Wire up start battle button
     this.setupStartBattleButton();
+
+    // Wire up reinforcement button
+    this.setupReinforcementButton();
 
     // Set initial phase - go to main menu
     this.setPhase(GamePhase.MainMenu);
@@ -256,12 +304,20 @@ export class Game {
       this.inputManager.update(dt);
       this.selectionManager.update(dt);
       this.unitManager.update(dt);
+      this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
     }
 
     if (!this._isPaused && this._phase === GamePhase.Battle) {
       this.economyManager.update(dt);
       this.combatManager.update(dt);
       this.aiManager.update(dt);
+      this.reinforcementManager.update(dt);
+      this.fogOfWarManager.update(dt);
+      this.multiplayerBattleSync.update(dt);
+      this.transportManager.update(dt);
+      this.smokeManager.update(dt);
+      this.damageNumberManager.update(dt);
+      this.visualEffectsManager.update(dt);
     }
 
     // Screen manager always updates
@@ -270,6 +326,11 @@ export class Game {
 
   private render(): void {
     this.renderer.render(this.scene, this.camera);
+
+    // Render minimap
+    if (this.minimapRenderer && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
+      this.minimapRenderer.render();
+    }
   }
 
   private onResize(): void {
@@ -345,16 +406,21 @@ export class Game {
     if (startButton) {
       startButton.classList.toggle('visible', phase === GamePhase.Setup);
     }
+
+    // Update reinforcement button
+    this.updateReinforcementButton();
   }
 
   /**
    * Start a skirmish battle with the given configuration
    */
-  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number): void {
+  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[]): void {
     // Save configuration for rematch
     this.lastDeck = deck;
     this.lastMapSize = mapSize;
     this.lastMapSeed = mapSeed;
+    this.lastTeam1 = team1 ?? [];
+    this.lastTeam2 = team2 ?? [];
 
     // Reset stats for new game
     this.resetStats();
@@ -368,6 +434,11 @@ export class Game {
       this.mapRenderer.render(this.currentMap);
     }
 
+    // Set map for minimap
+    if (this.minimapRenderer) {
+      this.minimapRenderer.setMap(this.currentMap);
+    }
+
     // Set camera bounds based on map size
     this.cameraController.setBounds(this.currentMap.width, this.currentMap.height);
 
@@ -376,6 +447,12 @@ export class Game {
 
     // Initialize economy with capture zones
     this.economyManager.initialize(this.currentMap.captureZones);
+
+    // Initialize reinforcement manager with entry points
+    this.reinforcementManager.initialize(this.currentMap.entryPoints);
+
+    // Initialize building manager with map buildings
+    this.buildingManager.initialize(this.currentMap.buildings);
 
     // Find player deployment zone
     const playerZone = this.currentMap.deploymentZones.find(z => z.team === 'player');
@@ -396,6 +473,9 @@ export class Game {
     // Spawn AI units for enemy team
     this.spawnEnemyUnits();
 
+    // Spawn ally CPU units (teammates that share vision with player)
+    this.spawnAllyAIUnits();
+
     // Enter setup phase
     this.setPhase(GamePhase.Setup);
     this.screenManager.switchTo(ScreenType.Battle);
@@ -407,25 +487,147 @@ export class Game {
     const enemyZone = this.currentMap.deploymentZones.find(z => z.team === 'enemy');
     if (!enemyZone) return;
 
-    // Spawn some enemy units for testing
-    const enemyUnits = [
-      'vanguard_marines',
-      'vanguard_marines',
-      'vanguard_marines',
-      'vanguard_predator',
-      'vanguard_predator',
-    ];
+    // Get enemy CPU players from team2
+    const enemyCPUs = this.lastTeam2.filter(slot => slot.type === 'CPU');
 
-    enemyUnits.forEach((unitType, i) => {
-      const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.2 + 0.15 * i);
-      const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
+    if (enemyCPUs.length === 0) {
+      // Fallback: spawn default enemy units if no CPUs configured
+      const defaultUnits = ['vanguard_marines', 'vanguard_marines', 'vanguard_predator'];
+      defaultUnits.forEach((unitType, i) => {
+        const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.3 + 0.2 * i);
+        const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
+        this.unitManager.spawnUnit({
+          position: new THREE.Vector3(x, 0, z),
+          team: 'enemy',
+          unitType,
+        });
+      });
+      return;
+    }
+
+    // Each enemy CPU deploys from their deck
+    enemyCPUs.forEach((cpu, cpuIndex) => {
+      const deck = this.getAIDeck(cpu.deckId);
+      const budget = this.getBudgetForDifficulty(cpu.difficulty);
+
+      this.deployAIUnits(
+        deck,
+        budget,
+        enemyZone,
+        'enemy',
+        `enemy${cpuIndex + 1}`,
+        cpuIndex,
+        enemyCPUs.length
+      );
+    });
+  }
+
+  private spawnAllyAIUnits(): void {
+    if (!this.currentMap) return;
+
+    const playerZone = this.currentMap.deploymentZones.find(z => z.team === 'player');
+    if (!playerZone) return;
+
+    // Get ally CPU players from team1 (exclude human player)
+    const allyCPUs = this.lastTeam1.filter(slot => slot.type === 'CPU');
+
+    if (allyCPUs.length === 0) {
+      return; // No ally CPUs to spawn
+    }
+
+    // Each ally CPU deploys from their deck
+    allyCPUs.forEach((cpu, cpuIndex) => {
+      const deck = this.getAIDeck(cpu.deckId);
+      const budget = this.getBudgetForDifficulty(cpu.difficulty);
+
+      this.deployAIUnits(
+        deck,
+        budget,
+        playerZone,
+        'player',
+        `ally${cpuIndex + 1}`,
+        cpuIndex + 1, // Offset to not overlap with human player's area
+        allyCPUs.length + 1
+      );
+    });
+  }
+
+  /**
+   * Get a deck for AI player - uses specified deck or random starter deck
+   */
+  private getAIDeck(deckId?: string): DeckData {
+    if (deckId) {
+      const deck = STARTER_DECKS.find(d => d.id === deckId);
+      if (deck) return deck;
+    }
+    // Return random starter deck (guaranteed to exist)
+    const randomDeck = STARTER_DECKS[Math.floor(Math.random() * STARTER_DECKS.length)];
+    if (!randomDeck) {
+      throw new Error('No starter decks available');
+    }
+    return randomDeck;
+  }
+
+  /**
+   * Get deployment budget based on difficulty
+   */
+  private getBudgetForDifficulty(difficulty: string): number {
+    switch (difficulty) {
+      case 'Easy': return 600;
+      case 'Medium': return 800;
+      case 'Hard': return 1000;
+      default: return 800;
+    }
+  }
+
+  /**
+   * Deploy AI units from a deck within budget
+   */
+  private deployAIUnits(
+    deck: DeckData,
+    budget: number,
+    zone: { minX: number; maxX: number; minZ: number; maxZ: number },
+    team: 'player' | 'enemy',
+    ownerId: string,
+    slotIndex: number,
+    totalSlots: number
+  ): void {
+    let remaining = budget;
+    let deployedCount = 0;
+
+    // Calculate this AI's area within the deployment zone
+    const zoneWidth = zone.maxX - zone.minX;
+    const slotWidth = zoneWidth / totalSlots;
+    const slotStartX = zone.minX + slotIndex * slotWidth;
+    const slotEndX = slotStartX + slotWidth;
+
+    // Deploy units from deck in order until budget exhausted
+    for (const deckUnit of deck.units) {
+      const unitData = getUnitById(deckUnit.unitId);
+      if (!unitData) continue;
+
+      const cost = unitData.cost;
+      if (remaining < cost) continue;
+
+      remaining -= cost;
+
+      // Position within this AI's slice of the deployment zone
+      const xProgress = (deployedCount % 3) / 3;
+      const x = slotStartX + (slotEndX - slotStartX) * (0.2 + xProgress * 0.6);
+      const zOffset = Math.floor(deployedCount / 3) * 4 - 4;
+      const z = (zone.minZ + zone.maxZ) / 2 + zOffset;
 
       this.unitManager.spawnUnit({
         position: new THREE.Vector3(x, 0, z),
-        team: 'enemy',
-        unitType,
+        team,
+        ownerId,
+        unitType: deckUnit.unitId,
       });
-    });
+
+      deployedCount++;
+    }
+
+    console.log(`AI ${ownerId} deployed ${deployedCount} units from deck "${deck.name}" (spent ${budget - remaining}/${budget} credits)`);
   }
 
   startBattle(): void {
@@ -437,9 +639,97 @@ export class Game {
     // Record battle start time
     this.gameStartTime = performance.now();
 
+    // Initialize fog of war
+    this.fogOfWarManager.initialize();
+
+    // Execute all pre-orders
+    this.executePreOrders();
+
+    // Clear pre-order path visualizations (dashed lines)
+    this.pathRenderer?.clearAllPreOrderPaths();
+
     // Start battle
     this.setPhase(GamePhase.Battle);
     this.unitManager.unfreezeAll();
+  }
+
+  /**
+   * Queue a pre-order for a unit during setup phase
+   */
+  queuePreOrder(unitId: string, type: string, target: THREE.Vector3, targetUnit?: any): void {
+    if (this._phase !== GamePhase.Setup) return; // Only allow during setup
+
+    // Get unit position for path visualization
+    const unit = this.unitManager.getUnitById(unitId);
+    if (!unit) return;
+
+    if (!this.preOrders.has(unitId)) {
+      this.preOrders.set(unitId, []);
+    }
+
+    const orders = this.preOrders.get(unitId)!;
+    orders.push({ type, target, targetUnit });
+
+    // Show pre-order path (dashed line)
+    if (this.pathRenderer) {
+      // Get the start position (last order target or unit position)
+      const startPos = orders.length > 1
+        ? orders[orders.length - 2]!.target
+        : unit.position.clone();
+
+      this.pathRenderer.showPreOrderPath(unitId, startPos, target, type);
+    }
+
+    console.log(`Pre-order queued for unit ${unitId}: ${type}`);
+  }
+
+  /**
+   * Execute all queued pre-orders when battle starts
+   */
+  private executePreOrders(): void {
+    const allUnits = this.unitManager.getAllUnits();
+
+    this.preOrders.forEach((orders, unitId) => {
+      const unit = allUnits.find(u => u.id === unitId);
+      if (!unit) return;
+
+      // Execute each order
+      orders.forEach(order => {
+        switch (order.type) {
+          case 'move':
+            unit.setMoveCommand(order.target);
+            break;
+          case 'fast':
+            unit.setFastMoveCommand(order.target);
+            break;
+          case 'reverse':
+            unit.setReverseCommand(order.target);
+            break;
+          case 'attack':
+            if (order.targetUnit) {
+              unit.setAttackCommand(order.targetUnit);
+            }
+            break;
+          case 'attackMove':
+            unit.setAttackMoveCommand(order.target);
+            break;
+        }
+      });
+
+      console.log(`Executed ${orders.length} pre-orders for unit ${unitId}`);
+    });
+
+    // Clear pre-orders after execution
+    this.preOrders.clear();
+  }
+
+  /**
+   * Clear all pre-orders (e.g., when restarting setup)
+   */
+  clearPreOrders(): void {
+    this.preOrders.clear();
+    // Clear pre-order path visualizations
+    this.pathRenderer?.clearAllPreOrderPaths();
   }
 
   private onVictory(winner: 'player' | 'enemy'): void {
@@ -679,8 +969,9 @@ export class Game {
 
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
-        // TODO: Open settings from pause menu
-        console.log('Settings from pause menu not yet implemented');
+        // Hide pause menu, show settings screen
+        this.togglePause();
+        this.screenManager.switchTo(ScreenType.Settings);
       });
     }
 
@@ -729,7 +1020,7 @@ export class Game {
 
         // Restart with same settings
         if (this.lastDeck) {
-          this.startSkirmish(this.lastDeck, this.lastMapSize, this.lastMapSeed);
+          this.startSkirmish(this.lastDeck, this.lastMapSize, this.lastMapSeed, this.lastTeam1, this.lastTeam2);
         }
       });
     }
@@ -750,6 +1041,28 @@ export class Game {
       startBtn.addEventListener('click', () => {
         this.startBattle();
       });
+    }
+  }
+
+  /**
+   * Setup reinforcement button (for battle phase)
+   */
+  private setupReinforcementButton(): void {
+    const reinforceBtn = document.getElementById('call-reinforcements-btn');
+    if (reinforceBtn) {
+      reinforceBtn.addEventListener('click', () => {
+        this.reinforcementManager.show();
+      });
+    }
+  }
+
+  /**
+   * Show/hide reinforcement button based on phase
+   */
+  private updateReinforcementButton(): void {
+    const reinforceBtn = document.getElementById('call-reinforcements-btn');
+    if (reinforceBtn) {
+      reinforceBtn.style.display = this._phase === GamePhase.Battle ? 'block' : 'none';
     }
   }
 }

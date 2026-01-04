@@ -11,6 +11,8 @@ import { createMainMenuScreen } from './screens/MainMenuScreen';
 import { createDeckBuilderScreen } from './screens/DeckBuilderScreen';
 import { createSkirmishSetupScreen, type SkirmishConfig } from './screens/SkirmishSetupScreen';
 import { createSettingsScreen } from './screens/SettingsScreen';
+import { JoinGameScreen } from './screens/JoinGameScreen';
+import { GameLobbyScreen } from './screens/GameLobbyScreen';
 import { showConfirmDialog } from './core/UINotifications';
 
 // DOM Elements
@@ -43,6 +45,9 @@ async function main(): Promise<void> {
       onSkirmish: () => {
         game.screenManager.switchTo(ScreenType.SkirmishSetup);
       },
+      onJoinGame: () => {
+        game.screenManager.switchTo(ScreenType.JoinGame);
+      },
       onDeckBuilder: () => {
         game.screenManager.switchTo(ScreenType.DeckBuilder);
       },
@@ -71,7 +76,17 @@ async function main(): Promise<void> {
       },
       onStartBattle: (config: SkirmishConfig) => {
         if (config.deck) {
-          game.startSkirmish(config.deck, config.mapSize, config.mapSeed);
+          game.startSkirmish(config.deck, config.mapSize, config.mapSeed, config.team1, config.team2);
+        }
+      },
+      onHostOnline: async (config: SkirmishConfig) => {
+        if (config.deck) {
+          try {
+            await game.multiplayerManager.createLobby(config.mapSize);
+            // Lobby created callback will switch to GameLobby screen
+          } catch (error) {
+            alert(`Failed to create online lobby: ${error}`);
+          }
         }
       },
     });
@@ -80,6 +95,19 @@ async function main(): Promise<void> {
       onBack: () => {
         game.screenManager.switchTo(ScreenType.MainMenu);
       },
+    });
+
+    // Create multiplayer screens
+    const joinGameScreen = new JoinGameScreen(game);
+    const gameLobbyScreen = new GameLobbyScreen(game);
+
+    // Setup multiplayer callbacks
+    game.multiplayerManager.on('lobby_created', () => {
+      game.screenManager.switchTo(ScreenType.GameLobby);
+    });
+
+    game.multiplayerManager.on('lobby_joined', () => {
+      game.screenManager.switchTo(ScreenType.GameLobby);
     });
 
     // Create battle screen (just a placeholder - battle uses the 3D canvas)
@@ -92,12 +120,26 @@ async function main(): Promise<void> {
     };
     battleScreen.element.id = 'battle-screen';
     battleScreen.element.classList.add('battle-active');
+    // IMPORTANT: Allow clicks to pass through to the canvas
+    battleScreen.element.style.pointerEvents = 'none';
 
     // Register all screens
     game.screenManager.registerScreen(mainMenuScreen);
     game.screenManager.registerScreen(deckBuilderScreen);
     game.screenManager.registerScreen(skirmishSetupScreen);
     game.screenManager.registerScreen(settingsScreen);
+    game.screenManager.registerScreen({
+      type: ScreenType.JoinGame,
+      element: joinGameScreen.getElement(),
+      onEnter: () => joinGameScreen.show(),
+      onExit: () => joinGameScreen.hide(),
+    });
+    game.screenManager.registerScreen({
+      type: ScreenType.GameLobby,
+      element: gameLobbyScreen.getElement(),
+      onEnter: () => gameLobbyScreen.show(),
+      onExit: () => gameLobbyScreen.hide(),
+    });
     game.screenManager.registerScreen(battleScreen);
 
     updateLoading(70, 'Initializing systems...');

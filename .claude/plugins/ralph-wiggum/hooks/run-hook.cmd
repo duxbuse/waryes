@@ -15,6 +15,12 @@ if %errorlevel% equ 0 (
 )
 
 :: Method 2: Check common installation paths individually
+:: Start with explicit scoop path (most reliable when env vars may be missing)
+if exist "C:\Users\duxbu\scoop\apps\nodejs\current\node.exe" (
+    "C:\Users\duxbu\scoop\apps\nodejs\current\node.exe" "%HOOK_SCRIPT%"
+    exit /b %errorlevel%
+)
+
 if exist "C:\Program Files\nodejs\node.exe" (
     "C:\Program Files\nodejs\node.exe" "%HOOK_SCRIPT%"
     exit /b %errorlevel%

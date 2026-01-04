@@ -1,0 +1,16 @@
+{
+  "id": "sdf_orbital_lance",
+  "name": "Orbital Lance",
+  "range": 5000,
+  "penetration": 500,
+  "damage": 500,
+  "suppression": 1000,
+  "rateOfFire": 1,
+  "accuracy": 0.85,
+  "aimTime": 10,
+  "reloadTime": 0,
+  "salvoLength": 1,
+  "supplyCost": 200,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

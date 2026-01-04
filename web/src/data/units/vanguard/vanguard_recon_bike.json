@@ -1,0 +1,42 @@
+{
+  "id": "vanguard_recon_bike",
+  "name": "Recon Bike",
+  "cost": 25,
+  "icon": "assets/icons/units/vanguard/vanguard_recon_bike.png",
+  "health": 3,
+  "speed": {
+    "road": 160,
+    "offRoad": 110,
+    "rotation": 12
+  },
+  "armor": {
+    "front": 5,
+    "side": 5,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": 200,
+  "autonomy": {
+    "road": 500,
+    "offRoad": 350
+  },
+  "optics": "Very Good",
+  "stealth": "Medium",
+  "forwardDeploy": 700,
+  "weapons": [
+    {
+      "weaponId": "vanguard_kinetic_carbine",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "REC",
+  "tags": ["fast", "scout", "bike"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

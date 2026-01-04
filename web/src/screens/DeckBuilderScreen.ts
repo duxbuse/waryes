@@ -3,7 +3,7 @@
  */
 
 import { ScreenType, type Screen } from '../core/ScreenManager';
-import type { DeckData, DeckUnit, UnitData, UnitCategory } from '../data/types';
+import type { DeckData, DeckUnit, UnitData, UnitCategory, DivisionRosterEntry, UnitAvailability } from '../data/types';
 import { FACTIONS, UNITS, getUnitById, getDivisionById, getDivisionsByFaction } from '../data/factions';
 import { GAME_CONSTANTS } from '../data/types';
 import { showNotification } from '../core/UINotifications';
@@ -14,6 +14,12 @@ export interface DeckBuilderCallbacks {
 }
 
 const CATEGORIES: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
+
+// Helper to calculate total availability from UnitAvailability object
+function getTotalAvailability(avail: UnitAvailability): number {
+  return avail.rookie + avail.trained + avail.veteran + avail.elite + avail.legend;
+}
+
 
 export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen {
   let currentFactionId = FACTIONS[0]?.id ?? '';
@@ -596,13 +602,13 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
   document.head.appendChild(style);
 
   // Helper functions
-  function getAvailableUnitsForDivision(divisionId: string): Map<string, number[]> {
+  function getAvailableUnitsForDivision(divisionId: string): Map<string, DivisionRosterEntry> {
     const division = getDivisionById(divisionId);
     if (!division) return new Map();
 
-    const available = new Map<string, number[]>();
+    const available = new Map<string, DivisionRosterEntry>();
     for (const entry of division.roster) {
-      available.set(entry.unitId, entry.availability);
+      available.set(entry.unitId, entry);
     }
     return available;
   }
@@ -678,7 +684,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       const availability = available.get(unit.id);
       const isAvailable = availability !== undefined;
       const usedCount = getUsedCount(unit.id);
-      const totalAvail = availability?.reduce((a, b) => a + b, 0) ?? 0;
+      const totalAvail = availability ? getTotalAvailability(availability.availability) : 0;
       const remaining = totalAvail - usedCount;
 
       return `
@@ -886,11 +892,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     if (!unit) return;
 
     const available = getAvailableUnitsForDivision(currentDivisionId);
-    const availability = available.get(unitId);
-    if (!availability) return;
+    const rosterEntry = available.get(unitId);
+    if (!rosterEntry) return;
 
     const usedCount = getUsedCount(unitId);
-    const totalAvail = availability.reduce((a, b) => a + b, 0);
+    const totalAvail = getTotalAvailability(rosterEntry.availability);
     if (usedCount >= totalAvail) return;
 
     // Check if unit can be transported and has transport options
@@ -914,7 +920,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       const avail = available.get(u.id);
       if (!avail) return false;
       const used = getUsedCount(u.id);
-      const total = avail.reduce((a, b) => a + b, 0);
+      const total = getTotalAvailability(avail.availability);
       return u.transportCapacity > 0 && used < total;
     });
 

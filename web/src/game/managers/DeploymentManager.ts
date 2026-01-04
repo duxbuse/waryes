@@ -15,11 +15,20 @@ export interface DeployableUnit {
   deployedUnitId: string | undefined;
 }
 
+// Grouped unit type for stacked display
+interface StackedUnitType {
+  unitData: UnitData;
+  indices: number[];  // Indices into deployableUnits array
+  available: number;  // Count of undeployed units
+  deployed: number;   // Count of deployed units
+}
+
 export class DeploymentManager {
   private readonly game: Game;
   private deck: DeckData | null = null;
   private deployableUnits: DeployableUnit[] = [];
   private selectedUnitIndex: number = -1;
+  private selectedUnitTypeId: string | null = null;  // For multi-placement with shift
   private deploymentZone: DeploymentZone | null = null;
   private currentCategory: UnitCategory = 'INF';
   private credits: number = GAME_CONSTANTS.STARTING_CREDITS;
@@ -46,6 +55,9 @@ export class DeploymentManager {
     // Create deployable units from deck
     this.deployableUnits = deck.units.map(deckUnit => {
       const unitData = getUnitById(deckUnit.unitId);
+      if (!unitData) {
+        console.warn('[Deploy] Could not find unit data for:', deckUnit.unitId);
+      }
       return {
         deckUnit,
         unitData: unitData!,
@@ -73,6 +85,7 @@ export class DeploymentManager {
     this.deploymentPanel.innerHTML = `
       <div class="deployment-header">
         <span class="credits-display">Credits: <span id="credits-value">${this.credits}</span></span>
+        <span class="shift-hint">Hold SHIFT for multi-place</span>
       </div>
       <div class="category-tabs" id="deploy-category-tabs"></div>
       <div class="unit-cards" id="deploy-unit-cards"></div>
@@ -89,10 +102,10 @@ export class DeploymentManager {
       style.textContent = `
         #deployment-panel {
           position: absolute;
-          top: 60px;
+          top: 120px;
           right: 10px;
-          width: 280px;
-          max-height: calc(100% - 120px);
+          width: 260px;
+          max-height: calc(100% - 180px);
           background: rgba(0, 0, 0, 0.85);
           border-radius: 8px;
           padding: 10px;
@@ -109,11 +122,19 @@ export class DeploymentManager {
           padding: 8px;
           border-bottom: 1px solid #333;
           margin-bottom: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
         }
 
         .credits-display {
           font-size: 16px;
           color: #ffd700;
+        }
+
+        .shift-hint {
+          font-size: 10px;
+          color: #666;
         }
 
         #deploy-category-tabs {
@@ -165,6 +186,7 @@ export class DeploymentManager {
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s;
+          position: relative;
         }
 
         .deploy-unit-card:hover {
@@ -177,8 +199,9 @@ export class DeploymentManager {
           border-color: #4a9eff;
         }
 
-        .deploy-unit-card.deployed {
-          opacity: 0.5;
+        .deploy-unit-card.all-deployed {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
 
         .deploy-unit-card.too-expensive {
@@ -195,6 +218,32 @@ export class DeploymentManager {
           align-items: center;
           justify-content: center;
           font-size: 18px;
+          position: relative;
+        }
+
+        .deploy-unit-count {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          min-width: 18px;
+          height: 18px;
+          background: #4a9eff;
+          border-radius: 9px;
+          font-size: 11px;
+          font-weight: bold;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 4px;
+        }
+
+        .deploy-unit-count.low {
+          background: #ff9f4a;
+        }
+
+        .deploy-unit-count.empty {
+          background: #666;
         }
 
         .deploy-unit-info {
@@ -214,7 +263,7 @@ export class DeploymentManager {
 
         .deploy-unit-status {
           font-size: 10px;
-          color: #4aff4a;
+          color: #888;
         }
       `;
       document.head.appendChild(style);
@@ -231,9 +280,9 @@ export class DeploymentManager {
 
     this.unitCardsContainer?.addEventListener('click', (e) => {
       const card = (e.target as HTMLElement).closest('.deploy-unit-card') as HTMLElement;
-      if (card && !card.classList.contains('deployed') && !card.classList.contains('too-expensive')) {
-        const index = parseInt(card.getAttribute('data-index')!);
-        this.selectUnit(index);
+      if (card && !card.classList.contains('all-deployed') && !card.classList.contains('too-expensive')) {
+        const unitTypeId = card.getAttribute('data-unit-type')!;
+        this.selectUnitByType(unitTypeId);
       }
     });
 
@@ -249,6 +298,9 @@ export class DeploymentManager {
 
     // Update credits
     this.creditsDisplay.textContent = this.credits.toString();
+
+    // Group units by type and category
+    const stackedByType = this.getStackedUnitTypes();
 
     // Count units per category
     const categoryCounts = new Map<UnitCategory, { total: number; deployed: number }>();
@@ -275,30 +327,64 @@ export class DeploymentManager {
         `;
       }).join('');
 
-    // Render unit cards for current category
-    const categoryUnits = this.deployableUnits
-      .map((du, index) => ({ ...du, index }))
-      .filter(du => du.unitData.category === this.currentCategory);
+    // Filter stacked units for current category
+    const categoryStacks = stackedByType.filter(
+      stack => stack.unitData.category === this.currentCategory
+    );
 
-    this.unitCardsContainer.innerHTML = categoryUnits.map(du => {
-      const isDeployed = du.deployed;
-      const tooExpensive = du.unitData.cost > this.credits;
-      const isSelected = du.index === this.selectedUnitIndex;
+    // Render stacked unit cards
+    this.unitCardsContainer.innerHTML = categoryStacks.map(stack => {
+      const allDeployed = stack.available === 0;
+      const tooExpensive = stack.unitData.cost > this.credits;
+      const isSelected = this.selectedUnitTypeId === stack.unitData.id;
+      const total = stack.available + stack.deployed;
 
-      const icon = this.getUnitIcon(du.unitData.category);
+      const icon = this.getUnitIcon(stack.unitData.category);
+      const countClass = stack.available === 0 ? 'empty' : (stack.available === 1 ? 'low' : '');
 
       return `
-        <div class="deploy-unit-card ${isDeployed ? 'deployed' : ''} ${tooExpensive ? 'too-expensive' : ''} ${isSelected ? 'selected' : ''}"
-             data-index="${du.index}">
-          <div class="deploy-unit-icon">${icon}</div>
+        <div class="deploy-unit-card ${allDeployed ? 'all-deployed' : ''} ${tooExpensive && !allDeployed ? 'too-expensive' : ''} ${isSelected ? 'selected' : ''}"
+             data-unit-type="${stack.unitData.id}">
+          <div class="deploy-unit-icon">
+            ${icon}
+            <span class="deploy-unit-count ${countClass}">${stack.available}</span>
+          </div>
           <div class="deploy-unit-info">
-            <div class="deploy-unit-name">${du.unitData.name}</div>
-            <div class="deploy-unit-cost">${du.unitData.cost} credits</div>
-            ${isDeployed ? '<div class="deploy-unit-status">Deployed</div>' : ''}
+            <div class="deploy-unit-name">${stack.unitData.name}</div>
+            <div class="deploy-unit-cost">${stack.unitData.cost} credits</div>
+            <div class="deploy-unit-status">${stack.deployed}/${total} deployed</div>
           </div>
         </div>
       `;
     }).join('');
+  }
+
+  /**
+   * Group deployable units by their unit type
+   */
+  private getStackedUnitTypes(): StackedUnitType[] {
+    const stacks = new Map<string, StackedUnitType>();
+
+    this.deployableUnits.forEach((du, index) => {
+      const typeId = du.unitData.id;
+      if (!stacks.has(typeId)) {
+        stacks.set(typeId, {
+          unitData: du.unitData,
+          indices: [],
+          available: 0,
+          deployed: 0,
+        });
+      }
+      const stack = stacks.get(typeId)!;
+      stack.indices.push(index);
+      if (du.deployed) {
+        stack.deployed++;
+      } else {
+        stack.available++;
+      }
+    });
+
+    return Array.from(stacks.values());
   }
 
   private getUnitIcon(category: UnitCategory): string {
@@ -315,8 +401,44 @@ export class DeploymentManager {
     return icons[category] ?? '❓';
   }
 
+  /**
+   * Select a unit by its type ID - finds the first available unit of that type
+   */
+  private selectUnitByType(unitTypeId: string): void {
+    // Find the first undeployed unit of this type
+    const index = this.deployableUnits.findIndex(
+      du => du.unitData.id === unitTypeId && !du.deployed
+    );
+
+    if (index === -1) return;
+
+    this.selectedUnitTypeId = unitTypeId;
+    this.selectUnit(index);
+  }
+
   private selectUnit(index: number): void {
+    const du = this.deployableUnits[index];
+    if (!du) return;
+
+    // In battle phase, queue for reinforcement instead of placing
+    if (this.game.phase === 'battle') {
+      const success = this.game.reinforcementManager.queueUnit(du.unitData.id);
+      if (success) {
+        // Deduct credits
+        this.credits -= du.unitData.cost;
+
+        // Mark as deployed (can't queue same unit again unless it spawns)
+        du.deployed = true;
+        this.renderUI();
+
+        console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
+      }
+      return;
+    }
+
+    // Setup phase: normal instant placement
     this.selectedUnitIndex = index;
+    this.selectedUnitTypeId = du.unitData.id;
     this.isPlacingUnit = true;
     this.renderUI();
 
@@ -377,19 +499,19 @@ export class DeploymentManager {
   private onClick(event: MouseEvent): void {
     // Only handle left clicks
     if (event.button !== 0) return;
-
     if (!this.isPlacingUnit) return;
 
     const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
     if (!worldPos) return;
 
     // Check if in deployment zone
-    if (!this.isInDeploymentZone(worldPos.x, worldPos.z)) {
-      return;
-    }
+    if (!this.isInDeploymentZone(worldPos.x, worldPos.z)) return;
+
+    // Check if shift is held for multi-placement
+    const shiftHeld = event.shiftKey;
 
     // Deploy the unit
-    this.deployUnit(this.selectedUnitIndex, worldPos);
+    this.deployUnit(this.selectedUnitIndex, worldPos, shiftHeld);
   }
 
   private onRightClick(event: MouseEvent): void {
@@ -410,23 +532,23 @@ export class DeploymentManager {
            z <= this.deploymentZone.maxZ;
   }
 
-  private deployUnit(index: number, position: THREE.Vector3): void {
+  private deployUnit(index: number, position: THREE.Vector3, continueAfter: boolean = false): void {
     const du = this.deployableUnits[index];
     if (!du || du.deployed) return;
 
     // Check credits
     if (du.unitData.cost > this.credits) return;
 
+    const unitTypeId = du.unitData.id;
+
     // Spawn the unit
     const unit = this.game.unitManager.spawnUnit({
       position,
       team: 'player',
-      unitType: du.unitData.id,
+      ownerId: 'player',
+      unitType: unitTypeId,
       name: du.unitData.name,
     });
-
-    // Update unit stats from data
-    // (The unit is already created with default stats, we'd need to update these)
 
     // Mark as deployed
     du.deployed = true;
@@ -434,6 +556,21 @@ export class DeploymentManager {
 
     // Deduct credits
     this.credits -= du.unitData.cost;
+
+    // Check if we should continue placing more units of the same type
+    if (continueAfter && this.selectedUnitTypeId) {
+      // Find the next undeployed unit of the same type
+      const nextIndex = this.deployableUnits.findIndex(
+        d => d.unitData.id === this.selectedUnitTypeId && !d.deployed
+      );
+
+      if (nextIndex !== -1 && this.deployableUnits[nextIndex]!.unitData.cost <= this.credits) {
+        // Continue placing
+        this.selectedUnitIndex = nextIndex;
+        this.renderUI();
+        return;
+      }
+    }
 
     // Cancel placement mode
     this.cancelPlacement();
@@ -445,6 +582,7 @@ export class DeploymentManager {
   private cancelPlacement(): void {
     this.isPlacingUnit = false;
     this.selectedUnitIndex = -1;
+    this.selectedUnitTypeId = null;
 
     // Remove ghost mesh
     if (this.ghostMesh) {

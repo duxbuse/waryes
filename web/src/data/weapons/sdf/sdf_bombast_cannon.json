@@ -1,0 +1,16 @@
+{
+  "id": "sdf_bombast_cannon",
+  "name": "Bombast Cannon",
+  "range": 1500,
+  "penetration": 150,
+  "damage": 80,
+  "suppression": 300,
+  "rateOfFire": 4,
+  "accuracy": 0.55,
+  "aimTime": 2.5,
+  "reloadTime": 8,
+  "salvoLength": 1,
+  "supplyCost": 30,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

@@ -14,6 +14,8 @@ export enum ScreenType {
   DeckBuilder = 'deck-builder',
   SkirmishSetup = 'skirmish-setup',
   Settings = 'settings',
+  JoinGame = 'join-game',
+  GameLobby = 'game-lobby',
   Battle = 'battle',
   Victory = 'victory',
 }

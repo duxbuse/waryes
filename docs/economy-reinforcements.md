@@ -174,7 +174,7 @@ interface CaptureZoneVisual {
 
 ---
 
-## REINFORCEMENT & ENTRY POINTS
+## REINFORCEMENT & RESUPPLY SYSTEM
 
 ### Deployment Phase (Setup)
 During the deployment/setup phase before battle begins:
@@ -209,42 +209,42 @@ DEPLOYMENT PHASE PLACEMENT:
 - Forward Deploy units can place ahead of normal zone
 
 ### Battle Phase Reinforcements
-Once battle begins, new units must enter through **Entry Points**:
+Once battle begins, new units spawn at **Resupply Points** and move to your destination:
 
 ```
-REINFORCEMENT ENTRY POINTS:
+REINFORCEMENT RESUPPLY POINTS:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  TEAM 1 SIDE                                                    │
-│  ════════════════════════════════════════════════════════════  │
-│       ║                    ║                    ║               │
-│       ║                    ║                    ║               │
-│    [ENTRY 1]           [ENTRY 2]            [ENTRY 3]          │
-│    Highway             Secondary             Dirt Road         │
-│    (fast)              (medium)              (slow)            │
-│       ║                    ║                    ║               │
-│       ▼                    ▼                    ▼               │
+│  TEAM 1 TERRITORY                                               │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │     [⬡ RESUPPLY 1]              [⬡ RESUPPLY 2]         │   │
+│  │     (Forward Depot)              (Main Supply Base)     │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│                      BATTLEFIELD                                │
+│                        BATTLEFIELD                              │
 │                                                                 │
-│       ▲                    ▲                    ▲               │
-│       ║                    ║                    ║               │
-│    [ENTRY A]           [ENTRY B]            [ENTRY C]          │
-│       ║                    ║                    ║               │
-│  ════════════════════════════════════════════════════════════  │
-│  TEAM 2 SIDE                                                    │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │     [⬡ RESUPPLY A]              [⬡ RESUPPLY B]         │   │
+│  │     (Forward Depot)              (Main Supply Base)     │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│  TEAM 2 TERRITORY                                               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Entry Point Types
+### Resupply Point Types
 
-| Type | Road | Spawn Rate | Best For |
-|------|------|------------|----------|
-| Primary | Highway | Fast (vehicles spawn quickly) | Armor, fast reinforcements |
-| Secondary | Main Road | Medium | Mixed forces |
-| Tertiary | Dirt Road | Slow | Infantry, light vehicles |
-| Air | Off-map edge | Instant (fly in) | Helicopters, Aircraft |
+| Type | Location | Spawn Delay | Best For |
+|------|----------|-------------|----------|
+| Forward Depot | Near front lines | 3 seconds | Quick reinforcements to active combat |
+| Main Supply Base | Rear area | 3 seconds | Safe spawn point, longer travel |
+| Air Resupply | Off-map edge | 3 seconds | Helicopters, Aircraft (fly in) |
+
+**Note:** The resupply system only applies during the **battle phase**. During deployment phase, units spawn instantly where you click. During battle phase, all ground units spawn at the nearest friendly resupply point after a 3-second delay.
 
 ### Calling Reinforcements (Battle Phase)
 
@@ -254,99 +254,112 @@ REINFORCEMENT CALL-IN PROCESS:
 │                                                                 │
 │  1. Select unit card from reinforcement panel                   │
 │                                                                 │
-│  2. Click on an ENTRY POINT (not anywhere on map)               │
+│  2. Click anywhere on the BATTLEFIELD to set destination        │
 │     ┌──────────────────────────────────────────────────────┐   │
-│     │  Available Entry Points highlighted when card selected│   │
-│     │  Hover shows: travel time to various map locations    │   │
+│     │  All movement type modifiers supported:              │   │
+│     │  • Left-click = Normal Move                          │   │
+│     │  • A + Click = Attack Move                           │   │
+│     │  • F + Click = Fast Move                             │   │
+│     │  • R + Click = Reverse Move                          │   │
+│     │  The movement type becomes the unit's first order    │   │
 │     └──────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  3. Unit spawns at entry point and drives onto map              │
+│  3. After 3 second delay, unit spawns at nearest RESUPPLY POINT │
 │     ┌──────────────────────────────────────────────────────┐   │
-│     │        ENTRY POINT                                    │   │
+│     │     [RESUPPLY POINT]                                 │   │
 │     │            ║                                          │   │
+│     │            ║  (3s spawn delay)                       │   │
 │     │            ║                                          │   │
-│     │     🚗 → 🚗 → 🚗 →  (units drive in one by one)      │   │
+│     │         🚗 ═══════════════════► [DESTINATION]        │   │
 │     │            ║                                          │   │
-│     │            ▼                                          │   │
-│     │       TO BATTLEFIELD                                  │   │
+│     │   Unit spawns here, then                             │   │
+│     │   executes movement order to destination             │   │
 │     └──────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  4. Optionally: Set rally point (Shift+Click destination)       │
-│     Units will auto-move to rally point after spawning          │
+│  4. Unit automatically moves to clicked destination             │
+│     Using the movement type specified during placement          │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Entry Point Queue System
+**Movement Type Examples:**
+- **Attack Move (A+Click)**: Unit spawns, then attack-moves to destination (engages enemies en route)
+- **Fast Move (F+Click)**: Unit spawns, then fast-moves to destination (max speed, less cautious)
+- **Normal Move**: Unit spawns, then moves to destination at standard speed
+- **Reverse (R+Click)**: Unit spawns, then reverses to destination (keeps front armor facing threat)
 
-Multiple units called to same entry point form a queue:
+### Resupply Point Spawn System
+
+Units spawn at the nearest friendly resupply point after a 3-second delay:
 
 ```
-SPAWN QUEUE AT ENTRY POINT:
+SPAWN AT RESUPPLY POINT:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  Entry Point: Highway North                                     │
+│  Resupply Point: Forward Supply Depot                          │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                                                         │   │
-│  │   OFF-MAP STAGING AREA (queue)                         │   │
-│  │   ┌───┐ ┌───┐ ┌───┐ ┌───┐                             │   │
-│  │   │ 4 │ │ 3 │ │ 2 │ │ 1 │  →  SPAWN POINT  →  MAP    │   │
-│  │   └───┘ └───┘ └───┘ └───┘      (one at a time)        │   │
-│  │   (waiting)                                            │   │
+│  │   [RESUPPLY POINT ⬡]                                   │   │
+│  │          │                                              │   │
+│  │          │ (3s delay)                                   │   │
+│  │          ▼                                              │   │
+│  │        🚗 ════════════════► [PLAYER'S DESTINATION]     │   │
+│  │                                                         │   │
+│  │   Unit spawns at resupply point, then                  │   │
+│  │   immediately executes queued movement order           │   │
 │  │                                                         │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  Queue UI shows:                                                │
-│  - Units waiting to spawn                                       │
-│  - Estimated spawn time for each                               │
-│  - Total queue time                                            │
+│  Spawn location selection:                                      │
+│  - System chooses nearest friendly resupply point              │
+│  - Considers distance to player's requested destination        │
+│  - Multiple resupply points = faster parallel spawning         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Queue Rules:**
-- Units spawn one at a time per entry point
-- Spawn interval based on road type (highway = 3s, dirt = 6s)
-- Larger units (tanks) take longer to spawn than infantry
-- Multiple entry points = parallel spawning (faster overall)
-- Queue visible in UI showing wait times
+**Spawn Rules:**
+- 3-second delay between placement and spawn
+- Unit spawns at nearest friendly resupply point
+- Movement order (with type) is queued during placement
+- Unit immediately executes movement to destination after spawning
+- Multiple units can spawn at different resupply points simultaneously
 
-### Entry Point Placement (Map Generation)
+### Resupply Point Placement (Map Generation)
 
-Entry points are placed during map generation:
+Resupply points are placed during map generation:
 
 ```
-ENTRY POINT PLACEMENT RULES:
+RESUPPLY POINT PLACEMENT RULES:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  ✓ Aligned with roads leading into map                         │
-│  ✓ At map edge, within team's deployment side                  │
-│  ✓ 2-4 entry points per team                                   │
-│  ✓ At least one highway entry (if highway exists)              │
-│  ✓ Spaced apart to allow strategic choice                      │
+│  ✓ Near towns, road intersections, or strategic positions     │
+│  ✓ Within each team's territory                                │
+│  ✓ 2-4 resupply points per team                                │
+│  ✓ Spaced to provide coverage across the map                   │
+│  ✓ Visual marker: ⬡ hexagon icon on map and minimap           │
 │                                                                 │
-│  Entry Point Properties:                                        │
-│  - position: Vector3 (at map edge)                             │
-│  - roadType: 'highway' | 'secondary' | 'dirt' | 'air'          │
-│  - teamId: which team uses this entry                          │
-│  - spawnDirection: angle units face when spawning              │
-│  - connectedRoadId: road they spawn onto                       │
+│  Resupply Point Properties:                                     │
+│  - position: Vector3 (strategic location)                      │
+│  - teamId: which team owns this resupply point                 │
+│  - capacity: how many units can spawn simultaneously           │
+│  - isActive: can be disabled if captured/destroyed             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Aircraft Entry (Special Case)
+### Aircraft Reinforcement (Special Case)
 
-Aircraft don't use ground entry points:
+Aircraft spawn at air resupply points (map edge):
 
 ```
 AIRCRAFT REINFORCEMENT:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
 │  Helicopters:                                                   │
-│  - Spawn at map edge (any edge on friendly side)               │
-│  - Fly in at altitude                                          │
-│  - Can be given destination immediately                        │
+│  - Spawn at map edge after 3s delay                            │
+│  - Fly directly to clicked destination                         │
+│  - Movement modifiers affect flight behavior                   │
 │                                                                 │
 │  Fixed-Wing Aircraft:                                           │
 │  - Called in via off-map sorties                               │
@@ -357,58 +370,62 @@ AIRCRAFT REINFORCEMENT:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Entry Point UI
+### Resupply Point UI
 
 ```
-ENTRY POINT VISUAL (on map):
+RESUPPLY POINT VISUAL (on map and minimap):
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  Normal state:         Selected card:        Queue active:      │
+│  Normal state:         Card selected:        Spawning unit:     │
 │  ┌─────────┐           ┌─────────┐           ┌─────────┐       │
-│  │   ═══   │           │  ★═══★  │           │  ★═══★  │       │
-│  │    ▼    │   →       │    ▼    │   →       │  3 │▼   │       │
-│  │         │           │ (glow)  │           │ queued  │       │
+│  │         │           │         │           │    3s   │       │
+│  │    ⬡    │   →       │   ⬡★    │   →       │   ⬡→🚗  │       │
+│  │         │           │ (glow)  │           │ spawning│       │
 │  └─────────┘           └─────────┘           └─────────┘       │
-│  (subtle marker)       (highlighted)         (shows count)     │
+│  (hexagon icon)        (highlighted)         (countdown)       │
 │                                                                 │
-│  Tooltip on hover:                                              │
+│  Minimap appearance:                                            │
 │  ┌────────────────────────────────┐                            │
-│  │ Highway Entry Point            │                            │
-│  │ Spawn Rate: Fast (3s/unit)     │                            │
-│  │ Queue: 2 units (6s total)      │                            │
-│  │ Road leads to: Town Center     │                            │
+│  │ ⬡ = Friendly resupply point   │                            │
+│  │ (team colored hexagon)         │                            │
 │  └────────────────────────────────┘                            │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Rally Points
+### Direct Destination Placement
 
-Set a destination for reinforcements automatically:
+Reinforcement destinations are set directly when placing:
 
 ```
-RALLY POINT SYSTEM:
+DIRECT PLACEMENT SYSTEM:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
 │  With reinforcement card selected:                              │
 │                                                                 │
-│  1. Click entry point (spawn location)                         │
-│  2. Shift+Click destination (rally point)                      │
+│  Simply click anywhere on the battlefield:                      │
+│  - That location becomes the unit's destination                │
+│  - Movement modifier keys set the movement type                │
 │                                                                 │
-│         [ENTRY]                                                 │
-│            ║                                                    │
-│            ║ (auto-move path shown)                            │
-│            ║                                                    │
-│            ▼                                                    │
-│           ●━━━━━━━━━━━━━━━━━━━━━━━━●                          │
-│                                   [RALLY]                       │
+│         [RESUPPLY ⬡]                                           │
+│              │                                                  │
+│              │  (3s delay)                                      │
+│              │                                                  │
+│              ▼                                                  │
+│            🚗 ═══════════════════════► ● [YOUR CLICK]          │
 │                                                                 │
-│  Units spawn → Auto-move to rally → Await orders               │
+│  Unit spawns → Executes movement order → Arrives at destination│
 │                                                                 │
-│  Rally point persists for that entry point until changed       │
+│  Movement type is locked in at placement time                  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Placement with Movement Modifiers:**
+- **Click**: Normal move to destination
+- **A + Click**: Attack-move to destination (engage enemies en route)
+- **F + Click**: Fast-move to destination (maximum speed)
+- **R + Click**: Reverse to destination (maintain front armor facing)
 
 ---
 

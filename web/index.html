@@ -242,11 +242,11 @@
       /* Start Battle Button */
       #start-battle-btn {
         position: absolute;
-        bottom: 50%;
+        top: 60px;
         left: 50%;
-        transform: translate(-50%, 50%);
-        padding: 15px 40px;
-        font-size: 18px;
+        transform: translateX(-50%);
+        padding: 12px 30px;
+        font-size: 16px;
         font-weight: bold;
         background: linear-gradient(135deg, #4a9eff, #2070cc);
         color: white;
@@ -258,7 +258,7 @@
       }
 
       #start-battle-btn:hover {
-        transform: translate(-50%, 50%) scale(1.05);
+        transform: translateX(-50%) scale(1.05);
         box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
       }
 
@@ -619,6 +619,23 @@
 
         <!-- Start Battle Button -->
         <button id="start-battle-btn">START BATTLE</button>
+
+        <!-- Call Reinforcements Button (during battle) -->
+        <button id="call-reinforcements-btn" style="
+          position: absolute;
+          top: 100px;
+          left: 10px;
+          padding: 10px 20px;
+          font-size: 14px;
+          font-weight: bold;
+          background: linear-gradient(135deg, #ff9f4a, #cc7020);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          display: none;
+          transition: transform 0.2s, box-shadow 0.2s;
+        ">CALL REINFORCEMENTS</button>
 
         <!-- Pause Menu -->
         <div id="pause-menu">

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import { getWeaponById } from '../../data/factions';
-import { GAME_CONSTANTS } from '../../data/types';
+import { GAME_CONSTANTS, type WeaponData } from '../../data/types';
 import { MapGenerator } from '../map/MapGenerator';
 
 export interface DamageResult {
@@ -29,6 +29,7 @@ export interface Projectile {
   targetUnit: Unit | undefined;
   timeAlive: number;
   maxTime: number;
+  weaponData: WeaponData;
 }
 
 export class CombatManager {
@@ -89,27 +90,36 @@ export class CombatManager {
     const coverValue = this.getTargetCover(target);
     hitChance *= 1 - coverValue;
 
-    // Size modifier (smaller units harder to hit)
-    // TODO: Add size to unit data
+    // Morale-accuracy scaling: accuracy malus = (100 - morale) / 100
+    // At 100 morale: no penalty. At 0 morale: 100% penalty (can't hit)
+    const moralePenalty = (100 - attacker.morale) / 100;
+    hitChance *= (1 - moralePenalty * 0.5); // Max 50% penalty at 0 morale
 
     // Roll for hit
     if (Math.random() > hitChance) {
       // Miss - create tracer anyway for visual
-      this.createProjectile(attacker, target, weapon.damage, weapon.penetration, weapon.suppression, false);
+      this.createProjectile(attacker, target, weapon, false, distance);
+      // Create muzzle flash and sound
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
+      this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
+      this.game.audioManager.playSound('weapon_fire');
       return;
     }
 
-    // Hit - create projectile
-    this.createProjectile(attacker, target, weapon.damage, weapon.penetration, weapon.suppression, true);
+    // Hit - create projectile with kinetic scaling
+    this.createProjectile(attacker, target, weapon, true, distance);
+    // Create muzzle flash and sound
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
+    this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
+    this.game.audioManager.playSound('weapon_fire');
   }
 
   private createProjectile(
     attacker: Unit,
     target: Unit,
-    damage: number,
-    penetration: number,
-    suppression: number,
-    willHit: boolean
+    weaponData: WeaponData,
+    willHit: boolean,
+    firingDistance: number
   ): void {
     const id = `proj_${this.nextProjectileId++}`;
 
@@ -140,19 +150,28 @@ export class CombatManager {
     const speed = 100; // meters per second
     const maxTime = distance / speed + 0.5;
 
+    // Kinetic scaling at close range - damage increases at shorter distances
+    // At max range: 100% damage. At point blank: 150% damage
+    const kineticScale = 1 + (1 - firingDistance / weaponData.range) * 0.5;
+    const scaledDamage = willHit ? Math.round(weaponData.damage * kineticScale) : 0;
+
+    // Penetration also increases at close range
+    const scaledPenetration = weaponData.penetration * kineticScale;
+
     const projectile: Projectile = {
       id,
       mesh,
       start,
       target: targetPos,
       speed,
-      damage: willHit ? damage : 0,
-      penetration,
-      suppression: willHit ? suppression : suppression * 0.5,
+      damage: scaledDamage,
+      penetration: scaledPenetration,
+      suppression: willHit ? weaponData.suppression : weaponData.suppression * 0.5,
       sourceTeam: attacker.team,
       targetUnit: willHit ? target : undefined,
       timeAlive: 0,
       maxTime,
+      weaponData,
     };
 
     this.projectiles.set(id, projectile);
@@ -213,10 +232,30 @@ export class CombatManager {
         this.game.unitManager.registerAttack(closest, proj.targetUnit);
       }
       proj.targetUnit.takeDamage(result.damage);
+
+      // Show damage number
+      if (result.damage > 0) {
+        this.game.damageNumberManager.createDamageNumber(
+          proj.targetUnit.position,
+          result.damage,
+          result.criticalHit
+        );
+      }
+
+      // Create explosion effect and sound on impact
+      const explosionSize = result.criticalHit ? 1.5 : 1;
+      this.game.visualEffectsManager.createExplosion(proj.targetUnit.position, explosionSize);
+      this.game.audioManager.playSound('explosion');
     }
 
     // Apply suppression (always applies even on miss)
     proj.targetUnit.suppressMorale(result.suppression);
+
+    // Deploy smoke if weapon has smoke effect
+    if (proj.weaponData.smokeEffect) {
+      const smokePos = proj.targetUnit.position.clone();
+      this.game.smokeManager.deploySmoke(smokePos, 'grenade');
+    }
   }
 
   private calculateDamage(proj: Projectile, target: Unit): DamageResult {

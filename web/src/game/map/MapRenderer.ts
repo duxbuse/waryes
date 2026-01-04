@@ -3,12 +3,17 @@
  */
 
 import * as THREE from 'three';
-import type { GameMap, Building, Road, CaptureZone, DeploymentZone } from '../../data/types';
+import type { GameMap, Building, Road, CaptureZone, DeploymentZone, ResupplyPoint } from '../../data/types';
+import { ZoneFillRenderer, type FillEntry } from './ZoneFillRenderer';
 
 export class MapRenderer {
   private scene: THREE.Scene;
   private mapGroup: THREE.Group;
   private captureZoneMeshes: Map<string, THREE.Group> = new Map();
+  private animationTime: number = 0; // For pulsing animations
+
+  // Zone fill renderer for territorial capture visualization
+  private zoneFillRenderer: ZoneFillRenderer | null = null;
 
   // Materials
   private materials: {
@@ -85,32 +90,42 @@ export class MapRenderer {
       deploymentPlayer: new THREE.MeshBasicMaterial({
         color: 0x4a9eff,
         transparent: true,
-        opacity: 0.2,
+        opacity: 0.4,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       }),
       deploymentEnemy: new THREE.MeshBasicMaterial({
         color: 0xff4a4a,
         transparent: true,
-        opacity: 0.2,
+        opacity: 0.4,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       }),
       captureNeutral: new THREE.MeshBasicMaterial({
         color: 0xffff00,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.4,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       }),
       capturePlayer: new THREE.MeshBasicMaterial({
         color: 0x4a9eff,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.4,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       }),
       captureEnemy: new THREE.MeshBasicMaterial({
         color: 0xff4a4a,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.4,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       }),
     };
   }
@@ -134,6 +149,9 @@ export class MapRenderer {
     // Render capture zones
     this.renderCaptureZones(map.captureZones);
 
+    // Render resupply points
+    this.renderResupplyPoints(map.resupplyPoints);
+
     // Add trees to forests
     this.renderForestTrees(map);
 
@@ -155,6 +173,12 @@ export class MapRenderer {
 
     this.mapGroup.clear();
     this.captureZoneMeshes.clear();
+
+    // Clear zone fill renderer
+    if (this.zoneFillRenderer) {
+      this.zoneFillRenderer.dispose();
+      this.zoneFillRenderer = null;
+    }
   }
 
   private renderTerrain(map: GameMap): void {
@@ -380,9 +404,10 @@ export class MapRenderer {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(
         (zone.minX + zone.maxX) / 2,
-        0.2,
+        0.5, // Above terrain
         (zone.minZ + zone.maxZ) / 2
       );
+      mesh.renderOrder = 99; // Render after terrain
 
       zoneGroup.add(mesh);
 
@@ -392,11 +417,14 @@ export class MapRenderer {
       );
       const borderMaterial = new THREE.LineBasicMaterial({
         color: zone.team === 'player' ? 0x4a9eff : 0xff4a4a,
+        depthWrite: false,
+        depthTest: false,
       });
       const border = new THREE.LineSegments(borderGeometry, borderMaterial);
       border.rotation.x = -Math.PI / 2;
       border.position.copy(mesh.position);
-      border.position.y = 0.25;
+      border.position.y = 1.0; // Above the zone mesh
+      border.renderOrder = 100;
 
       zoneGroup.add(border);
     }
@@ -408,29 +436,28 @@ export class MapRenderer {
     const zoneGroup = new THREE.Group();
     zoneGroup.name = 'capture-zones';
 
+    // Create zone fill renderer
+    this.zoneFillRenderer = new ZoneFillRenderer(this.mapGroup);
+
     for (const zone of zones) {
       const group = new THREE.Group();
       group.name = `capture-zone-${zone.id}`;
 
-      // Zone circle
-      const circleGeometry = new THREE.CircleGeometry(zone.radius, 32);
-      circleGeometry.rotateX(-Math.PI / 2);
-
-      const circleMesh = new THREE.Mesh(circleGeometry, this.materials.captureNeutral.clone());
-      circleMesh.position.set(zone.x, 0.3, zone.z);
-      group.add(circleMesh);
-
-      // Zone border ring
-      const ringGeometry = new THREE.RingGeometry(zone.radius - 1, zone.radius, 32);
+      // Zone border ring (outline of the capture zone)
+      const ringGeometry = new THREE.RingGeometry(zone.radius - 0.5, zone.radius, 64);
       ringGeometry.rotateX(-Math.PI / 2);
       const ringMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.6,
         side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
       });
       const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-      ringMesh.position.set(zone.x, 0.35, zone.z);
+      ringMesh.position.set(zone.x, 0.55, zone.z);
+      ringMesh.userData.isBorderRing = true;
+      ringMesh.renderOrder = 92;
       group.add(ringMesh);
 
       // Zone flag/marker
@@ -449,13 +476,121 @@ export class MapRenderer {
       });
       const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
       flagMesh.position.set(zone.x + 2, 7, zone.z);
+      flagMesh.userData.isFlag = true;
       group.add(flagMesh);
 
       this.captureZoneMeshes.set(zone.id, group);
       zoneGroup.add(group);
+
+      // Initialize zone in fill renderer
+      this.zoneFillRenderer.initializeZone(zone.id, zone.x, zone.z, zone.radius);
     }
 
     this.mapGroup.add(zoneGroup);
+  }
+
+  private renderResupplyPoints(resupplyPoints: ResupplyPoint[]): void {
+    const resupplyGroup = new THREE.Group();
+    resupplyGroup.name = 'resupply-points';
+
+    for (const point of resupplyPoints) {
+      const group = new THREE.Group();
+      group.name = `resupply-point-${point.id}`;
+
+      const teamColor = point.team === 'player' ? 0x4a9eff : 0xff4a4a;
+      const radius = point.radius;
+
+      // Arrow dimensions - larger for better visibility at map edge
+      const arrowLength = radius * 2.5;
+      const arrowWidth = radius * 1.0;
+      const arrowHeadLength = radius * 0.8;
+      const arrowHeadWidth = radius * 1.5;
+
+      // Offset the arrow base outside the map edge
+      // Player (bottom): arrow starts below the map edge, pointing up (+Z)
+      // Enemy (top): arrow starts above the map edge, pointing down (-Z)
+      const outsideOffset = radius * 0.5;
+      const baseZ = point.team === 'player'
+        ? point.z - outsideOffset
+        : point.z + outsideOffset;
+
+      // Arrow shape drawn pointing toward +Z (up on map)
+      // Shape drawn in X-Y plane, then rotated to X-Z plane
+      const arrowShape = new THREE.Shape();
+      // Draw arrow pointing in -Y direction (becomes +Z after rotateX)
+      arrowShape.moveTo(-arrowWidth / 2, 0);
+      arrowShape.lineTo(-arrowWidth / 2, -(arrowLength - arrowHeadLength));
+      arrowShape.lineTo(-arrowHeadWidth / 2, -(arrowLength - arrowHeadLength));
+      arrowShape.lineTo(0, -arrowLength); // Arrow tip
+      arrowShape.lineTo(arrowHeadWidth / 2, -(arrowLength - arrowHeadLength));
+      arrowShape.lineTo(arrowWidth / 2, -(arrowLength - arrowHeadLength));
+      arrowShape.lineTo(arrowWidth / 2, 0);
+      arrowShape.closePath();
+
+      const arrowGeometry = new THREE.ShapeGeometry(arrowShape);
+      arrowGeometry.rotateX(-Math.PI / 2);
+      // Rotate to match direction (direction 0 = +Z, direction PI = -Z)
+      arrowGeometry.rotateY(-point.direction);
+
+      const arrowMaterial = new THREE.MeshBasicMaterial({
+        color: teamColor,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      });
+
+      const arrowMesh = new THREE.Mesh(arrowGeometry, arrowMaterial);
+      arrowMesh.position.set(point.x, 0.6, baseZ);
+      arrowMesh.renderOrder = 95;
+      group.add(arrowMesh);
+
+      // Arrow border outline
+      const borderPoints: THREE.Vector3[] = [
+        new THREE.Vector3(-arrowWidth / 2, 0, 0),
+        new THREE.Vector3(-arrowWidth / 2, 0, arrowLength - arrowHeadLength),
+        new THREE.Vector3(-arrowHeadWidth / 2, 0, arrowLength - arrowHeadLength),
+        new THREE.Vector3(0, 0, arrowLength), // Arrow tip
+        new THREE.Vector3(arrowHeadWidth / 2, 0, arrowLength - arrowHeadLength),
+        new THREE.Vector3(arrowWidth / 2, 0, arrowLength - arrowHeadLength),
+        new THREE.Vector3(arrowWidth / 2, 0, 0),
+        new THREE.Vector3(-arrowWidth / 2, 0, 0),
+      ];
+
+      const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+      const borderMaterial = new THREE.LineBasicMaterial({
+        color: teamColor,
+        linewidth: 2,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const border = new THREE.Line(borderGeometry, borderMaterial);
+      border.position.set(point.x, 0.7, baseZ);
+      border.rotation.y = -point.direction;
+      border.renderOrder = 96;
+      group.add(border);
+
+      // Add small circle at arrow base to show spawn point
+      const circleGeometry = new THREE.CircleGeometry(radius * 0.35, 16);
+      circleGeometry.rotateX(-Math.PI / 2);
+      const circleMaterial = new THREE.MeshBasicMaterial({
+        color: teamColor,
+        transparent: true,
+        opacity: 1.0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const circleMesh = new THREE.Mesh(circleGeometry, circleMaterial);
+      circleMesh.position.set(point.x, 0.65, baseZ);
+      circleMesh.renderOrder = 97;
+      group.add(circleMesh);
+
+      resupplyGroup.add(group);
+    }
+
+    this.mapGroup.add(resupplyGroup);
   }
 
   private renderForestTrees(map: GameMap): void {
@@ -514,27 +649,35 @@ export class MapRenderer {
   }
 
   // Update capture zone visuals based on ownership
-  updateCaptureZone(zoneId: string, owner: 'neutral' | 'player' | 'enemy', progress: number): void {
+  updateCaptureZone(zoneId: string, owner: 'neutral' | 'player' | 'enemy', _progress: number, isContested = false): void {
     const group = this.captureZoneMeshes.get(zoneId);
     if (!group) return;
 
-    const circleMesh = group.children[0] as THREE.Mesh;
-    const flagMesh = group.children[3] as THREE.Mesh;
+    const ringMesh = group.children[0] as THREE.Mesh; // Border ring
+    const flagMesh = group.children.find(c => c.userData.isFlag) as THREE.Mesh;
 
-    if (circleMesh?.material instanceof THREE.MeshBasicMaterial) {
-      let color: number;
+    // Mark border ring as contested for pulsing animation
+    if (ringMesh?.userData.isBorderRing && ringMesh.material instanceof THREE.MeshBasicMaterial) {
+      ringMesh.userData.isContested = isContested;
+
+      // Update ring color based on owner
+      let ringColor: number;
       switch (owner) {
         case 'player':
-          color = 0x4a9eff;
+          ringColor = 0x4a9eff;
           break;
         case 'enemy':
-          color = 0xff4a4a;
+          ringColor = 0xff4a4a;
           break;
         default:
-          color = 0xffff00;
+          ringColor = 0xffffff;
       }
-      circleMesh.material.color.setHex(color);
-      circleMesh.material.opacity = 0.2 + progress * 0.2;
+      ringMesh.material.color.setHex(ringColor);
+
+      // Reset to normal opacity when not contested
+      if (!isContested) {
+        ringMesh.material.opacity = 0.6;
+      }
     }
 
     if (flagMesh?.material instanceof THREE.MeshBasicMaterial) {
@@ -553,8 +696,44 @@ export class MapRenderer {
     }
   }
 
+  /**
+   * Update zone fill visualization with unit entries
+   */
+  updateZoneFill(zoneId: string, entries: FillEntry[], dt: number): void {
+    if (!this.zoneFillRenderer) {
+      console.warn('MapRenderer: zoneFillRenderer not initialized');
+      return;
+    }
+    this.zoneFillRenderer.updateZone(zoneId, entries, dt);
+  }
+
+  /**
+   * Get fill state for a zone
+   */
+  getZoneFillState(zoneId: string): { playerPercent: number; enemyPercent: number; isFullyFilled: boolean; isCaptured: boolean; capturedBy: 'player' | 'enemy' | null } | null {
+    return this.zoneFillRenderer?.getZoneFillState(zoneId) ?? null;
+  }
+
   getMapGroup(): THREE.Group {
     return this.mapGroup;
+  }
+
+  /**
+   * Update animations (border pulsing, etc.)
+   */
+  update(dt: number): void {
+    this.animationTime += dt;
+
+    // Animate border rings for contested zones
+    this.captureZoneMeshes.forEach((group) => {
+      const ringMesh = group.children.find(child => child.userData.isBorderRing) as THREE.Mesh | undefined;
+      if (ringMesh && ringMesh.userData.isContested) {
+        // Pulsing effect: oscillate opacity between 0.3 and 1.0
+        const pulseSpeed = 3; // Hz
+        const opacity = 0.5 + 0.5 * Math.sin(this.animationTime * pulseSpeed * Math.PI * 2);
+        (ringMesh.material as THREE.MeshBasicMaterial).opacity = opacity;
+      }
+    });
   }
 
   dispose(): void {

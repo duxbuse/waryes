@@ -1,11 +1,12 @@
 /**
  * AIManager - Handles AI behavior for CPU-controlled units
  *
- * Provides basic AI behaviors:
- * - Patrol/hold position
- * - Attack enemies in range
- * - Capture zones with commanders
- * - Retreat when damaged
+ * Strategic AI that:
+ * - Captures and defends zones
+ * - Coordinates unit groups
+ * - Uses smoke for protection
+ * - Retreats damaged units
+ * - Plans attacks on enemy positions
  */
 
 import * as THREE from 'three';
@@ -15,16 +16,41 @@ import type { CaptureZone } from '../../data/types';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
-interface AIState {
-  currentBehavior: 'idle' | 'attacking' | 'moving' | 'capturing' | 'retreating';
+type AIBehavior = 'idle' | 'attacking' | 'moving' | 'capturing' | 'defending' | 'retreating' | 'supporting';
+
+interface AIUnitState {
+  behavior: AIBehavior;
   targetUnit: Unit | null;
   targetPosition: THREE.Vector3 | null;
+  targetZone: CaptureZone | null;
   lastDecisionTime: number;
+  lastDamageTime: number;
+  lastSmokeTime: number;
+  healthAtLastCheck: number;
+  assignedObjective: string | null; // Zone ID or 'attack' or 'defend'
+}
+
+interface ZoneAssessment {
+  zone: CaptureZone;
+  priority: number;
+  distanceToNearestUnit: number;
+  enemyPresence: number;
+  friendlyPresence: number;
+  needsDefense: boolean;
+  needsCapture: boolean;
+  isContested: boolean;
+}
+
+interface ThreatAssessment {
+  totalEnemyStrength: number;
+  totalFriendlyStrength: number;
+  isWinning: boolean;
+  shouldBeAggressive: boolean;
 }
 
 export class AIManager {
   private readonly game: Game;
-  private readonly aiStates: Map<string, AIState> = new Map();
+  private readonly aiStates: Map<string, AIUnitState> = new Map();
   private difficulty: AIDifficulty = 'medium';
 
   // Timing parameters based on difficulty
@@ -34,9 +60,23 @@ export class AIManager {
     hard: 0.5,    // 0.5 seconds
   };
 
-  // Behavior parameters
-  private readonly engageRange = 80;  // Range to start engaging enemies
-  private readonly retreatHealthThreshold = 0.25; // Retreat when below 25% health
+  // Strategic parameters
+  private readonly engageRange = 80;
+  private readonly retreatHealthThreshold = 0.25;
+  private readonly smokeCooldown = 15; // seconds between smoke deployments
+  private readonly damageThresholdForSmoke = 0.15; // 15% health lost triggers smoke
+  private readonly suppressionThresholdForRetreat = 70; // High suppression triggers retreat
+
+  // Strategic state
+  private lastStrategicUpdate = 0;
+  private readonly strategicUpdateInterval = 2.0; // Update strategy every 2 seconds
+  private zoneAssessments: ZoneAssessment[] = [];
+  private threatAssessment: ThreatAssessment = {
+    totalEnemyStrength: 0,
+    totalFriendlyStrength: 0,
+    isWinning: false,
+    shouldBeAggressive: false,
+  };
 
   constructor(game: Game) {
     this.game = game;
@@ -45,6 +85,8 @@ export class AIManager {
   initialize(difficulty: AIDifficulty = 'medium'): void {
     this.difficulty = difficulty;
     this.aiStates.clear();
+    this.zoneAssessments = [];
+    this.lastStrategicUpdate = 0;
   }
 
   setDifficulty(difficulty: AIDifficulty): void {
@@ -56,7 +98,16 @@ export class AIManager {
    */
   update(dt: number): void {
     const currentTime = performance.now() / 1000;
+
+    // Update strategic assessment periodically
+    if (currentTime - this.lastStrategicUpdate >= this.strategicUpdateInterval) {
+      this.updateStrategicAssessment();
+      this.allocateUnitsToObjectives();
+      this.lastStrategicUpdate = currentTime;
+    }
+
     const enemyUnits = this.game.unitManager.getAllUnits('enemy');
+    const decisionInterval = this.decisionIntervals[this.difficulty];
 
     for (const unit of enemyUnits) {
       if (unit.health <= 0) continue;
@@ -64,57 +115,358 @@ export class AIManager {
       // Get or create AI state for this unit
       let state = this.aiStates.get(unit.id);
       if (!state) {
-        state = this.createInitialState();
+        state = this.createInitialState(unit);
         this.aiStates.set(unit.id, state);
       }
 
+      // Check for emergency situations (damage taken, high suppression)
+      this.checkEmergencySituations(unit, state, currentTime);
+
       // Check if it's time to make a decision
-      const decisionInterval = this.decisionIntervals[this.difficulty];
       if (currentTime - state.lastDecisionTime >= decisionInterval) {
-        this.makeDecision(unit, state);
+        this.makeDecision(unit, state, currentTime);
         state.lastDecisionTime = currentTime;
       }
 
       // Execute current behavior
       this.executeBehavior(unit, state, dt);
+
+      // Update health tracking
+      state.healthAtLastCheck = unit.health;
     }
   }
 
-  private createInitialState(): AIState {
+  private createInitialState(unit: Unit): AIUnitState {
     return {
-      currentBehavior: 'idle',
+      behavior: 'idle',
       targetUnit: null,
       targetPosition: null,
+      targetZone: null,
       lastDecisionTime: 0,
+      lastDamageTime: 0,
+      lastSmokeTime: 0,
+      healthAtLastCheck: unit.health,
+      assignedObjective: null,
     };
   }
 
   /**
-   * Make a decision for the unit based on current game state
+   * Update strategic assessment of the battlefield
    */
-  private makeDecision(unit: Unit, state: AIState): void {
-    // Priority 1: Retreat if low health
-    if (unit.health / unit.maxHealth <= this.retreatHealthThreshold) {
-      this.orderRetreat(unit, state);
-      return;
+  private updateStrategicAssessment(): void {
+    const captureZones = this.game.economyManager.getCaptureZones();
+    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
+    const playerUnits = this.game.unitManager.getAllUnits('player');
+
+    // Assess overall threat level
+    this.threatAssessment = this.assessThreat(enemyUnits, playerUnits);
+
+    // Assess each zone
+    this.zoneAssessments = captureZones.map(zone => this.assessZone(zone, enemyUnits, playerUnits));
+
+    // Sort by priority (highest first)
+    this.zoneAssessments.sort((a, b) => b.priority - a.priority);
+  }
+
+  private assessThreat(friendlyUnits: Unit[], enemyUnits: Unit[]): ThreatAssessment {
+    // Calculate strength based on health and unit count
+    const friendlyStrength = friendlyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
+    const enemyStrength = enemyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
+
+    // Count zones
+    const zones = this.game.economyManager.getCaptureZones();
+    const friendlyZones = zones.filter(z => z.owner === 'enemy').length;
+    const enemyZones = zones.filter(z => z.owner === 'player').length;
+
+    const isWinning = friendlyStrength > enemyStrength * 1.2 || friendlyZones > enemyZones;
+    const shouldBeAggressive = isWinning || friendlyStrength > enemyStrength;
+
+    return {
+      totalEnemyStrength: enemyStrength,
+      totalFriendlyStrength: friendlyStrength,
+      isWinning,
+      shouldBeAggressive,
+    };
+  }
+
+  private assessZone(zone: CaptureZone, friendlyUnits: Unit[], enemyUnits: Unit[]): ZoneAssessment {
+    // Count units in/near zone
+    const zonePos = new THREE.Vector3(zone.x, 0, zone.z);
+    const detectionRadius = zone.radius + 30; // Include units approaching
+
+    let friendlyPresence = 0;
+    let enemyPresence = 0;
+    let nearestFriendlyDist = Infinity;
+
+    for (const unit of friendlyUnits) {
+      const dist = unit.position.distanceTo(zonePos);
+      if (dist < detectionRadius) {
+        friendlyPresence += unit.health / unit.maxHealth;
+      }
+      if (dist < nearestFriendlyDist) {
+        nearestFriendlyDist = dist;
+      }
     }
 
-    // Priority 2: Attack nearby enemies
+    for (const unit of enemyUnits) {
+      const dist = unit.position.distanceTo(zonePos);
+      if (dist < detectionRadius) {
+        enemyPresence += unit.health / unit.maxHealth;
+      }
+    }
+
+    // Determine zone status
+    const isOurs = zone.owner === 'enemy';
+    const isContested = friendlyPresence > 0 && enemyPresence > 0;
+    const needsDefense = isOurs && enemyPresence > 0;
+    const needsCapture = !isOurs;
+
+    // Calculate priority
+    let priority = zone.pointsPerTick * 10; // Base priority from zone value
+
+    if (needsDefense) {
+      priority += 50; // High priority to defend our zones
+    }
+
+    if (needsCapture && zone.owner === 'neutral') {
+      priority += 30; // Medium priority for neutral zones
+    }
+
+    if (needsCapture && zone.owner === 'player') {
+      priority += 40; // Higher priority to capture enemy zones
+    }
+
+    if (isContested) {
+      priority += 20; // Bonus for contested zones
+    }
+
+    // Distance penalty
+    priority -= nearestFriendlyDist * 0.1;
+
+    // Enemy presence consideration
+    if (enemyPresence > friendlyPresence * 1.5) {
+      priority -= 20; // Avoid heavily defended positions
+    }
+
+    return {
+      zone,
+      priority,
+      distanceToNearestUnit: nearestFriendlyDist,
+      enemyPresence,
+      friendlyPresence,
+      needsDefense,
+      needsCapture,
+      isContested,
+    };
+  }
+
+  /**
+   * Allocate units to strategic objectives
+   */
+  private allocateUnitsToObjectives(): void {
+    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
+    const availableUnits = enemyUnits.filter(u => {
+      const state = this.aiStates.get(u.id);
+      return u.health > 0 && state && state.behavior !== 'retreating';
+    });
+
+    if (availableUnits.length === 0) return;
+
+    // Reset assignments
+    for (const unit of availableUnits) {
+      const state = this.aiStates.get(unit.id);
+      if (state) {
+        state.assignedObjective = null;
+      }
+    }
+
+    // Allocate units to zones based on priority
+    for (const assessment of this.zoneAssessments) {
+      if (availableUnits.length === 0) break;
+
+      // Determine how many units to assign
+      let unitsNeeded = 0;
+
+      if (assessment.needsDefense) {
+        // Need at least enough to counter enemy presence
+        unitsNeeded = Math.ceil(assessment.enemyPresence + 1) - Math.floor(assessment.friendlyPresence);
+      } else if (assessment.needsCapture) {
+        // Need more units to capture
+        unitsNeeded = Math.max(1, Math.ceil(assessment.enemyPresence * 1.5 + 1) - Math.floor(assessment.friendlyPresence));
+      }
+
+      unitsNeeded = Math.min(unitsNeeded, Math.ceil(availableUnits.length / 2)); // Don't commit more than half
+
+      if (unitsNeeded <= 0) continue;
+
+      // Find nearest available units
+      const zonePos = new THREE.Vector3(assessment.zone.x, 0, assessment.zone.z);
+      const sortedUnits = [...availableUnits].sort((a, b) =>
+        a.position.distanceTo(zonePos) - b.position.distanceTo(zonePos)
+      );
+
+      for (let i = 0; i < Math.min(unitsNeeded, sortedUnits.length); i++) {
+        const unit = sortedUnits[i];
+        if (!unit) continue;
+        const state = this.aiStates.get(unit.id);
+        if (state) {
+          state.assignedObjective = assessment.zone.id;
+          state.targetZone = assessment.zone;
+
+          // Remove from available pool
+          const idx = availableUnits.indexOf(unit);
+          if (idx > -1) availableUnits.splice(idx, 1);
+        }
+      }
+    }
+
+    // Remaining units become roaming attackers
+    for (const unit of availableUnits) {
+      const state = this.aiStates.get(unit.id);
+      if (state) {
+        state.assignedObjective = 'roam';
+      }
+    }
+  }
+
+  /**
+   * Check for emergency situations that need immediate response
+   */
+  private checkEmergencySituations(unit: Unit, state: AIUnitState, currentTime: number): void {
+    // Check for damage taken
+    const damageTaken = state.healthAtLastCheck - unit.health;
+    const damagePercent = damageTaken / unit.maxHealth;
+
+    if (damageTaken > 0) {
+      state.lastDamageTime = currentTime;
+
+      // Consider deploying smoke if taking significant damage
+      if (damagePercent >= this.damageThresholdForSmoke &&
+          currentTime - state.lastSmokeTime >= this.smokeCooldown) {
+        this.deployDefensiveSmoke(unit, state, currentTime);
+      }
+    }
+
+    // Check for high suppression
+    if (unit.suppression >= this.suppressionThresholdForRetreat) {
+      // Deploy smoke if available
+      if (currentTime - state.lastSmokeTime >= this.smokeCooldown) {
+        this.deployDefensiveSmoke(unit, state, currentTime);
+      }
+
+      // Consider retreat
+      if (state.behavior !== 'retreating' && unit.suppression >= 80) {
+        this.orderRetreat(unit, state);
+      }
+    }
+
+    // Emergency retreat for very low health
+    if (unit.health / unit.maxHealth <= this.retreatHealthThreshold &&
+        state.behavior !== 'retreating') {
+      // Deploy smoke before retreating
+      if (currentTime - state.lastSmokeTime >= this.smokeCooldown) {
+        this.deployDefensiveSmoke(unit, state, currentTime);
+      }
+      this.orderRetreat(unit, state);
+    }
+  }
+
+  /**
+   * Deploy smoke for defensive purposes
+   * Infantry use grenades (small, 5m radius), other units use launchers (15m radius)
+   */
+  private deployDefensiveSmoke(unit: Unit, state: AIUnitState, currentTime: number): void {
+    // Check if smoke manager exists
+    if (!this.game.smokeManager) return;
+
+    // Check if unit has smoke ammo remaining
+    if (!unit.hasSmokeAmmo()) return;
+
+    // Get smoke type from unit
+    const smokeType = unit.getSmokeType();
+    const isInfantry = smokeType === 'grenade';
+
+    // Deploy smoke at unit's position
+    const smokePos = unit.position.clone();
+
+    // Offset slightly toward enemy if possible
     const nearestEnemy = this.findNearestEnemy(unit);
-    if (nearestEnemy && unit.position.distanceTo(nearestEnemy.position) <= this.engageRange) {
+    if (nearestEnemy) {
+      const toEnemy = nearestEnemy.position.clone().sub(unit.position).normalize();
+      // Infantry grenades thrown closer, vehicle launchers further
+      const offset = isInfantry ? 2 : 5;
+      smokePos.add(toEnemy.multiplyScalar(offset));
+    }
+
+    this.game.smokeManager.deploySmoke(smokePos, smokeType);
+    unit.useSmoke();
+    state.lastSmokeTime = currentTime;
+
+    // Get remaining smoke ammo for logging
+    const smokeIndex = unit.findSmokeWeaponIndex();
+    const remaining = smokeIndex >= 0 ? unit.getWeaponAmmo(smokeIndex) : 0;
+    console.log(`AI ${unit.name} deployed ${smokeType} smoke (${remaining} remaining)`);
+  }
+
+  /**
+   * Make a decision for the unit based on current game state and objectives
+   */
+  private makeDecision(unit: Unit, state: AIUnitState, _currentTime: number): void {
+    // Priority 1: Continue retreating if already retreating and still damaged
+    if (state.behavior === 'retreating') {
+      if (unit.health / unit.maxHealth > 0.5 && unit.suppression < 30) {
+        // Recovered enough to rejoin
+        state.behavior = 'idle';
+      } else {
+        return; // Continue retreating
+      }
+    }
+
+    // Priority 2: Handle assigned objective
+    if (state.assignedObjective && state.assignedObjective !== 'roam') {
+      const zone = this.zoneAssessments.find(z => z.zone.id === state.assignedObjective);
+
+      if (zone) {
+        // Check if we're at the zone
+        const zonePos = new THREE.Vector3(zone.zone.x, 0, zone.zone.z);
+        const distToZone = unit.position.distanceTo(zonePos);
+
+        if (distToZone <= zone.zone.radius + 5) {
+          // At the zone - defend or capture
+          const nearestEnemy = this.findNearestEnemyInRange(unit, this.engageRange);
+
+          if (nearestEnemy) {
+            this.orderAttack(unit, state, nearestEnemy);
+          } else {
+            // Hold position in zone
+            state.behavior = zone.needsDefense ? 'defending' : 'capturing';
+            state.targetZone = zone.zone;
+          }
+        } else {
+          // Move to zone
+          this.orderMove(unit, state, zonePos);
+          state.targetZone = zone.zone;
+        }
+        return;
+      }
+    }
+
+    // Priority 3: Attack nearby enemies
+    const nearestEnemy = this.findNearestEnemyInRange(unit, this.engageRange);
+    if (nearestEnemy) {
       this.orderAttack(unit, state, nearestEnemy);
       return;
     }
 
-    // Priority 3: Move toward capture zones or enemy units
-    const targetPosition = this.findStrategicTarget(unit);
+    // Priority 4: Move toward strategic targets
+    const targetPosition = this.findStrategicTarget(unit, state);
     if (targetPosition) {
       this.orderMove(unit, state, targetPosition);
       return;
     }
 
     // Default: Hold position / idle
-    state.currentBehavior = 'idle';
+    state.behavior = 'idle';
     state.targetUnit = null;
     state.targetPosition = null;
   }
@@ -137,11 +489,33 @@ export class AIManager {
     return nearest;
   }
 
-  private findStrategicTarget(unit: Unit): THREE.Vector3 | null {
-    // Look for uncaptured or enemy-held capture zones
+  private findNearestEnemyInRange(unit: Unit, range: number): Unit | null {
+    const playerUnits = this.game.unitManager.getAllUnits('player');
+    let nearest: Unit | null = null;
+    let nearestDist = range;
+
+    for (const enemy of playerUnits) {
+      if (enemy.health <= 0) continue;
+
+      const dist = unit.position.distanceTo(enemy.position);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = enemy;
+      }
+    }
+
+    return nearest;
+  }
+
+  private findStrategicTarget(unit: Unit, state: AIUnitState): THREE.Vector3 | null {
+    // If we have an assigned zone, go there
+    if (state.targetZone) {
+      return new THREE.Vector3(state.targetZone.x, 0, state.targetZone.z);
+    }
+
+    // Find the best zone to move toward
     const captureZones = this.game.economyManager.getCaptureZones();
 
-    // Find nearest zone that isn't ours
     let bestZone: CaptureZone | null = null;
     let bestScore = -Infinity;
 
@@ -154,7 +528,17 @@ export class AIManager {
       );
 
       // Score based on points value and proximity
-      const score = zone.pointsPerTick * 10 - distance * 0.1;
+      let score = zone.pointsPerTick * 10 - distance * 0.1;
+
+      // Prefer neutral zones (easier to capture)
+      if (zone.owner === 'neutral') {
+        score += 20;
+      }
+
+      // Aggressive AI prefers attacking
+      if (this.threatAssessment.shouldBeAggressive && zone.owner === 'player') {
+        score += 15;
+      }
 
       if (score > bestScore) {
         bestScore = score;
@@ -163,6 +547,7 @@ export class AIManager {
     }
 
     if (bestZone) {
+      state.targetZone = bestZone;
       return new THREE.Vector3(bestZone.x, 0, bestZone.z);
     }
 
@@ -175,8 +560,8 @@ export class AIManager {
     return null;
   }
 
-  private orderAttack(unit: Unit, state: AIState, target: Unit): void {
-    state.currentBehavior = 'attacking';
+  private orderAttack(unit: Unit, state: AIUnitState, target: Unit): void {
+    state.behavior = 'attacking';
     state.targetUnit = target;
     state.targetPosition = null;
 
@@ -184,8 +569,8 @@ export class AIManager {
     unit.setAttackCommand(target);
   }
 
-  private orderMove(unit: Unit, state: AIState, position: THREE.Vector3): void {
-    state.currentBehavior = 'moving';
+  private orderMove(unit: Unit, state: AIUnitState, position: THREE.Vector3): void {
+    state.behavior = 'moving';
     state.targetUnit = null;
     state.targetPosition = position.clone();
 
@@ -193,29 +578,76 @@ export class AIManager {
     unit.setMoveCommand(position);
   }
 
-  private orderRetreat(unit: Unit, state: AIState): void {
-    state.currentBehavior = 'retreating';
+  private orderRetreat(unit: Unit, state: AIUnitState): void {
+    state.behavior = 'retreating';
     state.targetUnit = null;
+    state.assignedObjective = null;
 
-    // Find our deployment zone
+    // Find a safe position to retreat to
+    const retreatPos = this.findRetreatPosition(unit);
+
+    if (retreatPos) {
+      state.targetPosition = retreatPos;
+      unit.setMoveCommand(retreatPos);
+    }
+
+    console.log(`AI ${unit.name} retreating!`);
+  }
+
+  private findRetreatPosition(unit: Unit): THREE.Vector3 | null {
+    // Priority 1: Retreat to a friendly-held zone
+    const friendlyZones = this.zoneAssessments.filter(z =>
+      z.zone.owner === 'enemy' && !z.isContested
+    );
+
+    if (friendlyZones.length > 0) {
+      // Find nearest safe zone
+      let nearest = friendlyZones[0];
+      if (!nearest) return this.fallbackRetreatPosition(unit);
+      let nearestDist = unit.position.distanceTo(new THREE.Vector3(nearest.zone.x, 0, nearest.zone.z));
+
+      for (const zone of friendlyZones) {
+        const dist = unit.position.distanceTo(new THREE.Vector3(zone.zone.x, 0, zone.zone.z));
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearest = zone;
+        }
+      }
+
+      return new THREE.Vector3(nearest.zone.x, 0, nearest.zone.z);
+    }
+
+    // Priority 2: Retreat toward deployment zone
+    return this.fallbackRetreatPosition(unit);
+  }
+
+  private fallbackRetreatPosition(unit: Unit): THREE.Vector3 | null {
     const enemyZone = this.game.currentMap?.deploymentZones.find(z => z.team === 'enemy');
     if (enemyZone) {
       const retreatX = (enemyZone.minX + enemyZone.maxX) / 2;
       const retreatZ = (enemyZone.minZ + enemyZone.maxZ) / 2;
-      state.targetPosition = new THREE.Vector3(retreatX, 0, retreatZ);
-      unit.setMoveCommand(state.targetPosition);
+      return new THREE.Vector3(retreatX, 0, retreatZ);
     }
+
+    // Last resort: Move away from nearest enemy
+    const nearestEnemy = this.findNearestEnemy(unit);
+    if (nearestEnemy) {
+      const awayDir = unit.position.clone().sub(nearestEnemy.position).normalize();
+      return unit.position.clone().add(awayDir.multiplyScalar(50));
+    }
+
+    return null;
   }
 
   /**
    * Execute the current behavior (called every frame)
    */
-  private executeBehavior(unit: Unit, state: AIState, _dt: number): void {
-    switch (state.currentBehavior) {
+  private executeBehavior(unit: Unit, state: AIUnitState, _dt: number): void {
+    switch (state.behavior) {
       case 'attacking':
         // Check if target is still valid
         if (state.targetUnit && state.targetUnit.health <= 0) {
-          state.currentBehavior = 'idle';
+          state.behavior = 'idle';
           state.targetUnit = null;
         }
         break;
@@ -225,16 +657,34 @@ export class AIManager {
         if (state.targetPosition) {
           const dist = unit.position.distanceTo(state.targetPosition);
           if (dist < 5) {
-            state.currentBehavior = 'idle';
+            state.behavior = state.targetZone ? 'capturing' : 'idle';
             state.targetPosition = null;
           }
         }
         break;
 
+      case 'capturing':
+      case 'defending':
+        // Stay in zone, look for threats
+        // Decision making will handle combat
+        break;
+
       case 'retreating':
-        // Continue retreating until safe or healed
-        if (unit.health / unit.maxHealth > 0.5) {
-          state.currentBehavior = 'idle';
+        // Check if reached safety
+        if (state.targetPosition) {
+          const dist = unit.position.distanceTo(state.targetPosition);
+          if (dist < 10) {
+            // Reached retreat position
+            if (unit.health / unit.maxHealth > 0.4) {
+              state.behavior = 'idle';
+            }
+            // Otherwise keep resting
+          }
+        }
+
+        // Also stop retreating if fully healed
+        if (unit.health / unit.maxHealth > 0.7 && unit.suppression < 20) {
+          state.behavior = 'idle';
         }
         break;
     }
@@ -252,5 +702,6 @@ export class AIManager {
    */
   clear(): void {
     this.aiStates.clear();
+    this.zoneAssessments = [];
   }
 }

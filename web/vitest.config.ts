@@ -1,12 +1,13 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
 
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'jsdom',
-    include: ['tests/unit/**/*.test.ts'],
-    pool: 'forks',
-    isolate: false,
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    // Use single threaded mode for compatibility with bun
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -16,12 +17,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': './src',
-      '@core': './src/core',
-      '@game': './src/game',
-      '@ui': './src/ui',
-      '@data': './src/data',
-      '@utils': './src/utils',
+      '@': resolve(__dirname, './src'),
+      '@core': resolve(__dirname, './src/core'),
+      '@game': resolve(__dirname, './src/game'),
+      '@ui': resolve(__dirname, './src/ui'),
+      '@data': resolve(__dirname, './src/data'),
+      '@utils': resolve(__dirname, './src/utils'),
     },
   },
 });

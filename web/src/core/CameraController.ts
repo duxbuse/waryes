@@ -50,12 +50,16 @@ export class CameraController {
   private readonly keys = new Set<string>();
   // Initialize to center of screen to prevent edge panning on startup
   private mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  private mouseInWindow = true;
   private isDragging = false;
   private lastDragPosition = { x: 0, y: 0 };
 
   // Target position for smooth movement
   private targetPosition: THREE.Vector3;
   private targetHeight: number;
+
+  // Fixed pitch angle (in radians) - looking down at 55 degrees
+  private readonly PITCH_ANGLE = -55 * (Math.PI / 180);
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -73,6 +77,12 @@ export class CameraController {
     );
     this.targetHeight = camera.position.y;
 
+    // Set initial fixed rotation
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.x = this.PITCH_ANGLE;
+    this.camera.rotation.y = 0;
+    this.camera.rotation.z = 0;
+
     this.setupEventListeners();
   }
 
@@ -85,7 +95,13 @@ export class CameraController {
     this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
     this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
     this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
-    this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
+
+    // Wheel zoom - attach to window so UI overlays don't block it
+    window.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
+
+    // Track mouse entering/leaving window for edge panning
+    document.addEventListener('mouseenter', this.onMouseEnter.bind(this));
+    document.addEventListener('mouseleave', this.onMouseLeave.bind(this));
 
     // Prevent context menu on right click
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -97,6 +113,14 @@ export class CameraController {
 
   private onKeyUp(event: KeyboardEvent): void {
     this.keys.delete(event.code);
+  }
+
+  private onMouseEnter(): void {
+    this.mouseInWindow = true;
+  }
+
+  private onMouseLeave(): void {
+    this.mouseInWindow = false;
   }
 
   private onMouseMove(event: MouseEvent): void {
@@ -170,8 +194,8 @@ export class CameraController {
       this.targetPosition.x += moveSpeed;
     }
 
-    // Edge panning (only when not dragging)
-    if (!this.isDragging) {
+    // Edge panning (only when not dragging and mouse is in window)
+    if (!this.isDragging && this.mouseInWindow) {
       const edgeSpeed = this.config.edgePanSpeed * speedMultiplier * dt;
       const threshold = this.config.edgePanThreshold;
       const width = window.innerWidth;
@@ -205,6 +229,10 @@ export class CameraController {
     // Smooth camera movement
     const smoothing = 1 - Math.pow(this.config.smoothing, dt);
 
+    // Calculate camera offset based on height and pitch angle
+    // Camera needs to be offset in Z to look at the target position at fixed angle
+    const zOffset = this.targetHeight / Math.tan(-this.PITCH_ANGLE);
+
     this.camera.position.x = THREE.MathUtils.lerp(
       this.camera.position.x,
       this.targetPosition.x,
@@ -212,7 +240,7 @@ export class CameraController {
     );
     this.camera.position.z = THREE.MathUtils.lerp(
       this.camera.position.z,
-      this.targetPosition.z + this.targetHeight * 0.7,
+      this.targetPosition.z + zOffset,
       smoothing
     );
     this.camera.position.y = THREE.MathUtils.lerp(
@@ -221,13 +249,10 @@ export class CameraController {
       smoothing
     );
 
-    // Look at ground below camera
-    const lookTarget = new THREE.Vector3(
-      this.targetPosition.x,
-      0,
-      this.targetPosition.z
-    );
-    this.camera.lookAt(lookTarget);
+    // Keep fixed rotation (no lookAt - prevents dizzying rotation)
+    this.camera.rotation.x = this.PITCH_ANGLE;
+    this.camera.rotation.y = 0;
+    this.camera.rotation.z = 0;
   }
 
   // Public methods for external control
@@ -250,6 +275,13 @@ export class CameraController {
 
   get isTacticalView(): boolean {
     return this.camera.position.y > 60;
+  }
+
+  /**
+   * Get the position the camera is looking at (for minimap viewport)
+   */
+  get targetLookAt(): { x: number; z: number } {
+    return { x: this.targetPosition.x, z: this.targetPosition.z };
   }
 
   /**

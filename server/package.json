@@ -1,0 +1,13 @@
+{
+  "name": "stellar-siege-server",
+  "version": "1.0.0",
+  "description": "Multiplayer server for Stellar Siege RTS",
+  "main": "server.ts",
+  "scripts": {
+    "start": "bun server.ts",
+    "dev": "bun --watch server.ts"
+  },
+  "keywords": ["multiplayer", "websocket", "rts"],
+  "author": "",
+  "license": "MIT"
+}

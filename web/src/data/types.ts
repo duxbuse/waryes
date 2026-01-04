@@ -5,6 +5,34 @@
 // Unit Categories
 export type UnitCategory = 'LOG' | 'INF' | 'TNK' | 'REC' | 'AA' | 'ART' | 'HEL' | 'AIR';
 
+// Optics and Stealth ratings (strings from JSON, converted to numbers in game)
+export type OpticsRating = 'Poor' | 'Normal' | 'Good' | 'Very Good' | 'Exceptional';
+export type StealthRating = 'None' | 'Poor' | 'Medium' | 'Good' | 'Exceptional';
+
+// Convert optics rating string to number (0-6)
+export function opticsToNumber(optics: OpticsRating): number {
+  const map: Record<OpticsRating, number> = {
+    'Poor': 2,
+    'Normal': 3,
+    'Good': 4,
+    'Very Good': 5,
+    'Exceptional': 6,
+  };
+  return map[optics] ?? 3;
+}
+
+// Convert stealth rating string to number (0-5)
+export function stealthToNumber(stealth: StealthRating): number {
+  const map: Record<StealthRating, number> = {
+    'None': 0,
+    'Poor': 1,
+    'Medium': 2,
+    'Good': 3,
+    'Exceptional': 5,
+  };
+  return map[stealth] ?? 1;
+}
+
 export interface WeaponData {
   id: string;
   name: string;
@@ -16,12 +44,18 @@ export interface WeaponData {
   suppression: number;
   isAntiAir: boolean;
   canTargetGround: boolean;
+  smokeEffect?: {
+    radius: number; // Smoke cloud radius in meters
+    duration: number; // Duration in seconds
+    opacityReduction: number; // 0-1, how much it blocks vision
+  };
 }
 
 export interface WeaponSlot {
   weaponId: string;
   count: number;
   turretMounted: boolean;
+  maxAmmo: number; // Maximum ammunition capacity for this weapon
 }
 
 export interface UnitData {
@@ -30,6 +64,7 @@ export interface UnitData {
   cost: number;
   category: UnitCategory;
   tags: string[];
+  icon?: string;       // Path to unit icon (optional, auto-generated if not provided)
   health: number;
   speed: {
     road: number;
@@ -42,9 +77,10 @@ export interface UnitData {
     rear: number;
     top: number;
   };
-  optics: number;
-  stealth: number;
+  optics: OpticsRating;
+  stealth: StealthRating;
   isCommander: boolean;
+  commanderAuraRadius: number; // Radius in meters for commander aura effect
   transportCapacity: number;
   canBeTransported: boolean;
   transportSize: number;
@@ -57,11 +93,25 @@ export interface FactionData {
   name: string;
   description: string;
   color: string;
+  icon: string;      // Path to faction icon
+  flag: string;      // Path to faction flag
+}
+
+// Unit availability by veterancy tier
+export interface UnitAvailability {
+  rookie: number;
+  trained: number;
+  veteran: number;
+  elite: number;
+  legend: number;
 }
 
 export interface DivisionRosterEntry {
   unitId: string;
-  availability: number[]; // [phase1, phase2, phase3]
+  maxCards: number;
+  availability: UnitAvailability;
+  transportOptions?: string[];
+  notes?: string;
 }
 
 export interface DivisionData {
@@ -69,6 +119,8 @@ export interface DivisionData {
   name: string;
   factionId: string;
   description: string;
+  playstyle: string;
+  icon?: string;       // Path to division icon (optional)
   roster: DivisionRosterEntry[];
   slotCosts: Record<UnitCategory, number[]>;
 }
@@ -133,6 +185,28 @@ export interface DeploymentZone {
   maxZ: number;
 }
 
+export interface EntryPoint {
+  id: string;
+  team: 'player' | 'enemy';
+  x: number;
+  z: number;
+  type: 'highway' | 'secondary' | 'dirt' | 'air';
+  spawnRate: number; // seconds between spawns
+  queue: string[]; // unit IDs waiting to spawn
+  rallyPoint: { x: number; z: number } | null;
+}
+
+export interface ResupplyPoint {
+  id: string;
+  x: number;
+  z: number;
+  team: 'player' | 'enemy';
+  radius: number; // Visual radius for the hexagon marker
+  capacity: number; // How many units can spawn simultaneously
+  isActive: boolean; // Can be disabled if captured/destroyed
+  direction: number; // Angle in radians pointing toward battlefield (0 = up/north, PI/2 = right/east)
+}
+
 export interface GameMap {
   seed: number;
   size: MapSize;
@@ -143,6 +217,8 @@ export interface GameMap {
   buildings: Building[];
   captureZones: CaptureZone[];
   deploymentZones: DeploymentZone[];
+  entryPoints: EntryPoint[];
+  resupplyPoints: ResupplyPoint[];
 }
 
 // Game Constants

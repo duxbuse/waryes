@@ -1,0 +1,45 @@
+{
+  "id": "sdf_sniper_team",
+  "name": "Sniper Team",
+  "cost": 45,
+  "icon": "assets/icons/units/sdf/sdf_sniper_team.png",
+  "health": 3,
+  "speed": {
+    "road": 10,
+    "offRoad": 8,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Exceptional",
+  "stealth": "Exceptional",
+  "forwardDeploy": 800,
+  "weapons": [
+    {
+      "weaponId": "sdf_sniper_rifle",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_laser_rifle",
+      "count": 1,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "REC",
+  "tags": ["sniper", "stealth"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.15
+}

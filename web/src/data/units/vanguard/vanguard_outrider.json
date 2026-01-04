@@ -1,0 +1,42 @@
+{
+  "id": "vanguard_outrider",
+  "name": "Outrider",
+  "cost": 35,
+  "icon": "assets/icons/units/vanguard/vanguard_outrider.png",
+  "health": 4,
+  "speed": {
+    "road": 140,
+    "offRoad": 100,
+    "rotation": 10
+  },
+  "armor": {
+    "front": 10,
+    "side": 10,
+    "rear": 5,
+    "top": 5
+  },
+  "fuel": 300,
+  "autonomy": {
+    "road": 400,
+    "offRoad": 300
+  },
+  "optics": "Very Good",
+  "stealth": "Good",
+  "forwardDeploy": 600,
+  "weapons": [
+    {
+      "weaponId": "vanguard_kinetic_carbine",
+      "count": 2,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "REC",
+  "tags": ["fast", "scout"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

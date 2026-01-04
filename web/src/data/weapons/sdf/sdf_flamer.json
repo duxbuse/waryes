@@ -1,0 +1,16 @@
+{
+  "id": "sdf_flamer",
+  "name": "Flamer",
+  "range": 100,
+  "penetration": 5,
+  "damage": 25,
+  "suppression": 200,
+  "rateOfFire": 60,
+  "accuracy": 0.9,
+  "aimTime": 0.5,
+  "reloadTime": 4,
+  "salvoLength": 10,
+  "supplyCost": 15,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

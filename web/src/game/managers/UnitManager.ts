@@ -15,6 +15,7 @@ import { Unit, type UnitConfig } from '../units/Unit';
 export interface SpawnConfig {
   position: THREE.Vector3;
   team: 'player' | 'enemy';
+  ownerId?: string; // 'player' for human, 'ally1', 'ally2', etc. for CPU allies
   unitType: string;
   name?: string;
 }
@@ -46,6 +47,7 @@ export class UnitManager {
       name: config.name || `${config.unitType}_${id}`,
       unitType: config.unitType,
       team: config.team,
+      ...(config.ownerId !== undefined && { ownerId: config.ownerId }),
       position: config.position.clone(),
       maxHealth: config.unitType === 'tank' ? 100 : 50,
       speed: config.unitType === 'tank' ? 8 : 5,

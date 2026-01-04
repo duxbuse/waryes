@@ -5,10 +5,20 @@
 import type { Game } from '../../core/Game';
 import type { CaptureZone } from '../../data/types';
 import { GAME_CONSTANTS } from '../../data/types';
+import type { FillEntry } from '../map/ZoneFillRenderer';
 
 export interface TeamScore {
   player: number;
   enemy: number;
+}
+
+/** Tracks a unit's entry into a zone */
+export interface ZoneUnitEntry {
+  unitId: string;
+  team: 'player' | 'enemy';
+  /** Position where unit first entered the zone */
+  entryX: number;
+  entryZ: number;
 }
 
 export class EconomyManager {
@@ -25,6 +35,9 @@ export class EconomyManager {
 
   // Capture zones
   private captureZones: CaptureZone[] = [];
+
+  // Track unit entries per zone (unit circles anchored at entry positions)
+  private zoneUnitEntries: Map<string, ZoneUnitEntry[]> = new Map();
 
   // Scoring
   private score: TeamScore = { player: 0, enemy: 0 };
@@ -105,55 +118,99 @@ export class EconomyManager {
 
   private updateCaptureZones(dt: number): void {
     for (const zone of this.captureZones) {
-      // Count units in zone
-      const playerUnits = this.countUnitsInZone(zone, 'player');
-      const enemyUnits = this.countUnitsInZone(zone, 'enemy');
+      // Get units currently in zone with their positions
+      const playerUnitsInZone = this.getUnitsInZone(zone, 'player');
+      const enemyUnitsInZone = this.getUnitsInZone(zone, 'enemy');
+      const playerCount = playerUnitsInZone.length;
+      const enemyCount = enemyUnitsInZone.length;
 
-      // Determine capture direction
-      if (playerUnits > 0 && enemyUnits === 0) {
-        // Player capturing
-        if (zone.owner !== 'player') {
-          zone.captureProgress += GAME_CONSTANTS.CAPTURE_RATE * dt * playerUnits;
+      // Get or create entry tracking for this zone
+      let entries = this.zoneUnitEntries.get(zone.id);
+      if (!entries) {
+        entries = [];
+        this.zoneUnitEntries.set(zone.id, entries);
+      }
 
-          if (zone.captureProgress >= 100) {
+      // Build set of unit IDs currently in zone
+      const currentUnitIds = new Set<string>();
+      for (const u of playerUnitsInZone) currentUnitIds.add(u.id);
+      for (const u of enemyUnitsInZone) currentUnitIds.add(u.id);
+
+      // Remove entries for units that left the zone
+      entries = entries.filter(e => currentUnitIds.has(e.unitId));
+
+      // Add new entries for units entering the zone (record entry position)
+      for (const unit of playerUnitsInZone) {
+        if (!entries.find(e => e.unitId === unit.id)) {
+          console.log(`Unit ${unit.id} entered zone ${zone.id} at (${unit.x.toFixed(1)}, ${unit.z.toFixed(1)})`);
+          entries.push({
+            unitId: unit.id,
+            team: 'player',
+            entryX: unit.x,
+            entryZ: unit.z,
+          });
+        }
+      }
+
+      for (const unit of enemyUnitsInZone) {
+        if (!entries.find(e => e.unitId === unit.id)) {
+          entries.push({
+            unitId: unit.id,
+            team: 'enemy',
+            entryX: unit.x,
+            entryZ: unit.z,
+          });
+        }
+      }
+
+      this.zoneUnitEntries.set(zone.id, entries);
+
+      // Convert to FillEntry format for the renderer
+      const fillEntries: FillEntry[] = entries.map(e => ({
+        unitId: e.unitId,
+        team: e.team,
+        entryX: e.entryX,
+        entryZ: e.entryZ,
+      }));
+
+      // Update zone fill visualization
+      this.game.mapRenderer?.updateZoneFill(zone.id, fillEntries, dt);
+
+      // Get fill state to determine ownership
+      const fillState = this.game.mapRenderer?.getZoneFillState(zone.id);
+      const isContested = playerCount > 0 && enemyCount > 0;
+
+      // Determine zone ownership based on fill state
+      if (fillState) {
+        // Check if zone was captured
+        if (fillState.isCaptured && fillState.capturedBy) {
+          if (fillState.capturedBy === 'player' && zone.owner !== 'player') {
             zone.owner = 'player';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'player');
-          }
-        }
-      } else if (enemyUnits > 0 && playerUnits === 0) {
-        // Enemy capturing
-        if (zone.owner !== 'enemy') {
-          zone.captureProgress += GAME_CONSTANTS.CAPTURE_RATE * dt * enemyUnits;
-
-          if (zone.captureProgress >= 100) {
+          } else if (fillState.capturedBy === 'enemy' && zone.owner !== 'enemy') {
             zone.owner = 'enemy';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'enemy');
           }
         }
-      } else if (playerUnits > 0 && enemyUnits > 0) {
-        // Contested - no progress change
-      } else {
-        // Empty - decay towards neutral
-        if (zone.owner !== 'neutral' && zone.captureProgress > 0) {
-          zone.captureProgress -= GAME_CONSTANTS.CAPTURE_RATE * dt * 0.5;
 
-          if (zone.captureProgress <= 0) {
-            zone.owner = 'neutral';
-            zone.captureProgress = 0;
-          }
+        // Update capture progress based on fill percentage
+        if (zone.owner === 'player') {
+          zone.captureProgress = fillState.playerPercent * 100;
+        } else if (zone.owner === 'enemy') {
+          zone.captureProgress = fillState.enemyPercent * 100;
         }
       }
 
-      // Update zone visuals
-      this.game.mapRenderer?.updateCaptureZone(zone.id, zone.owner, zone.captureProgress / 100);
+      // Update zone border/flag visuals
+      this.game.mapRenderer?.updateCaptureZone(zone.id, zone.owner, zone.captureProgress / 100, isContested);
     }
   }
 
-  private countUnitsInZone(zone: CaptureZone, team: 'player' | 'enemy'): number {
+  private getUnitsInZone(zone: CaptureZone, team: 'player' | 'enemy'): Array<{ id: string; x: number; z: number }> {
     const units = this.game.unitManager.getAllUnits(team);
-    let count = 0;
+    const result: Array<{ id: string; x: number; z: number }> = [];
 
     for (const unit of units) {
       const dx = unit.position.x - zone.x;
@@ -161,11 +218,11 @@ export class EconomyManager {
       const dist = Math.sqrt(dx * dx + dz * dz);
 
       if (dist <= zone.radius) {
-        count++;
+        result.push({ id: unit.id, x: unit.position.x, z: unit.position.z });
       }
     }
 
-    return count;
+    return result;
   }
 
   private onZoneCaptured(zone: CaptureZone, team: 'player' | 'enemy'): void {
@@ -175,8 +232,10 @@ export class EconomyManager {
 
   private checkVictory(): void {
     if (this.score.player >= this.victoryThreshold) {
+      this.game.audioManager.playSound('victory');
       this.onVictory?.('player');
     } else if (this.score.enemy >= this.victoryThreshold) {
+      this.game.audioManager.playSound('defeat');
       this.onVictory?.('enemy');
     }
   }

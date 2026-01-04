@@ -1,0 +1,39 @@
+{
+  "id": "sdf_field_gun_bombast",
+  "name": "Bombast Field Gun",
+  "cost": 55,
+  "icon": "assets/icons/units/sdf/sdf_field_gun_bombast.png",
+  "health": 5,
+  "speed": {
+    "road": 6,
+    "offRoad": 4,
+    "rotation": 4
+  },
+  "armor": {
+    "front": 10,
+    "side": 5,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Good",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_bombast_cannon",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": ["artillery", "towed"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 2,
+  "veterancyBonus": 0.1
+}

@@ -18,8 +18,11 @@ export interface InputState {
   isLeftMouseDown: boolean;
   isRightMouseDown: boolean;
   isDragging: boolean;
+  isRightDragging: boolean;
   dragStartX: number;
   dragStartY: number;
+  rightDragStartX: number;
+  rightDragStartY: number;
   modifiers: {
     shift: boolean;
     ctrl: boolean;
@@ -42,6 +45,9 @@ export class InputManager {
   private selectionBox: HTMLDivElement | null = null;
   private readonly DRAG_THRESHOLD = 5; // pixels before considered a drag
 
+  // Formation preview ghosts
+  private formationGhosts: THREE.Mesh[] = [];
+
   constructor(game: Game) {
     this.game = game;
     this.state = {
@@ -50,8 +56,11 @@ export class InputManager {
       isLeftMouseDown: false,
       isRightMouseDown: false,
       isDragging: false,
+      isRightDragging: false,
       dragStartX: 0,
       dragStartY: 0,
+      rightDragStartX: 0,
+      rightDragStartY: 0,
       modifiers: {
         shift: false,
         ctrl: false,
@@ -115,6 +124,8 @@ export class InputManager {
     } else if (event.button === 2) {
       // Right click
       this.state.isRightMouseDown = true;
+      this.state.rightDragStartX = event.clientX;
+      this.state.rightDragStartY = event.clientY;
     }
   }
 
@@ -133,9 +144,15 @@ export class InputManager {
       this.state.isDragging = false;
       this.hideSelectionBox();
     } else if (event.button === 2) {
-      // Right click - issue command
-      this.handleRightClick(event);
+      // Right click - check if it was a drag (formation) or click (command)
+      if (this.state.isRightDragging) {
+        this.handleFormationDrag(event);
+        this.clearFormationPreview(); // Clear ghosts after formation is set
+      } else {
+        this.handleRightClick(event);
+      }
       this.state.isRightMouseDown = false;
+      this.state.isRightDragging = false;
     }
   }
 
@@ -143,7 +160,7 @@ export class InputManager {
     this.state.mouseX = event.clientX;
     this.state.mouseY = event.clientY;
 
-    // Check for drag start
+    // Check for left drag start
     if (this.state.isLeftMouseDown && !this.state.isDragging) {
       const dx = event.clientX - this.state.dragStartX;
       const dy = event.clientY - this.state.dragStartY;
@@ -154,9 +171,25 @@ export class InputManager {
       }
     }
 
+    // Check for right drag start (formation drawing)
+    if (this.state.isRightMouseDown && !this.state.isRightDragging) {
+      const dx = event.clientX - this.state.rightDragStartX;
+      const dy = event.clientY - this.state.rightDragStartY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > this.DRAG_THRESHOLD) {
+        this.state.isRightDragging = true;
+      }
+    }
+
     // Update selection box
     if (this.state.isDragging) {
       this.updateSelectionBox();
+    }
+
+    // Show formation preview ghosts while right dragging
+    if (this.state.isRightDragging) {
+      this.updateFormationPreview(event.clientX, event.clientY);
     }
   }
 
@@ -227,6 +260,13 @@ export class InputManager {
       case 'KeyZ':
         // Toggle return-fire-only mode for selected units
         this.toggleReturnFireOnly();
+        break;
+
+      case 'KeyC':
+        // Call reinforcements (battle phase only)
+        if (this.game.phase === GamePhase.Battle) {
+          this.game.reinforcementManager.show();
+        }
         break;
 
       case 'Delete':
@@ -314,6 +354,7 @@ export class InputManager {
     if (selectedUnits.length === 0) return;
 
     const queue = this.state.modifiers.shift;
+    const isSetupPhase = this.game.phase === GamePhase.Setup;
 
     // Check if clicked on an enemy
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
@@ -321,7 +362,14 @@ export class InputManager {
 
     if (targetUnit && targetUnit.team !== 'player') {
       // Attack command
-      this.game.unitManager.issueAttackCommand(selectedUnits, targetUnit, queue);
+      if (isSetupPhase) {
+        // Queue as pre-order during setup
+        selectedUnits.forEach(unit => {
+          this.game.queuePreOrder(unit.id, 'attack', targetUnit.position.clone(), targetUnit);
+        });
+      } else {
+        this.game.unitManager.issueAttackCommand(selectedUnits, targetUnit, queue);
+      }
     } else {
       // Movement command - check for movement modifiers
       const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
@@ -329,18 +377,27 @@ export class InputManager {
 
       const { reverse, fast, attackMove } = this.state.movementModifiers;
 
-      if (attackMove) {
-        // A + Right Click = Attack Move
-        this.game.unitManager.issueAttackMoveCommand(selectedUnits, worldPos, queue);
-      } else if (reverse) {
-        // R + Right Click = Reverse
-        this.game.unitManager.issueReverseCommand(selectedUnits, worldPos, queue);
-      } else if (fast) {
-        // F + Right Click = Fast Move
-        this.game.unitManager.issueFastMoveCommand(selectedUnits, worldPos, queue);
+      if (isSetupPhase) {
+        // Queue as pre-order during setup
+        let orderType = 'move';
+        if (attackMove) orderType = 'attackMove';
+        else if (reverse) orderType = 'reverse';
+        else if (fast) orderType = 'fast';
+
+        selectedUnits.forEach(unit => {
+          this.game.queuePreOrder(unit.id, orderType, worldPos.clone());
+        });
       } else {
-        // Normal move
-        this.game.unitManager.issueMoveCommand(selectedUnits, worldPos, queue);
+        // Execute immediately during battle
+        if (attackMove) {
+          this.game.unitManager.issueAttackMoveCommand(selectedUnits, worldPos, queue);
+        } else if (reverse) {
+          this.game.unitManager.issueReverseCommand(selectedUnits, worldPos, queue);
+        } else if (fast) {
+          this.game.unitManager.issueFastMoveCommand(selectedUnits, worldPos, queue);
+        } else {
+          this.game.unitManager.issueMoveCommand(selectedUnits, worldPos, queue);
+        }
       }
     }
   }
@@ -402,6 +459,215 @@ export class InputManager {
         this.game.selectionManager.setSelection(playerUnits);
       }
     }
+  }
+
+  /**
+   * Handle formation drawing via right-click drag
+   */
+  private handleFormationDrag(event: MouseEvent): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    if (selectedUnits.length === 0) return;
+
+    // Get start and end positions in world space
+    const startWorld = this.game.screenToWorld(this.state.rightDragStartX, this.state.rightDragStartY);
+    const endWorld = this.game.screenToWorld(event.clientX, event.clientY);
+
+    if (!startWorld || !endWorld) return;
+
+    // Calculate formation line
+    const lineLength = startWorld.distanceTo(endWorld);
+
+    // If drag is very short (< 5m), treat as single point (auto-spread)
+    if (lineLength < 5) {
+      // Single point - auto-spread units in a small area
+      this.distributeUnitsAtPoint(selectedUnits, endWorld);
+      return;
+    }
+
+    // Distribute units along the line
+    this.distributeUnitsAlongLine(selectedUnits, startWorld, endWorld);
+  }
+
+  /**
+   * Distribute units at a single point with auto-spread
+   */
+  private distributeUnitsAtPoint(units: any[], center: THREE.Vector3): void {
+    const spacing = 4; // 4m between units
+    const columns = Math.ceil(Math.sqrt(units.length));
+
+    units.forEach((unit, i) => {
+      const row = Math.floor(i / columns);
+      const col = i % columns;
+
+      const offsetX = (col - columns / 2) * spacing;
+      const offsetZ = (row - Math.floor(units.length / columns) / 2) * spacing;
+
+      const target = new THREE.Vector3(
+        center.x + offsetX,
+        0,
+        center.z + offsetZ
+      );
+
+      // Issue move command based on modifiers
+      this.issueFormationCommand(unit, target);
+    });
+  }
+
+  /**
+   * Distribute units evenly along formation line
+   */
+  private distributeUnitsAlongLine(units: any[], start: THREE.Vector3, end: THREE.Vector3): void {
+    const count = units.length;
+
+    units.forEach((unit, i) => {
+      // Calculate position along line (evenly spaced)
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      const target = new THREE.Vector3().lerpVectors(start, end, t);
+
+      // TODO: Calculate facing direction (perpendicular to line for straight, outward for curved)
+      // For now units will face their movement direction
+
+      // Issue move command
+      this.issueFormationCommand(unit, target);
+    });
+  }
+
+  /**
+   * Issue movement command based on current modifiers
+   */
+  private issueFormationCommand(unit: any, target: THREE.Vector3): void {
+    const isSetupPhase = this.game.phase === GamePhase.Setup;
+
+    if (isSetupPhase) {
+      // Queue as pre-order during setup
+      let orderType = 'move';
+      if (this.state.movementModifiers.fast) orderType = 'fast';
+      else if (this.state.movementModifiers.reverse) orderType = 'reverse';
+      else if (this.state.movementModifiers.attackMove) orderType = 'attackMove';
+
+      this.game.queuePreOrder(unit.id, orderType, target.clone());
+    } else {
+      // Execute immediately during battle
+      if (this.state.movementModifiers.fast) {
+        unit.setFastMoveCommand(target);
+      } else if (this.state.movementModifiers.reverse) {
+        unit.setReverseCommand(target);
+      } else if (this.state.movementModifiers.attackMove) {
+        unit.setMoveCommand(target); // Attack move doesn't have target position variant
+      } else {
+        unit.setMoveCommand(target);
+      }
+    }
+  }
+
+  /**
+   * Update formation preview ghosts while right-dragging
+   */
+  private updateFormationPreview(mouseX: number, mouseY: number): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    if (selectedUnits.length === 0) {
+      this.clearFormationPreview();
+      return;
+    }
+
+    // Get start and end positions in world space
+    const startWorld = this.game.screenToWorld(this.state.rightDragStartX, this.state.rightDragStartY);
+    const endWorld = this.game.screenToWorld(mouseX, mouseY);
+
+    if (!startWorld || !endWorld) {
+      this.clearFormationPreview();
+      return;
+    }
+
+    // Calculate formation positions
+    const positions = this.calculateFormationPositions(selectedUnits, startWorld, endWorld);
+
+    // Update or create ghost meshes
+    this.updateGhostMeshes(positions);
+  }
+
+  /**
+   * Calculate formation positions for units
+   */
+  private calculateFormationPositions(units: any[], start: THREE.Vector3, end: THREE.Vector3): THREE.Vector3[] {
+    const lineLength = start.distanceTo(end);
+    const positions: THREE.Vector3[] = [];
+
+    // If drag is very short, auto-spread at end point
+    if (lineLength < 5) {
+      const spacing = 3;
+      const perRow = Math.ceil(Math.sqrt(units.length));
+
+      units.forEach((_, index) => {
+        const row = Math.floor(index / perRow);
+        const col = index % perRow;
+        const offsetX = (col - (perRow - 1) / 2) * spacing;
+        const offsetZ = row * spacing;
+        positions.push(new THREE.Vector3(
+          end.x + offsetX,
+          end.y,
+          end.z + offsetZ
+        ));
+      });
+    } else {
+      // Distribute along line
+      units.forEach((_, i) => {
+        const t = units.length === 1 ? 0.5 : i / (units.length - 1);
+        positions.push(new THREE.Vector3().lerpVectors(start, end, t));
+      });
+    }
+
+    return positions;
+  }
+
+  /**
+   * Update ghost meshes to match formation positions
+   */
+  private updateGhostMeshes(positions: THREE.Vector3[]): void {
+    // Remove excess ghosts
+    while (this.formationGhosts.length > positions.length) {
+      const ghost = this.formationGhosts.pop();
+      if (ghost) {
+        this.game.scene.remove(ghost);
+        ghost.geometry.dispose();
+        (ghost.material as THREE.Material).dispose();
+      }
+    }
+
+    // Create or update ghosts
+    positions.forEach((pos, i) => {
+      if (i < this.formationGhosts.length) {
+        // Update existing ghost
+        this.formationGhosts[i]!.position.copy(pos);
+      } else {
+        // Create new ghost
+        const geometry = new THREE.CylinderGeometry(1, 1, 0.2, 16);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0x00ff00,
+          transparent: true,
+          opacity: 0.3,
+          depthTest: false,
+        });
+        const ghost = new THREE.Mesh(geometry, material);
+        ghost.position.copy(pos);
+        ghost.position.y = 0.1; // Slightly above ground
+        ghost.renderOrder = 1000;
+        this.formationGhosts.push(ghost);
+        this.game.scene.add(ghost);
+      }
+    });
+  }
+
+  /**
+   * Clear all formation preview ghosts
+   */
+  private clearFormationPreview(): void {
+    this.formationGhosts.forEach(ghost => {
+      this.game.scene.remove(ghost);
+      ghost.geometry.dispose();
+      (ghost.material as THREE.Material).dispose();
+    });
+    this.formationGhosts = [];
   }
 
   update(_dt: number): void {

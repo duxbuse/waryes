@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- IFV Body -->
+  <path d="M10 24 L54 24 L50 42 L14 42 Z" fill="white" stroke="black" stroke-width="4"/>
+  <!-- Turret (distinct from APC) -->
+  <path d="M24 14 L40 14 L38 24 L26 24 Z" fill="white" stroke="black" stroke-width="3"/>
+  <!-- Gun barrel -->
+  <rect x="38" y="16" width="16" height="4" fill="white" stroke="black" stroke-width="2"/>
+  <!-- Tracks -->
+  <rect x="12" y="42" width="40" height="6" rx="2" fill="white" stroke="black" stroke-width="3"/>
+</svg>

@@ -1,0 +1,42 @@
+{
+  "id": "sdf_bastion_commander",
+  "name": "Bastion Command Tank",
+  "cost": 300,
+  "icon": "assets/icons/units/sdf/sdf_bastion_commander.png",
+  "health": 12,
+  "speed": {
+    "road": 60,
+    "offRoad": 40,
+    "rotation": 40
+  },
+  "armor": {
+    "front": 14,
+    "side": 8,
+    "rear": 4,
+    "top": 2
+  },
+  "fuel": 600,
+  "autonomy": {
+    "road": 500,
+    "offRoad": 350
+  },
+  "optics": "Very Good",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "isCommander": true,
+  "weapons": [
+    {
+      "weaponId": "sdf_cannon_120mm",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "LOG",
+  "tags": [],
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

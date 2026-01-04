@@ -159,13 +159,28 @@
 128. UI polish and feedback
 129. Sound effects (placeholder)
 
-### Phase 13: Testing & Balance
-130. Unit tests for all systems
-131. E2E tests for game flow
-132. AI behavior testing
-133. Balance pass on units/weapons
-134. Performance optimization
-135. Bug fixes
+### Phase 13: Multiplayer
+130. WebSocket server setup
+131. Game code generation (XXXX-NNNN format)
+132. Lobby creation and management
+133. Join Game screen with code entry
+134. Game browser showing all open lobbies
+135. Game Lobby screen (team selection, ready state)
+136. Player state synchronization
+137. Host privileges (kick, assign teams, start game)
+138. Ready-up system
+139. Game state synchronization during battle
+140. Reconnection support (30 second window)
+141. Disconnect handling (player leaves mid-game)
+142. Spectator mode for games in progress
+
+### Phase 14: Testing & Balance
+143. Unit tests for all systems
+144. E2E tests for game flow
+145. AI behavior testing
+146. Balance pass on units/weapons
+147. Performance optimization
+148. Bug fixes
 
 ---
 
@@ -391,10 +406,14 @@ Output `<promise>GAME COMPLETE</promise>` when ALL of the following are true:
 - [ ] Faction and Division selection
 - [ ] Category tabs with unit library
 - [ ] Activation point system with progressive costs
+- [ ] Division-specific slot costs (each division has different tiering per category)
+- [ ] Transports do NOT count toward activation points
+- [ ] Unit icons displayed in library and deck strip
 - [ ] Unit stats display with comparison
 - [ ] Veterancy selection affects unit count
-- [ ] Transport selection popup
+- [ ] Transport selection popup (free, no AP cost)
 - [ ] Save/Load/Delete decks
+- [ ] Starter decks available for new players (6 pre-built decks)
 
 ### Map Generation
 - [ ] Seed-based procedural generation
@@ -577,6 +596,28 @@ Output `<promise>GAME COMPLETE</promise>` when ALL of the following are true:
 - [ ] Lost LOS during capture: last seen state frozen until regained
 - [ ] Contested zones show frozen progress with pulsing border
 - [ ] Capture zones visible on minimap with owner colors
+
+### Multiplayer
+- [ ] Main Menu has JOIN GAME button
+- [ ] HOST ONLINE button in Skirmish Setup generates game code
+- [ ] Game code format: XXXX-NNNN (4 letters + 4 numbers)
+- [ ] Game code displayed with COPY button
+- [ ] Join Game screen with code entry field
+- [ ] Game browser lists all open lobbies
+- [ ] Game browser shows: code, host, map size, player count, status
+- [ ] Game browser auto-refreshes every 5 seconds
+- [ ] Filter options for full games and games in progress
+- [ ] Join button for open lobbies, Spectate for games in progress
+- [ ] Game Lobby screen shows all players and their ready state
+- [ ] Players can select team and deck in lobby
+- [ ] Players can mark themselves as Ready
+- [ ] Host can kick players and assign teams
+- [ ] Host can fill empty slots with CPU
+- [ ] Game starts when host clicks Start (requires 1+ player per team ready)
+- [ ] WebSocket connection for real-time lobby updates
+- [ ] Game state synchronized between all players during battle
+- [ ] Reconnection support (30 second window after disconnect)
+- [ ] Disconnect handling (slot becomes CPU or removed)
 
 ### Victory
 - [ ] Capture zones (commander-only capture)

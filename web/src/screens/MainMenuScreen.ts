@@ -6,6 +6,7 @@ import { ScreenType, type Screen } from '../core/ScreenManager';
 
 export interface MainMenuCallbacks {
   onSkirmish: () => void;
+  onJoinGame: () => void;
   onDeckBuilder: () => void;
   onSettings: () => void;
   onQuit: () => void;
@@ -22,6 +23,7 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
       </div>
       <div class="menu-buttons">
         <button class="menu-btn" id="btn-skirmish">SKIRMISH</button>
+        <button class="menu-btn" id="btn-join-game">JOIN GAME</button>
         <button class="menu-btn" id="btn-deck-builder">DECK BUILDER</button>
         <button class="menu-btn" id="btn-settings">SETTINGS</button>
         <button class="menu-btn" id="btn-quit">QUIT</button>
@@ -115,6 +117,7 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
   const onEnter = () => {
     // Bind button events
     element.querySelector('#btn-skirmish')?.addEventListener('click', callbacks.onSkirmish);
+    element.querySelector('#btn-join-game')?.addEventListener('click', callbacks.onJoinGame);
     element.querySelector('#btn-deck-builder')?.addEventListener('click', callbacks.onDeckBuilder);
     element.querySelector('#btn-settings')?.addEventListener('click', callbacks.onSettings);
     element.querySelector('#btn-quit')?.addEventListener('click', callbacks.onQuit);
