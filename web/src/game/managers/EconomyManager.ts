@@ -110,6 +110,11 @@ export class EconomyManager {
     this.playerCredits += playerZoneIncome;
     this.enemyCredits += this.baseIncome + enemyZoneIncome;
 
+    // Debug: Log score every tick
+    if (this.score.player > 0 || this.score.enemy > 0) {
+      console.log(`[SCORE] Blue: ${this.score.player}, Red: ${this.score.enemy} (playerZoneIncome: ${playerZoneIncome}, enemyZoneIncome: ${enemyZoneIncome})`);
+    }
+
     this.updateUI();
 
     // Check victory condition
@@ -185,10 +190,12 @@ export class EconomyManager {
         // Check if zone was captured
         if (fillState.isCaptured && fillState.capturedBy) {
           if (fillState.capturedBy === 'player' && zone.owner !== 'player') {
+            console.log(`[CAPTURE] ${zone.name} owner changing from '${zone.owner}' to 'player'`);
             zone.owner = 'player';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'player');
           } else if (fillState.capturedBy === 'enemy' && zone.owner !== 'enemy') {
+            console.log(`[CAPTURE] ${zone.name} (id=${zone.id}) owner changing from '${zone.owner}' to 'enemy'. captureZones length: ${this.captureZones.length}, zone ref: ${this.captureZones.indexOf(zone)}`);
             zone.owner = 'enemy';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'enemy');

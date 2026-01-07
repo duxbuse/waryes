@@ -15,6 +15,13 @@
       "type": "string",
       "description": "Path to the weapon icon."
     },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keywords like 'heavy', 'setup', etc."
+    },
     "range": {
       "type": "object",
       "properties": {

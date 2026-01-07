@@ -35,6 +35,8 @@ export interface InputState {
     attackMove: boolean; // A key - attack move
     unload: boolean;     // E key - unload at position
   };
+  // LOS preview mode (hold C to show line of sight from mouse position)
+  losPreviewActive: boolean;
 }
 
 export class InputManager {
@@ -47,6 +49,14 @@ export class InputManager {
 
   // Formation preview ghosts
   private formationGhosts: THREE.Mesh[] = [];
+
+  // Formation path tracking for curved lines
+  private formationPath: THREE.Vector3[] = [];
+
+  // Double-press tracking for control groups
+  private lastControlGroupKey: number = 0;
+  private lastControlGroupTime: number = 0;
+  private readonly DOUBLE_PRESS_THRESHOLD = 300; // ms
 
   constructor(game: Game) {
     this.game = game;
@@ -72,6 +82,7 @@ export class InputManager {
         attackMove: false,
         unload: false,
       },
+      losPreviewActive: false,
     };
   }
 
@@ -179,6 +190,11 @@ export class InputManager {
 
       if (distance > this.DRAG_THRESHOLD) {
         this.state.isRightDragging = true;
+        // Initialize path with starting point
+        const startWorld = this.game.screenToWorld(this.state.rightDragStartX, this.state.rightDragStartY);
+        if (startWorld) {
+          this.formationPath = [startWorld.clone()];
+        }
       }
     }
 
@@ -189,7 +205,30 @@ export class InputManager {
 
     // Show formation preview ghosts while right dragging
     if (this.state.isRightDragging) {
+      // Add point to path if far enough from last point
+      this.addPointToFormationPath(event.clientX, event.clientY);
       this.updateFormationPreview(event.clientX, event.clientY);
+    }
+  }
+
+  /**
+   * Add a point to the formation path if it's far enough from the last point
+   */
+  private addPointToFormationPath(screenX: number, screenY: number): void {
+    const worldPos = this.game.screenToWorld(screenX, screenY);
+    if (!worldPos) return;
+
+    if (this.formationPath.length === 0) {
+      this.formationPath.push(worldPos.clone());
+      return;
+    }
+
+    const lastPoint = this.formationPath[this.formationPath.length - 1]!;
+    const distance = lastPoint.distanceTo(worldPos);
+
+    // Only add point if it's far enough from the last one (in world units)
+    if (distance >= 3) { // 3 world units minimum
+      this.formationPath.push(worldPos.clone());
     }
   }
 
@@ -263,10 +302,8 @@ export class InputManager {
         break;
 
       case 'KeyC':
-        // Call reinforcements (battle phase only)
-        if (this.game.phase === GamePhase.Battle) {
-          this.game.reinforcementManager.show();
-        }
+        // LOS preview mode - hold C to preview line of sight from mouse position
+        this.state.losPreviewActive = true;
         break;
 
       case 'Delete':
@@ -290,11 +327,45 @@ export class InputManager {
           } else {
             // Number: Recall control group
             event.preventDefault();
+
+            const now = Date.now();
+            const isDoublePress =
+              this.lastControlGroupKey === groupNumber &&
+              (now - this.lastControlGroupTime) < this.DOUBLE_PRESS_THRESHOLD;
+
+            // Recall the group
             this.game.selectionManager.recallControlGroup(groupNumber);
+
+            // If double-press, focus camera on the group
+            if (isDoublePress) {
+              this.focusCameraOnSelection();
+            }
+
+            // Track for double-press detection
+            this.lastControlGroupKey = groupNumber;
+            this.lastControlGroupTime = now;
           }
         }
         break;
     }
+  }
+
+  /**
+   * Focus camera on currently selected units
+   */
+  private focusCameraOnSelection(): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    if (selectedUnits.length === 0) return;
+
+    // Calculate center of all selected units
+    const center = new THREE.Vector3();
+    for (const unit of selectedUnits) {
+      center.add(unit.position);
+    }
+    center.divideScalar(selectedUnits.length);
+
+    // Move camera to center on units
+    this.game.cameraController.focusOnPosition(center);
   }
 
   private onKeyUp(event: KeyboardEvent): void {
@@ -315,6 +386,9 @@ export class InputManager {
         break;
       case 'KeyE':
         this.state.movementModifiers.unload = false;
+        break;
+      case 'KeyC':
+        this.state.losPreviewActive = false;
         break;
     }
   }
@@ -468,24 +542,36 @@ export class InputManager {
     const selectedUnits = this.game.selectionManager.getSelectedUnits();
     if (selectedUnits.length === 0) return;
 
-    // Get start and end positions in world space
-    const startWorld = this.game.screenToWorld(this.state.rightDragStartX, this.state.rightDragStartY);
-    const endWorld = this.game.screenToWorld(event.clientX, event.clientY);
+    // Add final point to path
+    this.addPointToFormationPath(event.clientX, event.clientY);
 
-    if (!startWorld || !endWorld) return;
+    // Calculate total path length
+    const pathLength = this.getPathLength();
 
-    // Calculate formation line
-    const lineLength = startWorld.distanceTo(endWorld);
-
-    // If drag is very short (< 5m), treat as single point (auto-spread)
-    if (lineLength < 5) {
-      // Single point - auto-spread units in a small area
-      this.distributeUnitsAtPoint(selectedUnits, endWorld);
+    // If path is very short (< 5m), treat as single point (auto-spread)
+    if (pathLength < 5 || this.formationPath.length < 2) {
+      const endWorld = this.game.screenToWorld(event.clientX, event.clientY);
+      if (endWorld) {
+        this.distributeUnitsAtPoint(selectedUnits, endWorld);
+      }
+      this.formationPath = [];
       return;
     }
 
-    // Distribute units along the line
-    this.distributeUnitsAlongLine(selectedUnits, startWorld, endWorld);
+    // Distribute units along the curved path
+    this.distributeUnitsAlongPath(selectedUnits);
+    this.formationPath = [];
+  }
+
+  /**
+   * Calculate total length of the formation path
+   */
+  private getPathLength(): number {
+    let length = 0;
+    for (let i = 1; i < this.formationPath.length; i++) {
+      length += this.formationPath[i - 1]!.distanceTo(this.formationPath[i]!);
+    }
+    return length;
   }
 
   /**
@@ -514,22 +600,49 @@ export class InputManager {
   }
 
   /**
-   * Distribute units evenly along formation line
+   * Distribute units evenly along the curved formation path
    */
-  private distributeUnitsAlongLine(units: any[], start: THREE.Vector3, end: THREE.Vector3): void {
+  private distributeUnitsAlongPath(units: any[]): void {
     const count = units.length;
+    const totalLength = this.getPathLength();
 
     units.forEach((unit, i) => {
-      // Calculate position along line (evenly spaced)
-      const t = count === 1 ? 0.5 : i / (count - 1);
-      const target = new THREE.Vector3().lerpVectors(start, end, t);
+      // Calculate target distance along path (evenly spaced)
+      const targetDist = count === 1 ? totalLength / 2 : (i / (count - 1)) * totalLength;
+      const target = this.getPointAlongPath(targetDist);
 
-      // TODO: Calculate facing direction (perpendicular to line for straight, outward for curved)
-      // For now units will face their movement direction
-
-      // Issue move command
-      this.issueFormationCommand(unit, target);
+      if (target) {
+        this.issueFormationCommand(unit, target);
+      }
     });
+  }
+
+  /**
+   * Get a point at a specific distance along the path
+   */
+  private getPointAlongPath(targetDistance: number): THREE.Vector3 | null {
+    if (this.formationPath.length === 0) return null;
+    if (this.formationPath.length === 1) return this.formationPath[0]!.clone();
+
+    let accumulated = 0;
+
+    for (let i = 1; i < this.formationPath.length; i++) {
+      const segmentStart = this.formationPath[i - 1]!;
+      const segmentEnd = this.formationPath[i]!;
+      const segmentLength = segmentStart.distanceTo(segmentEnd);
+
+      if (accumulated + segmentLength >= targetDistance) {
+        // Target is on this segment
+        const remainingDist = targetDistance - accumulated;
+        const t = segmentLength > 0 ? remainingDist / segmentLength : 0;
+        return new THREE.Vector3().lerpVectors(segmentStart, segmentEnd, t);
+      }
+
+      accumulated += segmentLength;
+    }
+
+    // If we've gone past the end, return the last point
+    return this.formationPath[this.formationPath.length - 1]!.clone();
   }
 
   /**
@@ -570,31 +683,28 @@ export class InputManager {
       return;
     }
 
-    // Get start and end positions in world space
-    const startWorld = this.game.screenToWorld(this.state.rightDragStartX, this.state.rightDragStartY);
     const endWorld = this.game.screenToWorld(mouseX, mouseY);
-
-    if (!startWorld || !endWorld) {
+    if (!endWorld) {
       this.clearFormationPreview();
       return;
     }
 
-    // Calculate formation positions
-    const positions = this.calculateFormationPositions(selectedUnits, startWorld, endWorld);
+    // Calculate formation positions using the path
+    const positions = this.calculateFormationPositions(selectedUnits, endWorld);
 
     // Update or create ghost meshes
     this.updateGhostMeshes(positions);
   }
 
   /**
-   * Calculate formation positions for units
+   * Calculate formation positions for units along the curved path
    */
-  private calculateFormationPositions(units: any[], start: THREE.Vector3, end: THREE.Vector3): THREE.Vector3[] {
-    const lineLength = start.distanceTo(end);
+  private calculateFormationPositions(units: any[], endWorld: THREE.Vector3): THREE.Vector3[] {
     const positions: THREE.Vector3[] = [];
+    const pathLength = this.getPathLength();
 
-    // If drag is very short, auto-spread at end point
-    if (lineLength < 5) {
+    // If path is very short or has few points, auto-spread at end point
+    if (pathLength < 5 || this.formationPath.length < 2) {
       const spacing = 3;
       const perRow = Math.ceil(Math.sqrt(units.length));
 
@@ -604,16 +714,20 @@ export class InputManager {
         const offsetX = (col - (perRow - 1) / 2) * spacing;
         const offsetZ = row * spacing;
         positions.push(new THREE.Vector3(
-          end.x + offsetX,
-          end.y,
-          end.z + offsetZ
+          endWorld.x + offsetX,
+          endWorld.y,
+          endWorld.z + offsetZ
         ));
       });
     } else {
-      // Distribute along line
+      // Distribute units evenly along the curved path
+      const count = units.length;
       units.forEach((_, i) => {
-        const t = units.length === 1 ? 0.5 : i / (units.length - 1);
-        positions.push(new THREE.Vector3().lerpVectors(start, end, t));
+        const targetDist = count === 1 ? pathLength / 2 : (i / (count - 1)) * pathLength;
+        const pos = this.getPointAlongPath(targetDist);
+        if (pos) {
+          positions.push(pos);
+        }
       });
     }
 
@@ -681,5 +795,9 @@ export class InputManager {
 
   get modifiers(): InputState['modifiers'] {
     return { ...this.state.modifiers };
+  }
+
+  get isLOSPreviewActive(): boolean {
+    return this.state.losPreviewActive;
   }
 }

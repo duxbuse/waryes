@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { GameMap } from '../../data/types';
 import { VisibilityState } from '../managers/FogOfWarManager';
+import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 
 export class MinimapRenderer {
   private readonly game: Game;
@@ -25,8 +26,8 @@ export class MinimapRenderer {
   private offsetX = 0;
   private offsetY = 0;
 
-  // Colors
-  private readonly COLORS = {
+  // Colors - dynamic based on biome
+  private COLORS = {
     background: '#0a0a0a',
     field: '#2d4a3e',
     forest: '#1a2d1a',
@@ -120,6 +121,42 @@ export class MinimapRenderer {
   setMap(map: GameMap): void {
     this.map = map;
     this.calculateScale();
+    this.applyBiomeColors(map.biome);
+  }
+
+  /**
+   * Apply biome-specific colors to the minimap
+   */
+  private applyBiomeColors(biome: string): void {
+    if (!biome) {
+      console.warn('MinimapRenderer: No biome specified, using default colors');
+      return;
+    }
+
+    const biomeConfig = BIOME_CONFIGS[biome as keyof typeof BIOME_CONFIGS];
+    if (!biomeConfig) {
+      console.warn(`MinimapRenderer: Unknown biome '${biome}', using default colors`);
+      return;
+    }
+
+    try {
+      // Convert hex color to CSS string
+      const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
+
+      // Update colors based on biome
+      this.COLORS.field = hexToCSS(biomeConfig.groundColor);
+      this.COLORS.forest = hexToCSS(biomeConfig.forestColor);
+      this.COLORS.water = hexToCSS(biomeConfig.waterColor ?? 0x1a3a5a);
+
+      // Darken ground color slightly for hills
+      const hillColor = biomeConfig.groundColor;
+      const r = Math.floor(((hillColor >> 16) & 0xFF) * 0.75);
+      const g = Math.floor(((hillColor >> 8) & 0xFF) * 0.75);
+      const b = Math.floor((hillColor & 0xFF) * 0.75);
+      this.COLORS.hill = `rgb(${r},${g},${b})`;
+    } catch (error) {
+      console.error('MinimapRenderer: Error applying biome colors:', error);
+    }
   }
 
   private calculateScale(): void {
@@ -141,37 +178,44 @@ export class MinimapRenderer {
   render(): void {
     if (!this.map) return;
 
-    const ctx = this.ctx;
-    const canvas = this.canvas;
+    try {
+      const ctx = this.ctx;
+      const canvas = this.canvas;
 
-    // Clear canvas
-    ctx.fillStyle = this.COLORS.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas
+      ctx.fillStyle = this.COLORS.background;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Save context
-    ctx.save();
-    ctx.translate(this.offsetX, this.offsetY);
+      // Save context
+      ctx.save();
+      ctx.translate(this.offsetX, this.offsetY);
 
-    // Render terrain
-    this.renderTerrain();
+      // Render terrain
+      this.renderTerrain();
 
-    // Render buildings
-    this.renderBuildings();
+      // Render buildings
+      this.renderBuildings();
 
-    // Render capture zones
-    this.renderCaptureZones();
+      // Render deployment zones (during setup phase)
+      this.renderDeploymentZones();
 
-    // Render resupply points
-    this.renderResupplyPoints();
+      // Render capture zones
+      this.renderCaptureZones();
 
-    // Render units
-    this.renderUnits();
+      // Render resupply points
+      this.renderResupplyPoints();
 
-    // Render camera viewport
-    this.renderCameraViewport();
+      // Render units
+      this.renderUnits();
 
-    // Restore context
-    ctx.restore();
+      // Render camera viewport
+      this.renderCameraViewport();
+
+      // Restore context
+      ctx.restore();
+    } catch (error) {
+      console.error('MinimapRenderer: Error during render:', error);
+    }
   }
 
   private renderTerrain(): void {
@@ -180,6 +224,7 @@ export class MinimapRenderer {
     const ctx = this.ctx;
     const terrain = this.map.terrain;
     const fogEnabled = this.game.fogOfWarManager.isEnabled();
+    const cellSize = this.map.cellSize; // Use actual cell size from map
 
     for (let z = 0; z < terrain.length; z++) {
       for (let x = 0; x < terrain[z]!.length; x++) {
@@ -188,17 +233,17 @@ export class MinimapRenderer {
         let color = this.COLORS.field;
         if (cell.type === 'forest') color = this.COLORS.forest;
         else if (cell.type === 'road') color = this.COLORS.road;
-        else if (cell.type === 'water') color = this.COLORS.water;
+        else if (cell.type === 'water' || cell.type === 'river') color = this.COLORS.water;
         else if (cell.type === 'hill') color = this.COLORS.hill;
 
-        const pixelX = x * 4 * this.pixelsPerMeter; // 4m cell size
-        const pixelY = z * 4 * this.pixelsPerMeter;
-        const pixelSize = 4 * this.pixelsPerMeter;
+        const pixelX = x * cellSize * this.pixelsPerMeter;
+        const pixelY = z * cellSize * this.pixelsPerMeter;
+        const pixelSize = cellSize * this.pixelsPerMeter;
 
         // Apply fog of war to terrain rendering
         if (fogEnabled) {
-          const worldX = x * 4; // Convert grid position to world
-          const worldZ = z * 4;
+          const worldX = x * cellSize; // Convert grid position to world
+          const worldZ = z * cellSize;
           const visibility = this.game.fogOfWarManager.getVisibilityState(worldX, worldZ);
 
           if (visibility === VisibilityState.Unexplored) {
@@ -251,6 +296,37 @@ export class MinimapRenderer {
 
       // Buildings don't have rotation in this implementation
       ctx.fillRect(x - w / 2, z - h / 2, w, h);
+    }
+  }
+
+  private renderDeploymentZones(): void {
+    if (!this.map) return;
+
+    const ctx = this.ctx;
+    const mapCenterX = this.map.width / 2;
+    const mapCenterZ = this.map.height / 2;
+
+    for (const zone of this.map.deploymentZones) {
+      // Convert world coordinates to minimap coordinates
+      const minX = (zone.minX + mapCenterX) * this.pixelsPerMeter;
+      const minZ = (zone.minZ + mapCenterZ) * this.pixelsPerMeter;
+      const maxX = (zone.maxX + mapCenterX) * this.pixelsPerMeter;
+      const maxZ = (zone.maxZ + mapCenterZ) * this.pixelsPerMeter;
+
+      const width = maxX - minX;
+      const height = maxZ - minZ;
+
+      // Determine color based on team
+      const color = zone.team === 'player' ? this.COLORS.friendly : this.COLORS.enemy;
+
+      // Draw deployment zone rectangle (semi-transparent fill)
+      ctx.fillStyle = color + '30'; // 30 = ~19% opacity
+      ctx.fillRect(minX, minZ, width, height);
+
+      // Draw border
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(minX, minZ, width, height);
     }
   }
 

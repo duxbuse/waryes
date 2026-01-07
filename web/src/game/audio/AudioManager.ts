@@ -17,7 +17,7 @@ export type SoundEffect =
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
-  private masterVolume: number = 0.3; // 30% volume by default
+  private masterVolume: number = 0.5; // 50% volume by default
   private sfxVolume: number = 0.5;
   private enabled: boolean = true;
 

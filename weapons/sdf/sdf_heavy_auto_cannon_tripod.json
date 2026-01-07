@@ -12,5 +12,8 @@
   "supplyCost": 8,
   "id": "sdf_heavy_auto_cannon_tripod",
   "isAntiAir": false,
-  "canTargetGround": true
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

@@ -3,28 +3,30 @@
  */
 
 import { ScreenType, type Screen } from '../core/ScreenManager';
-import type { DeckData, MapSize } from '../data/types';
+import type { DeckData, MapSize, BiomeType } from '../data/types';
 import { loadSavedDecks } from './DeckBuilderScreen';
-import { FACTIONS, getDivisionsByFaction } from '../data/factions';
 import { STARTER_DECKS } from '../data/starterDecks';
+import { BIOME_CONFIGS } from '../data/biomeConfigs';
 
-// Create a default deck for quick start
+// Create a default deck for quick start using valid SDF units
 function createDefaultDeck(): DeckData {
-  const faction = FACTIONS[0]; // PDF
-  const divisions = getDivisionsByFaction(faction?.id ?? '');
-  const division = divisions[0]; // Infantry Division
+  // Use the first starter deck as default (SDF 7th Mechanized)
+  const starterDeck = STARTER_DECKS[0];
+  if (starterDeck) {
+    return { ...starterDeck, id: 'default_deck', name: 'Quick Start Deck' };
+  }
 
-  // Create a basic deck with some infantry and a tank
+  // Fallback to hardcoded valid SDF units
   return {
     id: 'default_deck',
     name: 'Quick Start Deck',
-    divisionId: division?.id ?? 'pdf_infantry',
+    divisionId: 'sdf_7th_mechanized',
     units: [
-      { unitId: 'pdf_infantry', veterancy: 0 },
-      { unitId: 'pdf_infantry', veterancy: 0 },
-      { unitId: 'pdf_infantry', veterancy: 0 },
-      { unitId: 'pdf_heavyweapons', veterancy: 0 },
-      { unitId: 'pdf_leman_russ', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_militia', veterancy: 0 },
+      { unitId: 'sdf_hwt_heavy_bolter', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt', veterancy: 0 },
     ],
     activationPoints: 10,
   };
@@ -43,6 +45,7 @@ export interface SkirmishConfig {
   deck: DeckData | null;
   mapSize: MapSize;
   mapSeed: number;
+  biome?: BiomeType;  // Optional biome override (undefined = auto-select from seed)
   team1: PlayerSlot[];
   team2: PlayerSlot[];
 }
@@ -58,6 +61,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   let selectedDeck: DeckData | null = createDefaultDeck();
   let mapSize: MapSize = 'medium';
   let mapSeed = Math.floor(Math.random() * 999999);
+  let selectedBiome: BiomeType | undefined = undefined;  // undefined = auto-select from seed
 
   // Team configuration (5v5 format)
   let team1: PlayerSlot[] = [
@@ -113,9 +117,9 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
             <div class="setting-row">
               <label>Map Size:</label>
               <div class="size-buttons">
-                <button class="size-btn" data-size="small">Small (200m)</button>
-                <button class="size-btn active" data-size="medium">Medium (300m)</button>
-                <button class="size-btn" data-size="large">Large (400m)</button>
+                <button class="size-btn" data-size="small">Small (300m)</button>
+                <button class="size-btn active" data-size="medium">Medium (1km)</button>
+                <button class="size-btn" data-size="large">Large (10km)</button>
               </div>
             </div>
             <div class="setting-row">
@@ -124,6 +128,19 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
                 <input type="number" id="map-seed" class="seed-input" value="${mapSeed}" />
                 <button id="random-seed-btn" class="random-btn">Random</button>
               </div>
+            </div>
+            <div class="setting-row">
+              <label>Biome:</label>
+              <select id="biome-select" class="biome-select">
+                <option value="">Auto (From Seed)</option>
+                <option value="rainforest">Rainforest</option>
+                <option value="tundra">Tundra</option>
+                <option value="mesa">Mesa</option>
+                <option value="mountains">Mountains</option>
+                <option value="plains">Plains</option>
+                <option value="farmland">Farmland</option>
+                <option value="cities">Urban</option>
+              </select>
             </div>
           </div>
 
@@ -533,12 +550,26 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
   function renderDeckSelect(): void {
     const select = element.querySelector('#deck-select') as HTMLSelectElement;
-    const decks = loadSavedDecks();
+    const savedDecks = loadSavedDecks();
+
+    // Group starter decks by faction
+    const sdfStarters = STARTER_DECKS.filter(d => d.id.includes('sdf'));
+    const vanguardStarters = STARTER_DECKS.filter(d => d.id.includes('vanguard'));
 
     select.innerHTML = `
       <option value="">-- Select a deck --</option>
       <option value="default" selected>Quick Start (Default Deck)</option>
-      ${decks.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+      <optgroup label="SDF Starter Decks">
+        ${sdfStarters.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+      </optgroup>
+      <optgroup label="Vanguard Starter Decks">
+        ${vanguardStarters.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+      </optgroup>
+      ${savedDecks.length > 0 ? `
+        <optgroup label="My Decks">
+          ${savedDecks.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+        </optgroup>
+      ` : ''}
     `;
   }
 
@@ -673,40 +704,66 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
   function renderMapPreview(): void {
     const canvas = element.querySelector('#preview-canvas') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d')!;
+    if (!canvas) {
+      console.error('Preview canvas not found');
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('Could not get 2D context for preview canvas');
+      return;
+    }
+
+    // Show loading state
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, 200, 200);
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px monospace';
+    ctx.fillText('Generating...', 60, 100);
 
     // Import map generator dynamically to render preview
     import('../game/map/MapGenerator').then(({ MapGenerator }) => {
-      const generator = new MapGenerator(mapSeed, mapSize);
-      const map = generator.generate();
+      try {
+        const generator = new MapGenerator(mapSeed, mapSize, selectedBiome);
+        const map = generator.generate();
 
       const canvasSize = 200;
-      // Clear canvas
-      ctx.fillStyle = '#4a7c4e';
+      const biomeConfig = BIOME_CONFIGS[map.biome];
+
+      // Convert hex color to CSS color string
+      const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
+
+      // Clear canvas with biome ground color
+      ctx.fillStyle = hexToCSS(biomeConfig.groundColor);
       ctx.fillRect(0, 0, canvasSize, canvasSize);
 
       const scale = canvasSize / map.width;
 
-      // Draw terrain (simplified)
-      const cellSize = 4 * scale;
+      // Draw terrain (simplified) - use biome colors
+      const cellSize = map.cellSize * scale;
       for (let z = 0; z < map.terrain.length; z++) {
         for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
           const cell = map.terrain[z]![x]!;
-          let color = '#4a7c4e'; // field
+          let color = hexToCSS(biomeConfig.groundColor); // field - use biome color
 
           switch (cell.type) {
             case 'forest':
-              color = '#2d5a30';
+              color = hexToCSS(biomeConfig.forestColor);
               break;
             case 'road':
               color = '#5a5a5a';
               break;
             case 'river':
             case 'water':
-              color = '#3a6a8a';
+              color = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
               break;
             case 'hill':
-              color = '#6b8e5a';
+              // Darken ground color slightly for hills
+              const hillColor = biomeConfig.groundColor;
+              const r = ((hillColor >> 16) & 0xFF) * 0.85;
+              const g = ((hillColor >> 8) & 0xFF) * 0.85;
+              const b = (hillColor & 0xFF) * 0.85;
+              color = `rgb(${r},${g},${b})`;
               break;
             case 'building':
               color = '#8a7a6a';
@@ -718,9 +775,34 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         }
       }
 
-      // Draw roads
-      ctx.strokeStyle = '#7a7a7a';
-      ctx.lineWidth = 3;
+      // Draw water bodies with bright outline
+      for (const waterBody of map.waterBodies) {
+        ctx.fillStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+        ctx.strokeStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        for (let i = 0; i < waterBody.points.length; i++) {
+          const p = waterBody.points[i]!;
+          const screenX = (p.x + map.width / 2) * scale;
+          const screenZ = (p.z + map.height / 2) * scale;
+          if (i === 0) {
+            ctx.moveTo(screenX, screenZ);
+          } else {
+            ctx.lineTo(screenX, screenZ);
+          }
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Draw roads with better visibility
+      ctx.strokeStyle = '#888888';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       for (const road of map.roads) {
         ctx.beginPath();
         for (let i = 0; i < road.points.length; i++) {
@@ -736,45 +818,71 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         ctx.stroke();
       }
 
-      // Draw buildings
-      ctx.fillStyle = '#d4c4a8';
+      // Draw buildings with outlines for better visibility
       for (const building of map.buildings) {
         const screenX = (building.x + map.width / 2) * scale;
         const screenZ = (building.z + map.height / 2) * scale;
-        const w = building.width * scale;
-        const d = building.depth * scale;
+        const w = Math.max(building.width * scale, 2); // Ensure minimum size
+        const d = Math.max(building.depth * scale, 2);
+
+        // Fill
+        ctx.fillStyle = '#d4c4a8';
         ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
+
+        // Outline
+        ctx.strokeStyle = '#8a7a6a';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
       }
 
-      // Draw capture zones
+      // Draw capture zones with better contrast
       for (const zone of map.captureZones) {
         const screenX = (zone.x + map.width / 2) * scale;
         const screenZ = (zone.z + map.height / 2) * scale;
-        const r = zone.radius * scale;
+        const r = Math.max(zone.radius * scale, 3); // Ensure minimum visible size
 
+        // Outer glow
+        ctx.beginPath();
+        ctx.arc(screenX, screenZ, r + 1, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+        ctx.fill();
+
+        // Main circle
         ctx.beginPath();
         ctx.arc(screenX, screenZ, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
         ctx.fill();
+
+        // Bold outline
         ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(screenX, screenZ, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffff00';
+        ctx.fill();
       }
 
-      // Draw deployment zones
+      // Draw deployment zones with better contrast
       for (const zone of map.deploymentZones) {
         const x1 = (zone.minX + map.width / 2) * scale;
         const x2 = (zone.maxX + map.width / 2) * scale;
         const z1 = (zone.minZ + map.height / 2) * scale;
         const z2 = (zone.maxZ + map.height / 2) * scale;
 
-        ctx.fillStyle = zone.team === 'player'
-          ? 'rgba(74, 158, 255, 0.3)'
-          : 'rgba(255, 74, 74, 0.3)';
+        const isPlayer = zone.team === 'player';
+        const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
+        const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
+
+        // Fill
+        ctx.fillStyle = fillColor;
         ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
 
-        ctx.strokeStyle = zone.team === 'player' ? '#4a9eff' : '#ff4a4a';
-        ctx.lineWidth = 2;
+        // Bold outline
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2.5;
         ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
       }
 
@@ -831,6 +939,23 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
         ctx.restore();
       }
+
+      // Draw biome info at bottom of preview
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 190, 200, 10);
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px monospace';
+      ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
+      } catch (error) {
+        console.error('Map generation failed:', error);
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(0, 0, 200, 200);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText('Generation Error', 50, 100);
+      }
+    }).catch(error => {
+      console.error('Failed to load MapGenerator:', error);
     });
   }
 
@@ -855,8 +980,14 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       if (deckId === 'default') {
         selectedDeck = createDefaultDeck();
       } else {
-        const decks = loadSavedDecks();
-        selectedDeck = decks.find(d => d.id === deckId) ?? null;
+        // First check starter decks, then saved decks
+        const starterDeck = STARTER_DECKS.find(d => d.id === deckId);
+        if (starterDeck) {
+          selectedDeck = starterDeck;
+        } else {
+          const savedDecks = loadSavedDecks();
+          selectedDeck = savedDecks.find(d => d.id === deckId) ?? null;
+        }
       }
       renderDeckPreview();
       updateStartButton();
@@ -885,12 +1016,19 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       renderMapPreview();
     });
 
+    element.querySelector('#biome-select')?.addEventListener('change', (e) => {
+      const value = (e.target as HTMLSelectElement).value;
+      selectedBiome = value ? (value as BiomeType) : undefined;
+      renderMapPreview();
+    });
+
     element.querySelector('#skirmish-start-btn')?.addEventListener('click', () => {
       if (selectedDeck) {
         callbacks.onStartBattle({
           deck: selectedDeck,
           mapSize,
           mapSeed,
+          ...(selectedBiome !== undefined && { biome: selectedBiome }),
           team1,
           team2,
         });
@@ -903,6 +1041,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
           deck: selectedDeck,
           mapSize,
           mapSeed,
+          ...(selectedBiome !== undefined && { biome: selectedBiome }),
           team1,
           team2,
         });

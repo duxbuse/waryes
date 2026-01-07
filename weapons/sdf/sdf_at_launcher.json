@@ -14,5 +14,8 @@
   "projectileSpeed": 150,
   "id": "sdf_at_launcher",
   "isAntiAir": false,
-  "canTargetGround": true
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

@@ -1,6 +1,0 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <!-- Bullet Shape -->
-  <path d="M22 12 Q32 2 42 12 L42 44 L22 44 Z" fill="white" stroke="black" stroke-width="4"/>
-  <!-- Casing -->
-  <rect x="20" y="44" width="24" height="12" fill="white" stroke="black" stroke-width="4"/>
-</svg>

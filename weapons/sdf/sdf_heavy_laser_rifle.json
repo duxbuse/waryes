@@ -12,5 +12,8 @@
   "supplyCost": 5,
   "id": "sdf_heavy_laser_rifle",
   "isAntiAir": false,
-  "canTargetGround": true
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

@@ -32,12 +32,18 @@ export class UnitUI {
   private garrisonedIcon: THREE.Mesh | null = null;
   private mountedIcon: THREE.Mesh | null = null;
 
-  // Aim indicator (circular arc)
-  private aimIndicator: THREE.Line | null = null;
+  // Ground ring indicators (positioned around unit on ground, not billboarded)
+  private groundRingsGroup: THREE.Group | null = null;
+  private aimRing: THREE.Line | null = null;  // Outer blue ring showing aim direction
+  private weaponReloadRings: THREE.Line[] = []; // Inner green rings for weapon reloads
+  private weaponReloadBgRings: THREE.Line[] = []; // Background rings for weapons
 
-  // Reload indicator (radial fill circle)
-  private reloadIndicator: THREE.Mesh | null = null;
-  private reloadIndicatorBg: THREE.Mesh | null = null;
+  // Ring constants
+  private readonly AIM_RING_RADIUS = 2.5;
+  private readonly AIM_ARC_ANGLE = Math.PI / 3; // 60 degrees
+  private readonly RELOAD_RING_START_RADIUS = 2.0;
+  private readonly RELOAD_RING_SPACING = 0.4;
+  private readonly RING_SEGMENTS = 48;
 
   // Category icon for tactical view
   private categoryIcon: THREE.Mesh | null = null;
@@ -47,6 +53,12 @@ export class UnitUI {
   private readonly BAR_HEIGHT = 0.15;
   private readonly BAR_Y_OFFSET = 2.5;
   private readonly BAR_SPACING = 0.25;
+
+  // Scaling constants for zoom compensation
+  private readonly MIN_SCALE = 1.0;   // Minimum scale (when close)
+  private readonly MAX_SCALE = 4.0;   // Maximum scale (when far)
+  private readonly NEAR_DISTANCE = 20;  // Distance where scale is minimum
+  private readonly FAR_DISTANCE = 150;  // Distance where scale is maximum
 
   constructor(unit: Unit, game: Game) {
     this.unit = unit;
@@ -71,11 +83,8 @@ export class UnitUI {
     // Create status icons
     this.createStatusIcons();
 
-    // Create aim indicator
-    this.createAimIndicator();
-
-    // Create reload indicator
-    this.createReloadIndicator();
+    // Create ground ring indicators (aim + weapon reloads)
+    this.createGroundRings();
 
     // Create category icon for tactical view
     this.createCategoryIcon();
@@ -229,75 +238,217 @@ export class UnitUI {
     this.statusIcons.add(this.mountedIcon);
   }
 
-  private createAimIndicator(): void {
-    // Create a circular arc that shows aim direction
-    // Arc will be positioned around the unit (on ground plane, not billboarded)
-    const arcRadius = 2.5;
-    const arcAngle = Math.PI / 3; // 60 degrees
-    const segments = 32;
+  /**
+   * Create ground ring indicators:
+   * - Outer ring (blue): aim direction toward enemy
+   * - Inner rings (green): weapon reload progress, fills clockwise
+   */
+  private createGroundRings(): void {
+    // Create group for all ground rings (added to unit mesh, not container, so it stays on ground)
+    this.groundRingsGroup = new THREE.Group();
+    this.groundRingsGroup.position.y = 0.15; // Slightly above ground
+    this.unit.mesh.add(this.groundRingsGroup);
 
-    const points: THREE.Vector3[] = [];
-    for (let i = 0; i <= segments; i++) {
-      const theta = (i / segments) * arcAngle - arcAngle / 2; // Center the arc
-      const x = Math.sin(theta) * arcRadius;
-      const z = Math.cos(theta) * arcRadius;
-      points.push(new THREE.Vector3(x, 0.1, z)); // Slightly above ground
+    // Create aim ring (outer, blue)
+    this.createAimRing();
+
+    // Create weapon reload rings (inner, green) - one per weapon
+    const weapons = this.unit.getWeapons();
+    for (let i = 0; i < Math.min(weapons.length, 3); i++) { // Max 3 weapon rings
+      this.createWeaponReloadRing(i);
     }
-
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-      color: 0xff0000, // Red
-      linewidth: 2,
-      transparent: true,
-      opacity: 0.8,
-      depthTest: false,
-    });
-
-    this.aimIndicator = new THREE.Line(geometry, material);
-    this.aimIndicator.renderOrder = 999;
-    this.aimIndicator.visible = false; // Hidden by default, shown when attacking
-
-    // Add directly to unit mesh (not container) so it doesn't billboard
-    this.unit.mesh.add(this.aimIndicator);
   }
 
-  private createReloadIndicator(): void {
-    // Create a radial fill indicator for reload progress
-    // Position it below the health/morale bars
-    const radius = 0.25;
-    const yOffset = -0.9; // Below bars
+  /**
+   * Create the outer aim ring (blue arc showing direction to enemy)
+   */
+  private createAimRing(): void {
+    // Create initial arc geometry (will be updated each frame)
+    const points = this.createArcPoints(this.AIM_RING_RADIUS, this.AIM_ARC_ANGLE, 0);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-    // Background circle (dark)
-    const bgGeometry = new THREE.RingGeometry(radius * 0.7, radius, 32);
-    const bgMaterial = new THREE.MeshBasicMaterial({
-      color: 0x222222,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8,
-      depthTest: false,
-    });
-    this.reloadIndicatorBg = new THREE.Mesh(bgGeometry, bgMaterial);
-    this.reloadIndicatorBg.position.y = yOffset;
-    this.reloadIndicatorBg.renderOrder = 1000;
-    this.reloadIndicatorBg.visible = false; // Hidden by default
-    this.container.add(this.reloadIndicatorBg);
-
-    // Foreground circle (fills radially) - using CircleGeometry for simplicity
-    // In a production version, this would use a custom shader for true radial fill
-    const fgGeometry = new THREE.CircleGeometry(radius, 32);
-    const fgMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffaa00, // Orange
-      side: THREE.DoubleSide,
+    const material = new THREE.LineBasicMaterial({
+      color: 0x4a9eff, // Blue
+      linewidth: 2,
       transparent: true,
       opacity: 0.9,
       depthTest: false,
     });
-    this.reloadIndicator = new THREE.Mesh(fgGeometry, fgMaterial);
-    this.reloadIndicator.position.y = yOffset;
-    this.reloadIndicator.position.z = 0.01; // Slightly in front
-    this.reloadIndicator.renderOrder = 1001;
-    this.reloadIndicator.visible = false; // Hidden by default
-    this.container.add(this.reloadIndicator);
+
+    this.aimRing = new THREE.Line(geometry, material);
+    this.aimRing.renderOrder = 999;
+    this.aimRing.visible = false;
+    this.groundRingsGroup?.add(this.aimRing);
+  }
+
+  /**
+   * Create a weapon reload ring (green arc that fills clockwise)
+   */
+  private createWeaponReloadRing(weaponIndex: number): void {
+    const radius = this.RELOAD_RING_START_RADIUS - weaponIndex * this.RELOAD_RING_SPACING;
+
+    // Background ring (dark, full circle)
+    const bgPoints = this.createArcPoints(radius, Math.PI * 2, 0);
+    const bgGeometry = new THREE.BufferGeometry().setFromPoints(bgPoints);
+    const bgMaterial = new THREE.LineBasicMaterial({
+      color: 0x333333,
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.4,
+      depthTest: false,
+    });
+    const bgRing = new THREE.Line(bgGeometry, bgMaterial);
+    bgRing.renderOrder = 998;
+    bgRing.visible = false;
+    this.groundRingsGroup?.add(bgRing);
+    this.weaponReloadBgRings.push(bgRing);
+
+    // Foreground ring (green, fills based on reload progress)
+    const fgPoints = this.createArcPoints(radius, 0, 0); // Start with no arc
+    const fgGeometry = new THREE.BufferGeometry().setFromPoints(fgPoints);
+    const fgMaterial = new THREE.LineBasicMaterial({
+      color: 0x44ff44, // Green
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    const fgRing = new THREE.Line(fgGeometry, fgMaterial);
+    fgRing.renderOrder = 999;
+    fgRing.visible = false;
+    this.groundRingsGroup?.add(fgRing);
+    this.weaponReloadRings.push(fgRing);
+  }
+
+  /**
+   * Create arc points for a ring
+   * @param radius - Ring radius
+   * @param arcAngle - Angle of arc in radians (2*PI for full circle)
+   * @param startAngle - Starting angle (0 = forward/+Z)
+   */
+  private createArcPoints(radius: number, arcAngle: number, startAngle: number): THREE.Vector3[] {
+    const points: THREE.Vector3[] = [];
+    const segments = Math.max(3, Math.ceil(this.RING_SEGMENTS * (arcAngle / (Math.PI * 2))));
+
+    for (let i = 0; i <= segments; i++) {
+      // Clockwise from top (start at -PI/2 to begin at top, go clockwise)
+      const theta = startAngle - Math.PI / 2 + (i / segments) * arcAngle;
+      const x = Math.cos(theta) * radius;
+      const z = Math.sin(theta) * radius;
+      points.push(new THREE.Vector3(x, 0, z));
+    }
+
+    return points;
+  }
+
+  /**
+   * Update aim ring geometry to point toward target
+   */
+  private updateAimRing(targetAngle: number): void {
+    if (!this.aimRing) return;
+
+    // Create arc centered on target direction
+    const points = this.createArcPoints(
+      this.AIM_RING_RADIUS,
+      this.AIM_ARC_ANGLE,
+      targetAngle + Math.PI / 2 // Adjust for coordinate system
+    );
+
+    // Update geometry
+    const geometry = this.aimRing.geometry as THREE.BufferGeometry;
+    geometry.setFromPoints(points);
+    geometry.attributes['position']!.needsUpdate = true;
+  }
+
+  /**
+   * Update weapon reload ring to show progress (fills clockwise)
+   */
+  private updateWeaponReloadRing(weaponIndex: number, progress: number): void {
+    if (weaponIndex >= this.weaponReloadRings.length) return;
+
+    const ring = this.weaponReloadRings[weaponIndex];
+    if (!ring) return;
+
+    // Progress 0 = empty, 1 = full circle
+    const arcAngle = progress * Math.PI * 2;
+    const radius = this.RELOAD_RING_START_RADIUS - weaponIndex * this.RELOAD_RING_SPACING;
+
+    // Create arc starting from top, going clockwise
+    const points = this.createArcPoints(radius, arcAngle, 0);
+
+    // Update geometry
+    const geometry = ring.geometry as THREE.BufferGeometry;
+    geometry.setFromPoints(points);
+    geometry.attributes['position']!.needsUpdate = true;
+  }
+
+  /**
+   * Update all ground ring indicators (aim + weapon reloads)
+   */
+  private updateGroundRingIndicators(): void {
+    // Get unit's current command
+    const currentCommand = (this.unit as any).currentCommand;
+    const fireCooldown = (this.unit as any).fireCooldown || 0;
+    const fireRate = (this.unit as any).fireRate || 1;
+    const maxCooldown = 1 / fireRate;
+
+    // Update aim ring - show when attacking or attack-moving with a target
+    if (this.aimRing) {
+      const hasTarget = currentCommand?.targetUnit ||
+        (currentCommand?.type === 4 && currentCommand?.target); // Type 4 = AttackMove
+
+      if (currentCommand?.targetUnit) {
+        // Has a specific target unit - show aim ring pointing at it
+        this.aimRing.visible = true;
+
+        const targetPos = currentCommand.targetUnit.position;
+        const direction = new THREE.Vector3()
+          .subVectors(targetPos, this.unit.position);
+        direction.y = 0;
+        const targetAngle = Math.atan2(direction.x, direction.z);
+
+        this.updateAimRing(targetAngle);
+      } else if (hasTarget && currentCommand?.target) {
+        // Attack-moving to a position - show aim ring in movement direction
+        this.aimRing.visible = true;
+
+        const direction = new THREE.Vector3()
+          .subVectors(currentCommand.target, this.unit.position);
+        direction.y = 0;
+        const targetAngle = Math.atan2(direction.x, direction.z);
+
+        this.updateAimRing(targetAngle);
+      } else {
+        this.aimRing.visible = false;
+      }
+    }
+
+    // Update weapon reload rings
+    const weapons = this.unit.getWeapons();
+    const isReloading = fireCooldown > 0 && maxCooldown > 0;
+
+    for (let i = 0; i < this.weaponReloadRings.length; i++) {
+      const bgRing = this.weaponReloadBgRings[i];
+      const fgRing = this.weaponReloadRings[i];
+
+      if (bgRing && fgRing) {
+        if (isReloading && i < weapons.length) {
+          // Show reload progress
+          bgRing.visible = true;
+          fgRing.visible = true;
+
+          // Calculate reload progress (0 = just fired, 1 = ready to fire)
+          // For now, all weapons share the same cooldown
+          // TODO: Per-weapon cooldown tracking
+          const progress = 1 - (fireCooldown / maxCooldown);
+          this.updateWeaponReloadRing(i, progress);
+        } else {
+          // Hide when ready to fire
+          bgRing.visible = false;
+          fgRing.visible = false;
+        }
+      }
+    }
   }
 
   private createCategoryIcon(): void {
@@ -399,50 +550,8 @@ export class UnitUI {
       this.mountedIcon.visible = this.unit.isMounted;
     }
 
-    // Update aim indicator
-    if (this.aimIndicator) {
-      // Show aim indicator when attacking
-      const currentCommand = (this.unit as any).currentCommand;
-      if (currentCommand?.type === 3 && currentCommand.targetUnit) {
-        // Type 3 = Attack command
-        this.aimIndicator.visible = true;
-
-        // Calculate angle to target
-        const targetPos = currentCommand.targetUnit.position;
-        const direction = new THREE.Vector3()
-          .subVectors(targetPos, this.unit.position);
-        direction.y = 0; // Keep on ground plane
-        const targetAngle = Math.atan2(direction.x, direction.z);
-
-        // Rotate aim indicator to face target
-        this.aimIndicator.rotation.y = targetAngle;
-      } else {
-        this.aimIndicator.visible = false;
-      }
-    }
-
-    // Update reload indicator
-    if (this.reloadIndicator && this.reloadIndicatorBg) {
-      const fireCooldown = (this.unit as any).fireCooldown || 0;
-      const fireRate = (this.unit as any).fireRate || 1;
-      const maxCooldown = 1 / fireRate;
-
-      if (fireCooldown > 0 && maxCooldown > 0) {
-        // Show reload indicator while reloading
-        this.reloadIndicatorBg.visible = true;
-        this.reloadIndicator.visible = true;
-
-        // Calculate reload progress (0 = just fired, 1 = ready to fire)
-        const progress = 1 - (fireCooldown / maxCooldown);
-
-        // Scale the indicator based on progress (simple radial approximation)
-        this.reloadIndicator.scale.set(progress, progress, 1);
-      } else {
-        // Hide when ready to fire
-        this.reloadIndicatorBg.visible = false;
-        this.reloadIndicator.visible = false;
-      }
-    }
+    // Update ground ring indicators
+    this.updateGroundRingIndicators();
 
     // Update category icon visibility based on tactical view
     if (this.categoryIcon) {
@@ -456,9 +565,7 @@ export class UnitUI {
         this.moraleBarBg.visible = false;
         this.moraleBarFg.visible = false;
         this.statusIcons.visible = false;
-        if (this.aimIndicator) this.aimIndicator.visible = false;
-        if (this.reloadIndicatorBg) this.reloadIndicatorBg.visible = false;
-        if (this.reloadIndicator) this.reloadIndicator.visible = false;
+        if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
         for (const star of this.veterancyStars) {
           star.visible = false;
         }
@@ -468,12 +575,29 @@ export class UnitUI {
         this.moraleBarBg.visible = true;
         this.moraleBarFg.visible = true;
         this.statusIcons.visible = true;
+        if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
         // Other indicators remain dynamically controlled
       }
     }
 
-    // Billboard effect - always face camera
-    this.container.quaternion.copy(this.game.camera.quaternion);
+    // Billboard effect - always face camera (independent of unit rotation)
+    // We need to get the inverse of the unit's rotation and combine with camera rotation
+    // This ensures the UI faces the camera regardless of which way the unit is facing
+    const unitWorldQuaternion = new THREE.Quaternion();
+    this.unit.mesh.getWorldQuaternion(unitWorldQuaternion);
+    const inverseUnitRotation = unitWorldQuaternion.clone().invert();
+    this.container.quaternion.copy(inverseUnitRotation).multiply(this.game.camera.quaternion);
+
+    // Scale based on camera distance for consistent visibility
+    const cameraPosition = this.game.camera.position;
+    const unitPosition = this.unit.position;
+    const distance = cameraPosition.distanceTo(unitPosition);
+
+    // Calculate scale factor based on distance (linear interpolation)
+    const t = Math.max(0, Math.min(1, (distance - this.NEAR_DISTANCE) / (this.FAR_DISTANCE - this.NEAR_DISTANCE)));
+    const scaleFactor = this.MIN_SCALE + t * (this.MAX_SCALE - this.MIN_SCALE);
+
+    this.container.scale.setScalar(scaleFactor);
   }
 
   destroy(): void {
@@ -507,21 +631,21 @@ export class UnitUI {
       (this.mountedIcon.material as THREE.Material).dispose();
     }
 
-    // Clean up aim indicator
-    if (this.aimIndicator) {
-      this.aimIndicator.geometry.dispose();
-      (this.aimIndicator.material as THREE.Material).dispose();
-      this.aimIndicator.parent?.remove(this.aimIndicator);
+    // Clean up ground ring indicators
+    if (this.aimRing) {
+      this.aimRing.geometry.dispose();
+      (this.aimRing.material as THREE.Material).dispose();
     }
-
-    // Clean up reload indicator
-    if (this.reloadIndicatorBg) {
-      this.reloadIndicatorBg.geometry.dispose();
-      (this.reloadIndicatorBg.material as THREE.Material).dispose();
+    for (const ring of this.weaponReloadRings) {
+      ring.geometry.dispose();
+      (ring.material as THREE.Material).dispose();
     }
-    if (this.reloadIndicator) {
-      this.reloadIndicator.geometry.dispose();
-      (this.reloadIndicator.material as THREE.Material).dispose();
+    for (const ring of this.weaponReloadBgRings) {
+      ring.geometry.dispose();
+      (ring.material as THREE.Material).dispose();
+    }
+    if (this.groundRingsGroup) {
+      this.groundRingsGroup.parent?.remove(this.groundRingsGroup);
     }
 
     // Clean up category icon

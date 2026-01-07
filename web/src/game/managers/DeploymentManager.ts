@@ -31,6 +31,7 @@ export class DeploymentManager {
   private selectedUnitTypeId: string | null = null;  // For multi-placement with shift
   private deploymentZone: DeploymentZone | null = null;
   private currentCategory: UnitCategory = 'INF';
+  private battleBarCategory: UnitCategory = 'INF';  // Category for the top unit bar
   private credits: number = GAME_CONSTANTS.STARTING_CREDITS;
 
   // UI Elements
@@ -291,6 +292,9 @@ export class DeploymentManager {
     canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
     canvas.addEventListener('click', this.onClick.bind(this));
     canvas.addEventListener('contextmenu', this.onRightClick.bind(this));
+
+    // Setup keyboard hotkeys for unit bar
+    document.addEventListener('keydown', this.onKeyDown.bind(this));
   }
 
   private renderUI(): void {
@@ -523,6 +527,71 @@ export class DeploymentManager {
     }
   }
 
+  /**
+   * Handle keyboard hotkeys for the unit bar
+   * F1-F12: Select unit 1-12 in current category
+   * Ctrl+F1-F12: Switch to tab 1-12
+   */
+  private onKeyDown(event: KeyboardEvent): void {
+    // Only handle F1-F12 keys
+    const fKeyMatch = event.key.match(/^F(\d+)$/);
+    if (!fKeyMatch || !fKeyMatch[1]) return;
+
+    const fKeyNum = parseInt(fKeyMatch[1], 10);
+    if (fKeyNum < 1 || fKeyNum > 12) return;
+
+    // Only handle if unit bar is visible (Setup or Battle phase)
+    const unitBar = document.getElementById('battle-unit-bar');
+    if (!unitBar || !unitBar.classList.contains('visible')) return;
+
+    event.preventDefault();
+
+    if (event.ctrlKey) {
+      // Ctrl+F1-F12: Switch category tabs
+      this.switchToTabByIndex(fKeyNum - 1);
+    } else {
+      // F1-F12: Select unit by index in current category
+      this.selectUnitByIndex(fKeyNum - 1);
+    }
+  }
+
+  /**
+   * Switch to a category tab by index (0-based)
+   */
+  private switchToTabByIndex(index: number): void {
+    const stackedByType = this.getStackedUnitTypes();
+
+    // Get categories that have available units
+    const categories: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
+    const availableCategories = categories.filter(cat =>
+      stackedByType.some(stack => stack.unitData.category === cat && stack.available > 0)
+    );
+
+    if (index >= 0 && index < availableCategories.length) {
+      this.battleBarCategory = availableCategories[index]!;
+      this.renderBattleUnitBar();
+    }
+  }
+
+  /**
+   * Select a unit by index in the current category (0-based)
+   */
+  private selectUnitByIndex(index: number): void {
+    const stackedByType = this.getStackedUnitTypes();
+
+    // Get units in current category that are available
+    const categoryUnits = stackedByType.filter(
+      stack => stack.unitData.category === this.battleBarCategory && stack.available > 0
+    );
+
+    if (index >= 0 && index < categoryUnits.length) {
+      const unit = categoryUnits[index]!;
+      if (unit.unitData.cost <= this.credits) {
+        this.queueUnitFromBar(unit.unitData.id);
+      }
+    }
+  }
+
   private isInDeploymentZone(x: number, z: number): boolean {
     if (!this.deploymentZone) return false;
 
@@ -575,8 +644,10 @@ export class DeploymentManager {
     // Cancel placement mode
     this.cancelPlacement();
 
-    // Re-render UI
+    // Re-render UI (both right panel and battle unit bar)
     this.renderUI();
+    this.renderBattleUnitBar();
+    this.updateCreditsDisplay();
   }
 
   private cancelPlacement(): void {
@@ -593,6 +664,7 @@ export class DeploymentManager {
     }
 
     this.renderUI();
+    this.renderBattleUnitBar();
   }
 
   // Called when a deployed unit is sold
@@ -631,6 +703,185 @@ export class DeploymentManager {
   show(): void {
     if (this.deploymentPanel) {
       this.deploymentPanel.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * Render the horizontal battle unit bar for quick reinforcement access
+   */
+  renderBattleUnitBar(): void {
+    const unitBar = document.getElementById('battle-unit-bar');
+    const unitTabs = document.getElementById('battle-unit-tabs');
+    const unitCards = document.getElementById('battle-unit-cards');
+    if (!unitBar || !unitTabs || !unitCards) return;
+
+    // Get stacked unit types (grouped by type)
+    const stackedByType = this.getStackedUnitTypes();
+
+    // Count available and total units per category
+    const categoryCounts = new Map<UnitCategory, { available: number; total: number }>();
+    for (const stack of stackedByType) {
+      const cat = stack.unitData.category;
+      const existing = categoryCounts.get(cat) ?? { available: 0, total: 0 };
+      existing.available += stack.available;
+      existing.total += stack.available + stack.deployed;
+      categoryCounts.set(cat, existing);
+    }
+
+    // If current category is empty and has no units at all, switch to first with any units
+    const currentCatData = categoryCounts.get(this.battleBarCategory);
+    if (!currentCatData || currentCatData.total === 0) {
+      const firstCat = Array.from(categoryCounts.entries()).find(([_, data]) => data.total > 0)?.[0];
+      if (firstCat) {
+        this.battleBarCategory = firstCat;
+      }
+    }
+
+    // Render category tabs (show all categories that have any units, gray out empty ones)
+    const categories: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
+    unitTabs.innerHTML = categories
+      .filter(cat => {
+        const data = categoryCounts.get(cat);
+        return data && data.total > 0; // Only show tabs for categories that had units in deck
+      })
+      .map(cat => {
+        const data = categoryCounts.get(cat) ?? { available: 0, total: 0 };
+        const isActive = cat === this.battleBarCategory;
+        const isEmpty = data.available === 0;
+        return `
+          <button class="battle-tab ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}"
+                  data-category="${cat}" ${isEmpty ? 'disabled' : ''}>
+            ${cat}<span class="tab-count">(${data.available})</span>
+          </button>
+        `;
+      }).join('');
+
+    // Bind tab click handlers
+    unitTabs.querySelectorAll('.battle-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const tabEl = e.currentTarget as HTMLElement;
+        const category = tabEl.getAttribute('data-category') as UnitCategory;
+        if (category) {
+          this.battleBarCategory = category;
+          this.renderBattleUnitBar();
+        }
+      });
+    });
+
+    // Filter and render unit cards for current category (show all, gray out unavailable)
+    unitCards.innerHTML = stackedByType
+      .filter(stack => stack.unitData.category === this.battleBarCategory)
+      .map(stack => {
+        const allDeployed = stack.available === 0;
+        const tooExpensive = stack.unitData.cost > this.credits;
+        const isSelected = this.selectedUnitTypeId === stack.unitData.id && this.isPlacingUnit;
+
+        return `
+          <div class="battle-unit-card ${allDeployed ? 'all-deployed' : ''} ${tooExpensive && !allDeployed ? 'too-expensive' : ''} ${isSelected ? 'selected' : ''}"
+               data-unit-type="${stack.unitData.id}"
+               title="${stack.unitData.name} - ${stack.unitData.cost} credits${allDeployed ? ' (all deployed)' : ''}">
+            <span class="unit-count-badge ${allDeployed ? 'empty' : ''}">${stack.available}</span>
+            <span class="unit-name">${stack.unitData.name.slice(0, 8)}</span>
+            <span class="unit-cost">${stack.unitData.cost}</span>
+          </div>
+        `;
+      }).join('');
+
+    // Bind card click handlers
+    unitCards.querySelectorAll('.battle-unit-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        const cardEl = e.currentTarget as HTMLElement;
+        if (cardEl.classList.contains('too-expensive')) return;
+        if (cardEl.classList.contains('all-deployed')) return;
+
+        const unitTypeId = cardEl.getAttribute('data-unit-type');
+        if (unitTypeId) {
+          this.queueUnitFromBar(unitTypeId);
+        }
+      });
+    });
+  }
+
+  /**
+   * Handle unit selection from the battle unit bar
+   * - Setup phase: Start ghost placement mode (click to place)
+   * - Battle phase: Queue at auto-selected entry point
+   */
+  private queueUnitFromBar(unitTypeId: string): void {
+    // Find the first undeployed unit of this type
+    const duIndex = this.deployableUnits.findIndex(
+      d => d.unitData.id === unitTypeId && !d.deployed
+    );
+
+    if (duIndex === -1) return;
+
+    const du = this.deployableUnits[duIndex]!;
+
+    // Check credits
+    if (du.unitData.cost > this.credits) {
+      console.log('Not enough credits');
+      return;
+    }
+
+    // Setup phase: Start ghost placement mode
+    if (this.game.phase === 'setup') {
+      this.selectedUnitIndex = duIndex;
+      this.selectedUnitTypeId = unitTypeId;
+      this.isPlacingUnit = true;
+      this.createGhostMesh();
+      this.renderBattleUnitBar(); // Update selection state
+      return;
+    }
+
+    // Battle phase: Queue using auto-selection
+    const success = this.game.reinforcementManager.queueUnitAuto(du.unitData.id);
+    if (success) {
+      // Deduct credits
+      this.credits -= du.unitData.cost;
+
+      // Mark as deployed (can't queue same unit again until it spawns)
+      du.deployed = true;
+
+      // Re-render both the battle unit bar and update credits display
+      this.renderBattleUnitBar();
+      this.updateCreditsDisplay();
+
+      console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
+    }
+  }
+
+  /**
+   * Update all credits displays
+   */
+  private updateCreditsDisplay(): void {
+    if (this.creditsDisplay) {
+      this.creditsDisplay.textContent = this.credits.toString();
+    }
+    // Update top-bar credits
+    const topCredits = document.getElementById('credits-value');
+    if (topCredits) {
+      topCredits.textContent = this.credits.toString();
+    }
+  }
+
+  /**
+   * Show the battle unit bar
+   */
+  showBattleUnitBar(): void {
+    const unitBar = document.getElementById('battle-unit-bar');
+    if (unitBar) {
+      unitBar.classList.add('visible');
+      this.renderBattleUnitBar();
+    }
+  }
+
+  /**
+   * Hide the battle unit bar
+   */
+  hideBattleUnitBar(): void {
+    const unitBar = document.getElementById('battle-unit-bar');
+    if (unitBar) {
+      unitBar.classList.remove('visible');
     }
   }
 

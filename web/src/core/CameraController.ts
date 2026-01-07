@@ -41,6 +41,24 @@ const DEFAULT_CONFIG: CameraConfig = {
   maxZ: 250,
 };
 
+/**
+ * Calculate camera configuration based on map size
+ */
+function getMapScaledConfig(mapSize: number): Partial<CameraConfig> {
+  // Scale maxHeight to allow viewing entire map
+  // At 55 degree pitch, we need roughly height = mapSize * 0.7 to see whole map
+  const maxHeight = Math.max(150, mapSize * 0.7);
+
+  // Scale zoom speed proportionally (faster zoom for larger maps)
+  const zoomSpeed = Math.max(10, mapSize * 0.02);
+
+  // Scale pan speed for larger maps
+  const panSpeed = Math.max(50, mapSize * 0.15);
+  const edgePanSpeed = Math.max(30, mapSize * 0.1);
+
+  return { maxHeight, zoomSpeed, panSpeed, edgePanSpeed };
+}
+
 export class CameraController {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly canvas: HTMLCanvasElement;
@@ -261,6 +279,14 @@ export class CameraController {
     this.targetPosition.z = z;
   }
 
+  /**
+   * Focus camera on a world position (smooth pan)
+   */
+  focusOnPosition(position: THREE.Vector3): void {
+    this.targetPosition.x = position.x;
+    this.targetPosition.z = position.z;
+  }
+
   setHeight(height: number): void {
     this.targetHeight = THREE.MathUtils.clamp(
       height,
@@ -285,14 +311,19 @@ export class CameraController {
   }
 
   /**
-   * Set the camera bounds based on map dimensions
+   * Set the camera bounds and scale settings based on map dimensions
    * Adds some padding so the camera can see the edges
    */
   setBounds(mapWidth: number, mapHeight: number): void {
-    const padding = 50; // Extra space beyond map edges
+    const padding = Math.max(50, Math.max(mapWidth, mapHeight) * 0.05);
     this.config.minX = -mapWidth / 2 - padding;
     this.config.maxX = mapWidth / 2 + padding;
     this.config.minZ = -mapHeight / 2 - padding;
     this.config.maxZ = mapHeight / 2 + padding;
+
+    // Scale camera settings based on map size
+    const mapSize = Math.max(mapWidth, mapHeight);
+    const scaledConfig = getMapScaledConfig(mapSize);
+    Object.assign(this.config, scaledConfig);
   }
 }

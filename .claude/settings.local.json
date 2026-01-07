@@ -8,7 +8,9 @@
       "Bash(bun run build)",
       "Bash(bunx vitest:*)",
       "Bash(bun test:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(bun x tsc:*)",
+      "Bash(npm run typecheck:*)"
     ]
   }
 }

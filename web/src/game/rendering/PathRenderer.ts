@@ -12,9 +12,15 @@
 import * as THREE from 'three';
 import type { Unit } from '../units/Unit';
 
+interface PathData {
+  line: THREE.Line;
+  unit: Unit;
+  target: THREE.Vector3;
+}
+
 export class PathRenderer {
   private readonly scene: THREE.Scene;
-  private pathLines: Map<string, THREE.Line[]> = new Map(); // unitId -> lines (multiple for queue)
+  private pathData: Map<string, PathData[]> = new Map(); // unitId -> path data (multiple for queue)
   private waypointMarkers: Map<string, THREE.Mesh[]> = new Map(); // unitId -> markers
   private preOrderLines: Map<string, THREE.Line[]> = new Map(); // unitId -> dashed lines
 
@@ -38,12 +44,16 @@ export class PathRenderer {
 
   /**
    * Update path visualization for a unit
+   * Only shows paths for player-owned units (not enemies or AI allies)
    */
   updatePath(unit: Unit, targetPosition: THREE.Vector3 | null, commandType: string = 'move'): void {
     // Remove existing path
     this.clearPath(unit.id);
 
     if (!targetPosition) return;
+
+    // Only show paths for player-owned units
+    if (unit.ownerId !== 'player') return;
 
     // Create path line
     const points = [
@@ -67,7 +77,13 @@ export class PathRenderer {
     const line = new THREE.Line(geometry, material);
     line.renderOrder = 100; // Render on top
     this.scene.add(line);
-    this.pathLines.set(unit.id, [line]);
+
+    // Store path data with unit reference for dynamic updates
+    this.pathData.set(unit.id, [{
+      line,
+      unit,
+      target: targetPosition.clone(),
+    }]);
 
     // Create waypoint marker at destination
     this.createWaypoint(unit.id, targetPosition, color);
@@ -75,8 +91,13 @@ export class PathRenderer {
 
   /**
    * Show pre-order path (dashed line during setup phase)
+   * Only shows paths for player-owned units
    */
-  showPreOrderPath(unitId: string, startPos: THREE.Vector3, targetPos: THREE.Vector3, commandType: string = 'move'): void {
+  showPreOrderPath(unit: Unit, startPos: THREE.Vector3, targetPos: THREE.Vector3, commandType: string = 'move'): void {
+    // Only show paths for player-owned units
+    if (unit.ownerId !== 'player') return;
+
+    const unitId = unit.id;
     // Create dashed line for pre-order
     const points = [
       startPos.clone(),
@@ -162,14 +183,14 @@ export class PathRenderer {
    */
   clearPath(unitId: string): void {
     // Remove lines
-    const lines = this.pathLines.get(unitId);
-    if (lines) {
-      lines.forEach(line => {
-        this.scene.remove(line);
-        line.geometry.dispose();
-        (line.material as THREE.Material).dispose();
+    const data = this.pathData.get(unitId);
+    if (data) {
+      data.forEach(d => {
+        this.scene.remove(d.line);
+        d.line.geometry.dispose();
+        (d.line.material as THREE.Material).dispose();
       });
-      this.pathLines.delete(unitId);
+      this.pathData.delete(unitId);
     }
 
     // Remove waypoint markers
@@ -188,15 +209,29 @@ export class PathRenderer {
    * Update all paths (shrink as units move)
    */
   update(): void {
-    // Path lines are automatically updated because they reference unit positions
-    // For more advanced behavior (shrinking paths), we'd need to track progress
+    // Update each path line to start from unit's current position
+    for (const [_unitId, dataList] of this.pathData) {
+      for (const data of dataList) {
+        const { line, unit, target } = data;
+
+        // Update the line geometry to reflect current unit position
+        const positions = line.geometry.attributes.position as THREE.BufferAttribute;
+        if (positions) {
+          // Start point - unit's current position
+          positions.setXYZ(0, unit.position.x, 0.1, unit.position.z);
+          // End point - target (stays the same)
+          positions.setXYZ(1, target.x, 0.1, target.z);
+          positions.needsUpdate = true;
+        }
+      }
+    }
   }
 
   /**
    * Clear all paths
    */
   clearAll(): void {
-    this.pathLines.forEach((_, unitId) => this.clearPath(unitId));
+    this.pathData.forEach((_, unitId) => this.clearPath(unitId));
   }
 
   /**

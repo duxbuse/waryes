@@ -101,7 +101,7 @@ export class ZoneFillRenderer {
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(centerX, 0.52, centerZ);
+    mesh.position.set(centerX, 1.5, centerZ);
     mesh.renderOrder = 91;
 
     this.mapGroup.add(mesh);

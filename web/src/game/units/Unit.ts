@@ -13,6 +13,7 @@ import type { Game } from '../../core/Game';
 import type { UnitData, WeaponSlot, Building } from '../../data/types';
 import { getUnitById, getWeaponById } from '../../data/factions';
 import { UnitUI } from '../ui/UnitUI';
+import { getUnitMaterial, getWireframeMaterial, getSelectionRingMaterial } from './SharedMaterials';
 
 export interface UnitConfig {
   id: string;
@@ -84,6 +85,7 @@ export class Unit {
   private _isFrozen: boolean = true;
   private _isRouting: boolean = false;
   private _returnFireOnly: boolean = false;
+  private _spawnProtectionTimer: number = 0; // Seconds of invulnerability after spawning
 
   // Commander aura bonus (recalculated each frame)
   private auraBonusMorale: number = 0; // +morale from nearby commanders
@@ -158,26 +160,30 @@ export class Unit {
     this.mesh.userData['unitId'] = this.id;
 
     // Create body mesh (simple box for now)
-    const geometry = this.createGeometry();
-    const material = new THREE.MeshStandardMaterial({
-      color: this.getUnitColor(),
-      roughness: 0.7,
-      metalness: 0.3,
-    });
-    this.bodyMesh = new THREE.Mesh(geometry, material);
-    this.bodyMesh.castShadow = true;
-    this.bodyMesh.receiveShadow = true;
-    this.mesh.add(this.bodyMesh);
+    const { geometry, height } = this.createGeometry();
 
-    // Create selection ring
+    // Use shared material based on team/owner for better batching
+    const material = getUnitMaterial(this.team, this.ownerId);
+    this.bodyMesh = new THREE.Mesh(geometry, material);
+    this.bodyMesh.position.y = height / 2; // Raise mesh so bottom sits on ground
+    this.bodyMesh.renderOrder = 999; // Very high to ensure visibility over all terrain/overlays
+    // Frustum culling enabled - compute proper bounding sphere after positioning
+    this.bodyMesh.castShadow = false;
+    this.bodyMesh.receiveShadow = false;
+    this.mesh.add(this.bodyMesh);
+    // Ensure bounding sphere is computed for proper frustum culling
+    this.bodyMesh.geometry.computeBoundingSphere();
+
+    // Add wireframe outline for better visibility (shared material)
+    const wireframeGeometry = new THREE.EdgesGeometry(geometry);
+    const wireframe = new THREE.LineSegments(wireframeGeometry, getWireframeMaterial());
+    wireframe.position.y = height / 2;
+    wireframe.renderOrder = 1000; // Render wireframe above body
+    this.mesh.add(wireframe);
+
+    // Create selection ring (shared material)
     const ringGeometry = new THREE.RingGeometry(1.5, 1.8, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ff00,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8,
-    });
-    this.selectionRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    this.selectionRing = new THREE.Mesh(ringGeometry, getSelectionRingMaterial());
     this.selectionRing.rotation.x = -Math.PI / 2;
     this.selectionRing.position.y = 0.05;
     this.selectionRing.visible = false;
@@ -187,15 +193,29 @@ export class Unit {
     this.unitUI = new UnitUI(this, game);
   }
 
-  private createGeometry(): THREE.BufferGeometry {
-    // Different shapes based on unit type
-    switch (this.unitType) {
-      case 'tank':
-        return new THREE.BoxGeometry(2, 1, 3);
-      case 'infantry':
-        return new THREE.CapsuleGeometry(0.3, 1, 8, 16);
+  private createGeometry(): { geometry: THREE.BufferGeometry; height: number } {
+    // Different shapes based on unit category
+    // All sizes increased for visibility at typical camera zoom
+    const category = this.unitData?.category ?? 'INF';
+
+    switch (category) {
+      case 'TNK': // Tanks - large box
+        return { geometry: new THREE.BoxGeometry(3, 1.5, 4), height: 1.5 };
+      case 'REC': // Recon - medium box
+        return { geometry: new THREE.BoxGeometry(2.2, 1.5, 3), height: 1.5 };
+      case 'ART': // Artillery - wide box
+        return { geometry: new THREE.BoxGeometry(2.5, 1.5, 3.5), height: 1.5 };
+      case 'AA': // Anti-air - medium box
+        return { geometry: new THREE.BoxGeometry(2.2, 1.5, 3), height: 1.5 };
+      case 'HEL': // Helicopters - flat box (flies higher)
+        return { geometry: new THREE.BoxGeometry(2.5, 0.8, 3.5), height: 8 }; // Height = flying altitude
+      case 'AIR': // Aircraft - flat wedge-like box (flies high)
+        return { geometry: new THREE.BoxGeometry(3, 0.6, 4), height: 15 }; // Height = flying altitude
+      case 'LOG': // Logistics - box
+        return { geometry: new THREE.BoxGeometry(2.5, 1.5, 3.5), height: 1.5 };
+      case 'INF': // Infantry - upright box
       default:
-        return new THREE.BoxGeometry(1.5, 1, 2);
+        return { geometry: new THREE.BoxGeometry(2, 2.5, 2), height: 2.5 };
     }
   }
 
@@ -215,10 +235,29 @@ export class Unit {
   }
 
   takeDamage(amount: number): void {
+    // Spawn protection - unit is invulnerable during this period
+    if (this._spawnProtectionTimer > 0) {
+      return;
+    }
+
     this._health = Math.max(0, this._health - amount);
     if (this._health <= 0) {
       this.onDeath();
     }
+  }
+
+  /**
+   * Set spawn protection timer (seconds of invulnerability)
+   */
+  setSpawnProtection(seconds: number): void {
+    this._spawnProtectionTimer = seconds;
+  }
+
+  /**
+   * Check if unit has spawn protection
+   */
+  get hasSpawnProtection(): boolean {
+    return this._spawnProtectionTimer > 0;
   }
 
   heal(amount: number): void {
@@ -624,6 +663,11 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.AttackMove, target: target.clone() };
     this.targetPosition = target.clone();
+
+    // Update path visualization
+    if (this.game.pathRenderer) {
+      this.game.pathRenderer.updatePath(this, target, 'attackMove');
+    }
   }
 
   queueAttackMoveCommand(target: THREE.Vector3): void {
@@ -1199,7 +1243,12 @@ export class Unit {
   /**
    * Variable update for visuals/interpolation
    */
-  update(_dt: number): void {
+  update(dt: number): void {
+    // Decrement spawn protection timer
+    if (this._spawnProtectionTimer > 0) {
+      this._spawnProtectionTimer = Math.max(0, this._spawnProtectionTimer - dt);
+    }
+
     // Update UI (health bars, morale bars)
     if (this.unitUI) {
       this.unitUI.update();

@@ -31,7 +31,10 @@ export class ReinforcementManager {
    * Initialize with map entry points
    */
   initialize(entryPoints: EntryPoint[]): void {
+    console.log(`[REINFORCE] Initializing with ${entryPoints.length} total entry points`);
     this.entryPoints = entryPoints.filter(ep => ep.team === 'player');
+    console.log(`[REINFORCE] Filtered to ${this.entryPoints.length} player entry points:`,
+      this.entryPoints.map(ep => `${ep.id} (${ep.type}) at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)})`));
 
     // Initialize spawn timers
     for (const ep of this.entryPoints) {
@@ -217,6 +220,12 @@ export class ReinforcementManager {
    * Update spawn timers and process queues
    */
   update(dt: number): void {
+    // Check total queue length across all entry points
+    const totalQueued = this.entryPoints.reduce((sum, ep) => sum + ep.queue.length, 0);
+    if (totalQueued > 0) {
+      console.log(`[REINFORCE] Update called, dt=${dt.toFixed(3)}, total queued: ${totalQueued}`);
+    }
+
     for (const ep of this.entryPoints) {
       // Skip if queue is empty
       if (ep.queue.length === 0) continue;
@@ -225,8 +234,11 @@ export class ReinforcementManager {
       const currentTimer = this.spawnTimers.get(ep.id) || 0;
       const newTimer = currentTimer - dt;
 
+      console.log(`[REINFORCE] Entry ${ep.id}: queue=${ep.queue.length}, timer=${currentTimer.toFixed(2)} -> ${newTimer.toFixed(2)}`);
+
       if (newTimer <= 0) {
         // Spawn unit
+        console.log(`[REINFORCE] Timer expired for ${ep.id}, spawning unit...`);
         this.spawnUnitFromQueue(ep);
 
         // Reset timer
@@ -253,7 +265,10 @@ export class ReinforcementManager {
       unitType,
     });
 
-    console.log(`Spawned ${unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)})`);
+    // Give spawned units 3 seconds of spawn protection
+    unit.setSpawnProtection(3);
+
+    console.log(`Spawned ${unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) with 3s spawn protection`);
 
     // Mark unit as no longer deployed in deployment manager so it can be called again
     const deck = this.game.deploymentManager.getDeck();
@@ -286,6 +301,57 @@ export class ReinforcementManager {
    */
   getEntryPoints(): EntryPoint[] {
     return this.entryPoints;
+  }
+
+  /**
+   * Get the best entry point for spawning (auto-selection)
+   * Priority: highway > secondary > dirt (then by shortest queue)
+   */
+  getBestEntryPoint(): EntryPoint | null {
+    if (this.entryPoints.length === 0) return null;
+
+    // Priority order for entry point types
+    const typePriority: Record<string, number> = {
+      'highway': 1,
+      'secondary': 2,
+      'dirt': 3,
+      'air': 4
+    };
+
+    // Sort by type priority, then by queue length (shortest first)
+    const sorted = [...this.entryPoints].sort((a, b) => {
+      const priorityA = typePriority[a.type] ?? 99;
+      const priorityB = typePriority[b.type] ?? 99;
+
+      // First sort by type priority
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Then sort by queue length (prefer less congested)
+      return a.queue.length - b.queue.length;
+    });
+
+    return sorted[0] || null;
+  }
+
+  /**
+   * Queue a unit at the best available entry point (auto-selection)
+   */
+  queueUnitAuto(unitType: string): boolean {
+    console.log(`[REINFORCE] queueUnitAuto called for ${unitType}, entryPoints count: ${this.entryPoints.length}`);
+    const bestEntry = this.getBestEntryPoint();
+    if (!bestEntry) {
+      console.warn('[REINFORCE] No entry points available');
+      return false;
+    }
+
+    // Add to queue
+    bestEntry.queue.push(unitType);
+    console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
+
+    this.updateUI();
+    return true;
   }
 
   /**

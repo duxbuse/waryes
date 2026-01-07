@@ -33,6 +33,7 @@ import { MapGenerator } from '../game/map/MapGenerator';
 import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
+import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
 import type { GameMap, DeckData, MapSize } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
@@ -77,6 +78,7 @@ export class Game {
   public mapRenderer: MapRenderer | null = null;
   public minimapRenderer: MinimapRenderer | null = null;
   public pathRenderer: PathRenderer | null = null;
+  public losPreviewRenderer: LOSPreviewRenderer | null = null;
 
   // Game state
   private _phase: GamePhase = GamePhase.Loading;
@@ -98,6 +100,12 @@ export class Game {
   private readonly FIXED_TIMESTEP = 1 / 60; // 60 Hz
   private _accumulator = 0;
 
+  // FPS tracking
+  private _fpsFrameCount = 0;
+  private _fpsLastTime = 0;
+  private _currentFps = 0;
+  private _fpsOverlay: HTMLElement | null = null;
+
   // Current map
   public currentMap: GameMap | null = null;
 
@@ -106,6 +114,9 @@ export class Game {
 
   // Ground plane for raycasting
   public readonly groundPlane: THREE.Mesh;
+
+  // Sun light reference for shadow optimization
+  private sunLight: THREE.DirectionalLight | null = null;
 
   // Victory callback
   private onVictoryCallback: ((winner: 'player' | 'enemy') => void) | null = null;
@@ -125,9 +136,10 @@ export class Game {
       antialias: true,
       alpha: false,
       stencil: true, // Required for capture circle overlap prevention
+      powerPreference: 'high-performance', // Request discrete GPU
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Reduced from 2 for better performance
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -143,7 +155,7 @@ export class Game {
       0.1,
       1000
     );
-    this.camera.position.set(0, 50, 50);
+    this.camera.position.set(0, 150, 150);
     this.camera.lookAt(0, 0, 0);
 
     // Create ground plane (will be replaced by map terrain)
@@ -179,9 +191,10 @@ export class Game {
     this.visualEffectsManager = new VisualEffectsManager(this);
     this.audioManager = new AudioManager();
     this.screenManager = new ScreenManager();
-    this.mapRenderer = new MapRenderer(this.scene);
+    // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);
     this.pathRenderer = new PathRenderer(this.scene);
+    this.losPreviewRenderer = new LOSPreviewRenderer(this);
 
     // Setup lighting
     this.setupLighting();
@@ -195,23 +208,121 @@ export class Game {
     const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
     this.scene.add(ambientLight);
 
-    // Directional light (sun)
-    const sunLight = new THREE.DirectionalLight(0xffeedd, 1.0);
-    sunLight.position.set(50, 100, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 300;
-    sunLight.shadow.camera.left = -100;
-    sunLight.shadow.camera.right = 100;
-    sunLight.shadow.camera.top = 100;
-    sunLight.shadow.camera.bottom = -100;
-    this.scene.add(sunLight);
+    // Directional light (sun) with optimized shadow settings
+    this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.0);
+    this.sunLight.position.set(50, 100, 50);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.camera.near = 10;
+    this.sunLight.shadow.camera.far = 300;
+    this.sunLight.shadow.camera.left = -100;
+    this.sunLight.shadow.camera.right = 100;
+    this.sunLight.shadow.camera.top = 100;
+    this.sunLight.shadow.camera.bottom = -100;
+    // Reduce shadow acne with bias
+    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.normalBias = 0.02;
+    this.scene.add(this.sunLight);
 
     // Hemisphere light for sky/ground color variation
     const hemiLight = new THREE.HemisphereLight(0x8888aa, 0x444422, 0.3);
     this.scene.add(hemiLight);
+
+    // Create FPS overlay
+    this.createFpsOverlay();
+  }
+
+  private createFpsOverlay(): void {
+    this._fpsOverlay = document.createElement('div');
+    this._fpsOverlay.id = 'fps-overlay';
+    this._fpsOverlay.style.cssText = `
+      position: fixed;
+      top: 5px;
+      right: 220px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      z-index: 10000;
+      pointer-events: none;
+    `;
+    document.body.appendChild(this._fpsOverlay);
+  }
+
+  private updateFps(currentTime: number): void {
+    this._fpsFrameCount++;
+
+    // Update FPS every 500ms
+    if (currentTime - this._fpsLastTime >= 500) {
+      this._currentFps = Math.round((this._fpsFrameCount * 1000) / (currentTime - this._fpsLastTime));
+      this._fpsFrameCount = 0;
+      this._fpsLastTime = currentTime;
+
+      if (this._fpsOverlay) {
+        const triangles = this.renderer.info.render.triangles;
+        const calls = this.renderer.info.render.calls;
+        this._fpsOverlay.innerHTML = `
+          FPS: ${this._currentFps}<br>
+          Draw calls: ${calls}<br>
+          Triangles: ${triangles.toLocaleString()}
+        `;
+      }
+    }
+  }
+
+  /**
+   * Configure rendering settings based on map size for performance
+   */
+  private configureRenderingForMapSize(mapWidth: number, mapHeight: number): void {
+    const mapSize = Math.max(mapWidth, mapHeight);
+
+    // Update camera far plane for large maps
+    this.camera.far = Math.max(1000, mapSize * 1.5);
+    this.camera.updateProjectionMatrix();
+
+    // Update fog for large maps
+    const fogNear = Math.max(100, mapSize * 0.1);
+    const fogFar = Math.max(500, mapSize * 1.2);
+    this.scene.fog = new THREE.Fog(0x1a1a2e, fogNear, fogFar);
+
+    // Update shadow settings based on map size (use stored reference)
+    if (this.sunLight) {
+      // For large maps, adjust shadow quality and coverage for performance
+      if (mapSize > 5000) {
+        // Very large maps - disable shadows entirely for performance
+        this.sunLight.castShadow = false;
+        this.renderer.shadowMap.enabled = false;
+      } else if (mapSize > 2000) {
+        // Large maps - reduced shadow quality, use faster shadow type
+        this.sunLight.shadow.mapSize.width = 1024;
+        this.sunLight.shadow.mapSize.height = 1024;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap; // Faster than soft
+        const shadowRange = Math.min(150, mapSize * 0.1);
+        this.sunLight.shadow.camera.left = -shadowRange;
+        this.sunLight.shadow.camera.right = shadowRange;
+        this.sunLight.shadow.camera.top = shadowRange;
+        this.sunLight.shadow.camera.bottom = -shadowRange;
+        this.sunLight.shadow.camera.near = 20;
+        this.sunLight.shadow.camera.far = Math.min(400, mapSize * 0.3);
+        this.sunLight.shadow.camera.updateProjectionMatrix();
+      } else if (mapSize > 500) {
+        // Medium maps - balanced quality
+        this.sunLight.shadow.mapSize.width = 1536;
+        this.sunLight.shadow.mapSize.height = 1536;
+        const shadowRange = Math.min(120, mapSize * 0.2);
+        this.sunLight.shadow.camera.left = -shadowRange;
+        this.sunLight.shadow.camera.right = shadowRange;
+        this.sunLight.shadow.camera.top = shadowRange;
+        this.sunLight.shadow.camera.bottom = -shadowRange;
+        this.sunLight.shadow.camera.near = 15;
+        this.sunLight.shadow.camera.far = Math.min(300, mapSize * 0.4);
+        this.sunLight.shadow.camera.updateProjectionMatrix();
+      }
+      // Small maps (<= 500) keep default high-quality settings
+    }
   }
 
   async loadAssets(): Promise<void> {
@@ -238,9 +349,6 @@ export class Game {
 
     // Wire up start battle button
     this.setupStartBattleButton();
-
-    // Wire up reinforcement button
-    this.setupReinforcementButton();
 
     // Set initial phase - go to main menu
     this.setPhase(GamePhase.MainMenu);
@@ -280,6 +388,9 @@ export class Game {
 
     // Render
     this.render();
+
+    // Update FPS display
+    this.updateFps(currentTime);
   }
 
   /**
@@ -305,6 +416,20 @@ export class Game {
       this.selectionManager.update(dt);
       this.unitManager.update(dt);
       this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
+      this.pathRenderer?.update(); // Update path lines as units move
+
+      // Update LOS preview if active
+      if (this.inputManager.isLOSPreviewActive) {
+        const mousePos = this.inputManager.mousePosition;
+        const worldPos = this.screenToWorld(mousePos.x, mousePos.y);
+        if (worldPos) {
+          const selectedUnits = this.selectionManager.getSelectedUnits();
+          const unit = selectedUnits.length > 0 ? (selectedUnits[0] ?? null) : null;
+          this.losPreviewRenderer?.show(worldPos, unit);
+        }
+      } else {
+        this.losPreviewRenderer?.hide();
+      }
     }
 
     if (!this._isPaused && this._phase === GamePhase.Battle) {
@@ -357,9 +482,91 @@ export class Game {
 
     if (this.pauseMenu) {
       this.pauseMenu.classList.toggle('visible', this._isPaused);
+
+      // Populate player info when showing pause menu
+      if (this._isPaused) {
+        this.populatePauseMenuPlayers();
+      }
     }
 
     console.log(`Game ${this._isPaused ? 'paused' : 'resumed'}`);
+  }
+
+  /**
+   * Populate the pause menu with current player information
+   */
+  private populatePauseMenuPlayers(): void {
+    const team1Container = document.getElementById('pause-team1-players');
+    const team2Container = document.getElementById('pause-team2-players');
+
+    if (!team1Container || !team2Container) return;
+
+    // Clear existing content
+    team1Container.innerHTML = '';
+    team2Container.innerHTML = '';
+
+    // Helper to get deck name
+    const getDeckName = (slot: PlayerSlot): string => {
+      if (slot.deckId) {
+        // Check starter decks
+        const starterDeck = STARTER_DECKS.find(d => d.id === slot.deckId);
+        if (starterDeck) return starterDeck.name;
+        // Check saved decks
+        const savedDecks = JSON.parse(localStorage.getItem('waryes_decks') || '[]');
+        const savedDeck = savedDecks.find((d: DeckData) => d.id === slot.deckId);
+        if (savedDeck) return savedDeck.name;
+      }
+      return 'Random Deck';
+    };
+
+    // Render player card
+    const renderPlayerCard = (slot: PlayerSlot, index: number, isYou: boolean): string => {
+      const name = isYou ? 'Player' : `CPU ${index + 1}`;
+      const difficulty = slot.type === 'CPU' ? ` (${slot.difficulty})` : '';
+      const deckName = isYou && this.lastDeck ? this.lastDeck.name : getDeckName(slot);
+
+      return `
+        <div class="pause-player-card ${isYou ? 'is-you' : ''}">
+          <div class="pause-player-name">
+            ${name}${difficulty}
+            ${isYou ? '<span class="you-badge">YOU</span>' : ''}
+          </div>
+          <div class="pause-player-deck">
+            Deck: <span class="deck-name">${deckName}</span>
+          </div>
+        </div>
+      `;
+    };
+
+    // Team 1 (player's team)
+    // Add the human player first
+    team1Container.innerHTML += renderPlayerCard({ type: 'YOU', difficulty: 'Medium' }, 0, true);
+
+    // Add CPU allies
+    let allyIndex = 0;
+    for (const slot of this.lastTeam1) {
+      if (slot.type === 'CPU') {
+        team1Container.innerHTML += renderPlayerCard(slot, allyIndex++, false);
+      }
+    }
+
+    // Team 2 (enemy team)
+    let enemyIndex = 0;
+    for (const slot of this.lastTeam2) {
+      if (slot.type === 'CPU') {
+        team2Container.innerHTML += renderPlayerCard(slot, enemyIndex++, false);
+      }
+    }
+
+    // If no enemies shown, add a placeholder
+    if (team2Container.innerHTML === '') {
+      team2Container.innerHTML = `
+        <div class="pause-player-card">
+          <div class="pause-player-name">CPU 1</div>
+          <div class="pause-player-deck">Deck: <span class="deck-name">AI Opponent</span></div>
+        </div>
+      `;
+    }
   }
 
   // Phase management
@@ -390,7 +597,8 @@ export class Game {
 
     if (topBar) topBar.style.display = inBattle ? 'flex' : 'none';
     if (scoreDisplay) scoreDisplay.style.display = inBattle ? 'block' : 'none';
-    if (phaseIndicator) phaseIndicator.style.display = inBattle ? 'block' : 'none';
+    // Phase indicator only shown during Setup, hidden during Battle
+    if (phaseIndicator) phaseIndicator.style.display = phase === GamePhase.Setup ? 'block' : 'none';
     if (minimap) minimap.style.display = inBattle ? 'block' : 'none';
 
     if (phaseText) {
@@ -407,8 +615,14 @@ export class Game {
       startButton.classList.toggle('visible', phase === GamePhase.Setup);
     }
 
-    // Update reinforcement button
-    this.updateReinforcementButton();
+    // Show unit bar during both Setup and Battle phases
+    if (phase === GamePhase.Setup || phase === GamePhase.Battle) {
+      this.deploymentManager.showBattleUnitBar();
+      // Hide the right-side deployment panel - we only use the top bar now
+      this.deploymentManager.hide();
+    } else {
+      this.deploymentManager.hideBattleUnitBar();
+    }
   }
 
   /**
@@ -429,6 +643,12 @@ export class Game {
     const generator = new MapGenerator(mapSeed, mapSize);
     this.currentMap = generator.generate();
 
+    // Recreate MapRenderer with biome colors
+    if (this.mapRenderer) {
+      this.mapRenderer.dispose();
+    }
+    this.mapRenderer = new MapRenderer(this.scene, this.currentMap.biome);
+
     // Render map
     if (this.mapRenderer) {
       this.mapRenderer.render(this.currentMap);
@@ -441,6 +661,9 @@ export class Game {
 
     // Set camera bounds based on map size
     this.cameraController.setBounds(this.currentMap.width, this.currentMap.height);
+
+    // Configure rendering for map size
+    this.configureRenderingForMapSize(this.currentMap.width, this.currentMap.height);
 
     // Hide ground plane (map terrain replaces it)
     this.groundPlane.visible = false;
@@ -492,13 +715,14 @@ export class Game {
 
     if (enemyCPUs.length === 0) {
       // Fallback: spawn default enemy units if no CPUs configured
-      const defaultUnits = ['vanguard_marines', 'vanguard_marines', 'vanguard_predator'];
+      const defaultUnits = ['vanguard_infantry', 'vanguard_infantry', 'vanguard_hunter_tank'];
       defaultUnits.forEach((unitType, i) => {
         const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.3 + 0.2 * i);
         const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
         this.unitManager.spawnUnit({
           position: new THREE.Vector3(x, 0, z),
           team: 'enemy',
+          ownerId: 'enemy',
           unitType,
         });
       });
@@ -581,7 +805,7 @@ export class Game {
   }
 
   /**
-   * Deploy AI units from a deck within budget
+   * Deploy AI units from a deck with strategic selection and positioning
    */
   private deployAIUnits(
     deck: DeckData,
@@ -593,41 +817,125 @@ export class Game {
     totalSlots: number
   ): void {
     let remaining = budget;
-    let deployedCount = 0;
 
     // Calculate this AI's area within the deployment zone
     const zoneWidth = zone.maxX - zone.minX;
+    const zoneDepth = zone.maxZ - zone.minZ;
     const slotWidth = zoneWidth / totalSlots;
     const slotStartX = zone.minX + slotIndex * slotWidth;
     const slotEndX = slotStartX + slotWidth;
+    const slotCenterX = (slotStartX + slotEndX) / 2;
 
-    // Deploy units from deck in order until budget exhausted
+    // Determine front/back based on team (player at low Z, enemy at high Z)
+    const frontZ = team === 'player' ? zone.maxZ : zone.minZ;
+    const backZ = team === 'player' ? zone.minZ : zone.maxZ;
+
+    // Categorize available units by role
+    const unitsByCategory: { [key: string]: { unitId: string; cost: number }[] } & {
+      INF: { unitId: string; cost: number }[];
+      TNK: { unitId: string; cost: number }[];
+      REC: { unitId: string; cost: number }[];
+      ART: { unitId: string; cost: number }[];
+      AA: { unitId: string; cost: number }[];
+      HEL: { unitId: string; cost: number }[];
+      AIR: { unitId: string; cost: number }[];
+      LOG: { unitId: string; cost: number }[];
+    } = {
+      INF: [], TNK: [], REC: [], ART: [], AA: [], HEL: [], AIR: [], LOG: []
+    };
+
     for (const deckUnit of deck.units) {
       const unitData = getUnitById(deckUnit.unitId);
       if (!unitData) continue;
-
-      const cost = unitData.cost;
-      if (remaining < cost) continue;
-
-      remaining -= cost;
-
-      // Position within this AI's slice of the deployment zone
-      const xProgress = (deployedCount % 3) / 3;
-      const x = slotStartX + (slotEndX - slotStartX) * (0.2 + xProgress * 0.6);
-      const zOffset = Math.floor(deployedCount / 3) * 4 - 4;
-      const z = (zone.minZ + zone.maxZ) / 2 + zOffset;
-
-      this.unitManager.spawnUnit({
-        position: new THREE.Vector3(x, 0, z),
-        team,
-        ownerId,
-        unitType: deckUnit.unitId,
-      });
-
-      deployedCount++;
+      const category = unitData.category || 'INF';
+      if (!unitsByCategory[category]) unitsByCategory[category] = [];
+      unitsByCategory[category].push({ unitId: deckUnit.unitId, cost: unitData.cost });
     }
 
-    console.log(`AI ${ownerId} deployed ${deployedCount} units from deck "${deck.name}" (spent ${budget - remaining}/${budget} credits)`);
+    const deployed: { unitId: string; x: number; z: number }[] = [];
+    const jitter = (base: number, range: number) => base + (Math.random() - 0.5) * range;
+
+    // 1. Deploy 2-3 infantry at front line
+    const infToSpawn = Math.min(3, unitsByCategory.INF.length);
+    for (let i = 0; i < infToSpawn && unitsByCategory.INF.length > 0; i++) {
+      const inf = unitsByCategory.INF.shift()!;
+      if (remaining < inf.cost) continue;
+      remaining -= inf.cost;
+      const spreadX = slotWidth * 0.7;
+      const x = jitter(slotCenterX + (i - 1) * (spreadX / 3), 3);
+      const z = jitter(frontZ - (team === 'player' ? zoneDepth * 0.2 : -zoneDepth * 0.2), 5);
+      deployed.push({ unitId: inf.unitId, x, z });
+    }
+
+    // 2. Deploy recon on flanks
+    for (const rec of unitsByCategory.REC.slice(0, 2)) {
+      if (remaining < rec.cost) continue;
+      remaining -= rec.cost;
+      const side = deployed.length % 2 === 0 ? 1 : -1;
+      const x = jitter(slotCenterX + side * (slotWidth * 0.35), 3);
+      const z = jitter(frontZ - (team === 'player' ? zoneDepth * 0.1 : -zoneDepth * 0.1), 5);
+      deployed.push({ unitId: rec.unitId, x, z });
+    }
+
+    // 3. Deploy tanks in center for fire support
+    for (const tank of unitsByCategory.TNK.slice(0, 2)) {
+      if (remaining < tank.cost) continue;
+      remaining -= tank.cost;
+      const x = jitter(slotCenterX + (deployed.length % 2 === 0 ? -1 : 1) * (slotWidth * 0.15), 5);
+      const z = jitter((frontZ + backZ) / 2, 8);
+      deployed.push({ unitId: tank.unitId, x, z });
+    }
+
+    // 4. Deploy artillery in the back
+    for (const art of unitsByCategory.ART.slice(0, 2)) {
+      if (remaining < art.cost) continue;
+      remaining -= art.cost;
+      const x = jitter(slotCenterX + (deployed.length % 2 === 0 ? -1 : 1) * (slotWidth * 0.25), 5);
+      const z = jitter(backZ + (team === 'player' ? zoneDepth * 0.15 : -zoneDepth * 0.15), 5);
+      deployed.push({ unitId: art.unitId, x, z });
+    }
+
+    // 5. Deploy AA in mid-back
+    for (const aa of unitsByCategory.AA.slice(0, 1)) {
+      if (remaining < aa.cost) continue;
+      remaining -= aa.cost;
+      const x = jitter(slotCenterX, 8);
+      const z = jitter(backZ + (team === 'player' ? zoneDepth * 0.25 : -zoneDepth * 0.25), 5);
+      deployed.push({ unitId: aa.unitId, x, z });
+    }
+
+    // 6. Deploy helicopters
+    for (const hel of unitsByCategory.HEL.slice(0, 1)) {
+      if (remaining < hel.cost) continue;
+      remaining -= hel.cost;
+      const x = jitter(slotCenterX, 15);
+      const z = jitter(backZ + (team === 'player' ? zoneDepth * 0.1 : -zoneDepth * 0.1), 10);
+      deployed.push({ unitId: hel.unitId, x, z });
+    }
+
+    // 7. Spend remaining budget on more units
+    const remainingUnits = [...unitsByCategory.INF, ...unitsByCategory.TNK.slice(2), ...unitsByCategory.REC.slice(2), ...unitsByCategory.LOG];
+    for (const unit of remainingUnits) {
+      if (remaining < unit.cost) continue;
+      remaining -= unit.cost;
+      const x = jitter(slotCenterX, slotWidth * 0.4);
+      const z = jitter((frontZ + backZ) / 2, zoneDepth * 0.3);
+      deployed.push({ unitId: unit.unitId, x, z });
+    }
+
+    // Spawn all deployed units
+    for (const unit of deployed) {
+      const clampedX = Math.max(zone.minX + 5, Math.min(zone.maxX - 5, unit.x));
+      const clampedZ = Math.max(zone.minZ + 5, Math.min(zone.maxZ - 5, unit.z));
+      this.unitManager.spawnUnit({
+        position: new THREE.Vector3(clampedX, 0, clampedZ),
+        team,
+        ownerId,
+        unitType: unit.unitId,
+      });
+    }
+
+    console.log(`AI ${ownerId} deployed ${deployed.length} units from "${deck.name}" (${budget - remaining}/${budget} credits)`);
   }
 
   startBattle(): void {
@@ -635,6 +943,9 @@ export class Game {
 
     // Hide deployment UI
     this.deploymentManager.hide();
+
+    // Hide deployment zone boundaries on the map (no longer needed in battle)
+    this.mapRenderer?.setDeploymentZonesVisible(false);
 
     // Record battle start time
     this.gameStartTime = performance.now();
@@ -677,7 +988,7 @@ export class Game {
         ? orders[orders.length - 2]!.target
         : unit.position.clone();
 
-      this.pathRenderer.showPreOrderPath(unitId, startPos, target, type);
+      this.pathRenderer.showPreOrderPath(unit, startPos, target, type);
     }
 
     console.log(`Pre-order queued for unit ${unitId}: ${type}`);
@@ -993,14 +1304,6 @@ export class Game {
       });
     }
 
-    // ESC key to toggle pause
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle) {
-          this.togglePause();
-        }
-      }
-    });
   }
 
   /**
@@ -1044,25 +1347,4 @@ export class Game {
     }
   }
 
-  /**
-   * Setup reinforcement button (for battle phase)
-   */
-  private setupReinforcementButton(): void {
-    const reinforceBtn = document.getElementById('call-reinforcements-btn');
-    if (reinforceBtn) {
-      reinforceBtn.addEventListener('click', () => {
-        this.reinforcementManager.show();
-      });
-    }
-  }
-
-  /**
-   * Show/hide reinforcement button based on phase
-   */
-  private updateReinforcementButton(): void {
-    const reinforceBtn = document.getElementById('call-reinforcements-btn');
-    if (reinforceBtn) {
-      reinforceBtn.style.display = this._phase === GamePhase.Battle ? 'block' : 'none';
-    }
-  }
 }
