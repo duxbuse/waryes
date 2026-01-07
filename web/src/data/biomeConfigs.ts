@@ -41,8 +41,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 0.3,
     settlementTypes: ['hamlet', 'village'],
 
-    // Strategic objectives: Resource extraction
-    objectiveTypes: ['oil_field', 'logging_camp', 'indigenous_settlement'],
+    // Strategic objectives: Resource extraction + small settlements
+    objectiveTypes: ['oil_field', 'logging_camp', 'indigenous_settlement', 'hamlet', 'village'],
     objectiveCount: { min: 3, max: 5 },
 
     // Balance: Limited open space, high cover
@@ -83,8 +83,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 0.2,
     settlementTypes: ['hamlet', 'village'],
 
-    // Strategic objectives: Science and mining
-    objectiveTypes: ['research_station', 'mine', 'fuel_depot'],
+    // Strategic objectives: Science and mining + outposts
+    objectiveTypes: ['research_station', 'mine', 'fuel_depot', 'hamlet', 'village'],
     objectiveCount: { min: 3, max: 5 },
 
     // Balance: Lots of open space, minimal cover
@@ -125,8 +125,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 0.4,
     settlementTypes: ['hamlet', 'village', 'town'],
 
-    // Strategic objectives: Mining and observation
-    objectiveTypes: ['mining_operation', 'observation_post', 'water_well'],
+    // Strategic objectives: Mining and observation + settlements
+    objectiveTypes: ['mining_operation', 'observation_post', 'water_well', 'hamlet', 'village', 'town'],
     objectiveCount: { min: 4, max: 5 },
 
     // Balance: Good open space, some cover
@@ -167,8 +167,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 0.5,
     settlementTypes: ['hamlet', 'village', 'town'],
 
-    // Strategic objectives: High-altitude positions
-    objectiveTypes: ['communication_tower', 'ski_resort', 'military_base'],
+    // Strategic objectives: High-altitude positions + settlements
+    objectiveTypes: ['communication_tower', 'ski_resort', 'military_base', 'hamlet', 'village', 'town'],
     objectiveCount: { min: 3, max: 5 },
 
     // Balance: Moderate open space and cover
@@ -209,8 +209,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 0.8,
     settlementTypes: ['village', 'town'],
 
-    // Strategic objectives: Agricultural infrastructure
-    objectiveTypes: ['grain_silo', 'wind_farm', 'rail_junction'],
+    // Strategic objectives: Agricultural infrastructure + settlements
+    objectiveTypes: ['grain_silo', 'wind_farm', 'rail_junction', 'village', 'town'],
     objectiveCount: { min: 4, max: 5 },
 
     // Balance: Very open, good for ranged combat
@@ -251,8 +251,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 1.2,
     settlementTypes: ['hamlet', 'village', 'town'],
 
-    // Strategic objectives: Processing and infrastructure
-    objectiveTypes: ['processing_plant', 'irrigation_station', 'market_town'],
+    // Strategic objectives: Processing and infrastructure + settlements
+    objectiveTypes: ['processing_plant', 'irrigation_station', 'market_town', 'hamlet', 'village', 'town'],
     objectiveCount: { min: 4, max: 5 },
 
     // Balance: Very open, minimal cover
@@ -266,8 +266,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     description: 'Dense urban environment with city districts',
 
     // Visual: Gray concrete
-    groundColor: 0x808080,  // Gray concrete
-    forestColor: 0x6a7a6a,  // Urban park green
+    groundColor: 0x6a8840,  // Urban-park green (was 0x808080)
+    forestColor: 0x4a5a4a,  // Slightly darker green (was 0x6a7a6a)
     waterColor: 0x4a6a8a,   // Urban water
 
     // Vegetation: Minimal (parks only)
@@ -293,8 +293,8 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     settlementDensity: 2.0,
     settlementTypes: ['town', 'city'],
 
-    // Strategic objectives: City districts (use existing building system)
-    objectiveTypes: ['city_district'],
+    // Strategic objectives: City districts + urban settlements
+    objectiveTypes: ['city_district', 'town', 'city'],
     objectiveCount: { min: 5, max: 7 },
 
     // Balance: Limited open space, high cover from buildings

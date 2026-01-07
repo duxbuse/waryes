@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { GameMap, Building, Road, RoadType, CaptureZone, DeploymentZone, ResupplyPoint, Bridge, Intersection, WaterBody, BiomeType } from '../../data/types';
+import type { GameMap, Building, Road, RoadType, CaptureZone, DeploymentZone, ResupplyPoint, Bridge, Intersection, WaterBody, BiomeType, ObjectiveType } from '../../data/types';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 import { ZoneFillRenderer, type FillEntry } from './ZoneFillRenderer';
 
@@ -20,6 +20,7 @@ export class MapRenderer {
   private deploymentZonesGroup: THREE.Group | null = null; // Track deployment zones for hiding
   private animationTime: number = 0; // For pulsing animations
   private biomeGroundColor: number; // Store biome ground color for terrain rendering
+  private biome: BiomeType;
 
   // Zone fill renderer for territorial capture visualization
   private zoneFillRenderer: ZoneFillRenderer | null = null;
@@ -48,6 +49,7 @@ export class MapRenderer {
     this.scene = scene;
     this.mapGroup = new THREE.Group();
     this.mapGroup.name = 'map';
+    this.biome = biome;
 
     // Get biome configuration for colors
     const biomeConfig = BIOME_CONFIGS[biome];
@@ -136,7 +138,7 @@ export class MapRenderer {
         transparent: true,
         opacity: 0.8,
         side: THREE.DoubleSide,
-        depthWrite: false,
+        depthWrite: true, // Enable depthWrite to prevent overlapping transparent faces from darkening junctions
       }),
       building: new THREE.MeshStandardMaterial({
         color: 0xd4c4a8,
@@ -162,17 +164,17 @@ export class MapRenderer {
         color: 0x4a9eff,
         transparent: true,
         opacity: 0.4,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide, // Only render outside faces
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
       }),
       deploymentEnemy: new THREE.MeshBasicMaterial({
         color: 0xff4a4a,
         transparent: true,
         opacity: 0.4,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide, // Only render outside faces
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
       }),
       captureNeutral: new THREE.MeshBasicMaterial({
         color: 0xffff00,
@@ -180,7 +182,7 @@ export class MapRenderer {
         opacity: 0.4,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
       }),
       capturePlayer: new THREE.MeshBasicMaterial({
         color: 0x4a9eff,
@@ -188,7 +190,7 @@ export class MapRenderer {
         opacity: 0.4,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
       }),
       captureEnemy: new THREE.MeshBasicMaterial({
         color: 0xff4a4a,
@@ -196,7 +198,7 @@ export class MapRenderer {
         opacity: 0.4,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
       }),
     };
   }
@@ -300,9 +302,28 @@ export class MapRenderer {
     const cliffColor = new THREE.Color(0x6b6355); // Gray-brown rock
     const tempColor = new THREE.Color();
 
+    // Field variant colors (Green, Wheat, Pasture, Dirt)
+    const fieldColors = [
+      new THREE.Color(0x4a6b3e), // Dark Green (Crops)
+      new THREE.Color(this.biome === 'tundra' ? 0x8c7c4e : 0xdec98a), // Wheat/Straw (adjust for biome)
+      new THREE.Color(0x7a8c5e), // Light Green (Pasture)
+      new THREE.Color(0x6b5c45), // Dirt (Plowed)
+    ];
+
     for (let i = 0; i < positionAttr.count; i++) {
       // Get normal Y component (1.0 = flat, 0.0 = vertical)
       const normalY = normalAttr.getY(i);
+
+      // Determine base ground color (grass or field variant)
+      let baseColor = grassColor;
+
+      const x = Math.floor(((positionAttr.getX(i) + map.width / 2) / map.width) * cols);
+      const z = Math.floor(((positionAttr.getZ(i) + map.height / 2) / map.height) * rows);
+      const cell = map.terrain[Math.min(z, rows - 1)]?.[Math.min(x, cols - 1)];
+
+      if (cell && cell.type === 'field' && cell.variant !== undefined) {
+        baseColor = fieldColors[cell.variant] || grassColor;
+      }
 
       // Calculate slope factor: 0 = vertical cliff, 1 = flat ground
       // Cliffs start appearing at ~30 degree slopes (normalY < 0.866)
@@ -312,16 +333,16 @@ export class MapRenderer {
 
       let slopeFactor: number;
       if (normalY >= cliffThresholdStart) {
-        slopeFactor = 1.0; // Full grass
+        slopeFactor = 1.0; // Full base color
       } else if (normalY <= cliffThresholdFull) {
         slopeFactor = 0.0; // Full cliff
       } else {
-        // Blend between grass and cliff
+        // Blend between base color and cliff
         slopeFactor = (normalY - cliffThresholdFull) / (cliffThresholdStart - cliffThresholdFull);
       }
 
-      // Interpolate between cliff and grass color
-      tempColor.copy(cliffColor).lerp(grassColor, slopeFactor);
+      // Interpolate between cliff and base color
+      tempColor.copy(cliffColor).lerp(baseColor, slopeFactor);
 
       // Set vertex color
       colors[i * 3] = tempColor.r;
@@ -705,14 +726,31 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;        // Interpolate along z
     };
 
-    // Helper to check if a point is over water (river)
-    const isOverWater = (worldX: number, worldZ: number): boolean => {
+    // Helper to check if a point is over water (river) or a bridge segment
+    const isOverBridgeOrWater = (worldX: number, worldZ: number, roadId?: string): boolean => {
       const gridX = Math.floor((worldX + map.width / 2) / cellSizeX);
       const gridZ = Math.floor((worldZ + map.height / 2) / cellSizeZ);
       const clampedX = Math.max(0, Math.min(cols - 1, gridX));
       const clampedZ = Math.max(0, Math.min(rows - 1, gridZ));
       const terrainType = map.terrain[clampedZ]?.[clampedX]?.type;
-      return terrainType === 'river' || terrainType === 'water';
+
+      if (terrainType === 'river' || terrainType === 'water') return true;
+
+      // Check if there's an overpass or bridge for this road at this position
+      if (roadId) {
+        for (const bridge of map.bridges) {
+          if (bridge.roadId === roadId) {
+            const dx = worldX - bridge.x;
+            const dz = worldZ - bridge.z;
+            const distSq = dx * dx + dz * dz;
+            // Buffer slightly larger than half length to ensure clean connection (stop before bridge starts)
+            const bridgeBuffer = bridge.length * 0.5 + 2;
+            if (distSq < bridgeBuffer * bridgeBuffer) return true;
+          }
+        }
+      }
+
+      return false;
     };
 
     // Collect geometries for batch merging (better performance)
@@ -729,7 +767,7 @@ export class MapRenderer {
 
       // Create smooth road mesh using continuous strip geometry
       // Skip segments over water (bridges will be rendered separately)
-      const roadGeometry = this.createRoadStripGeometry(road, getElevationAt, isOverWater);
+      const roadGeometry = this.createRoadStripGeometry(road, getElevationAt, (x, z) => isOverBridgeOrWater(x, z, road.id));
       if (roadGeometry) {
         roadGeometriesByType[road.type].push(roadGeometry);
       }
@@ -756,7 +794,7 @@ export class MapRenderer {
     this.renderIntersections(map.intersections, roads, getElevationAt);
 
     // Render lane markings for paved roads (pass intersections to stop markings at them)
-    this.renderLaneMarkings(roads, map.intersections, getElevationAt, isOverWater);
+    this.renderLaneMarkings(roads, map.intersections, getElevationAt, isOverBridgeOrWater);
   }
 
   /**
@@ -767,7 +805,7 @@ export class MapRenderer {
   private createRoadStripGeometry(
     road: Road,
     getElevationAt: (x: number, z: number) => number,
-    isOverWater: (x: number, z: number) => boolean
+    isOverBridgeOrWater: (x: number, z: number) => boolean
   ): THREE.BufferGeometry | null {
     const points = road.points;
     if (points.length < 2) return null;
@@ -871,11 +909,11 @@ export class MapRenderer {
           // Quadratic bezier: P = (1-t)²P0 + 2(1-t)tP1 + t²P2
           const oneMinusT = 1 - t;
           const x = oneMinusT * oneMinusT * arcStart.x +
-                    2 * oneMinusT * t * controlX +
-                    t * t * arcEnd.x;
+            2 * oneMinusT * t * controlX +
+            t * t * arcEnd.x;
           const z = oneMinusT * oneMinusT * arcStart.z +
-                    2 * oneMinusT * t * controlZ +
-                    t * t * arcEnd.z;
+            2 * oneMinusT * t * controlZ +
+            t * t * arcEnd.z;
           smoothedPoints.push({ x, z });
         }
 
@@ -923,8 +961,8 @@ export class MapRenderer {
     for (let i = 0; i < densePoints.length; i++) {
       const p = densePoints[i]!;
 
-      // Check if this point is over water
-      const overWater = isOverWater(p.x, p.z);
+      // Check if this point is over bridge or water
+      const overWater = isOverBridgeOrWater(p.x, p.z);
 
       if (overWater) {
         // End current segment if it has valid geometry
@@ -1161,7 +1199,7 @@ export class MapRenderer {
     roads: Road[],
     intersections: Intersection[],
     getElevationAt: (x: number, z: number) => number,
-    isOverWater: (x: number, z: number) => boolean
+    isOverBridgeOrWater: (x: number, z: number, roadId?: string) => boolean
   ): void {
     const markingsGroup = new THREE.Group();
     markingsGroup.name = 'lane-markings';
@@ -1216,6 +1254,9 @@ export class MapRenderer {
       opacity: 0.4, // More transparent for edge lines
       transparent: true,
     });
+
+    // Wrapped skipper that passes the specific road ID
+    const getSkipperForRoad = (roadId?: string) => (x: number, z: number) => isOverBridgeOrWater(x, z, roadId);
 
     const lineWidth = 0.3; // Width of lane markings in meters (smaller and more subtle)
     const lineHeightOffset = 0.1; // Height above road surface (minimal to avoid visible gap)
@@ -1342,7 +1383,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          isOverWater // Pass water detection to skip bridge sections
+          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
         );
         if (centerlineGeometry) {
           const centerlineMesh = new THREE.Mesh(centerlineGeometry, centerlineMaterial);
@@ -1358,7 +1399,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          isOverWater // Pass water detection to skip bridge sections
+          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
         );
         if (leftEdgeGeometry) {
           const leftEdgeMesh = new THREE.Mesh(leftEdgeGeometry, edgeLineMaterial);
@@ -1374,7 +1415,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          isOverWater // Pass water detection to skip bridge sections
+          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
         );
         if (rightEdgeGeometry) {
           const rightEdgeMesh = new THREE.Mesh(rightEdgeGeometry, edgeLineMaterial);
@@ -1424,7 +1465,7 @@ export class MapRenderer {
     getElevationAt: (x: number, z: number) => number,
     heightOffset: number,
     roadWidth: number = 8, // Default road width for elevation sampling
-    isOverWater?: (x: number, z: number) => boolean // Optional water detection function
+    isOverBridgeOrWater?: (x: number, z: number) => boolean // Optional bridge/water detection function
   ): THREE.BufferGeometry | null {
     if (points.length < 2) return null;
 
@@ -1446,8 +1487,8 @@ export class MapRenderer {
     for (let i = 0; i < points.length; i++) {
       const p = points[i]!;
 
-      // Skip points over water (bridges don't have lane markings)
-      if (isOverWater && isOverWater(p.x, p.z)) {
+      // Skip points over bridge or water (bridges don't have lane markings)
+      if (isOverBridgeOrWater && isOverBridgeOrWater(p.x, p.z)) {
         continue;
       }
 
@@ -1573,7 +1614,9 @@ export class MapRenderer {
       // Get elevation at bridge ends (where it meets the road)
       const startElevation = getElevationAt(startX, startZ) + 0.2;
       const endElevation = getElevationAt(endX, endZ) + 0.2;
-      const centerElevation = bridgeHeight;
+
+      // Use explicit elevation if available (for overpasses)
+      const centerElevation = bridge.elevation !== undefined ? bridge.elevation : bridgeHeight;
 
       // Create bridge deck as a series of segments for smooth elevation transition
       const numSegments = 8;
@@ -1736,6 +1779,7 @@ export class MapRenderer {
 
     // Get terrain elevation at building position
     const terrainElevation = getElevationAt(building.x, building.z);
+    const buildingSubtype = building.subtype;
 
     // Select material based on building type/subtype
     let wallMaterial = this.materials.building;
@@ -1757,156 +1801,180 @@ export class MapRenderer {
     bodyMesh.receiveShadow = true;
     group.add(bodyMesh);
 
-    // Roof style based on building type/subtype
-    const subtype = building.subtype;
-
-    // Religious buildings - spires
-    if (building.type === 'church' || subtype === 'church' || subtype === 'cathedral' || subtype === 'chapel') {
-      // Church spire
-      const spireGeometry = new THREE.ConeGeometry(
-        building.width * 0.3,
-        building.height * 0.8,
-        8
-      );
-      const spireMesh = new THREE.Mesh(spireGeometry, this.materials.roof);
-      spireMesh.position.y = building.height + building.height * 0.4;
-      spireMesh.castShadow = true;
-      group.add(spireMesh);
-
-      // Cathedral gets extra spires
-      if (subtype === 'cathedral') {
-        const sideSpireGeometry = new THREE.ConeGeometry(building.width * 0.2, building.height * 0.5, 6);
-        [-1, 1].forEach(side => {
-          const sideSpire = new THREE.Mesh(sideSpireGeometry, this.materials.roof);
-          sideSpire.position.set(building.width * 0.3 * side, building.height + building.height * 0.25, 0);
-          sideSpire.castShadow = true;
-          group.add(sideSpire);
-        });
+    // Style-specific geometry adjustments
+    // Style-specific geometry adjustments
+    if (buildingSubtype === 'skyscraper') {
+      bodyMesh.visible = false;
+      const tiers = 3;
+      for (let i = 0; i < tiers; i++) {
+        const tierHeight = building.height * (1 - i * 0.2);
+        const tierWidth = building.width * (1 - i * 0.15);
+        const tierDepth = building.depth * (1 - i * 0.15);
+        const tierGeo = new THREE.BoxGeometry(tierWidth, tierHeight, tierDepth);
+        const tierMesh = new THREE.Mesh(tierGeo, wallMaterial);
+        tierMesh.position.y = tierHeight / 2;
+        tierMesh.castShadow = true;
+        group.add(tierMesh);
       }
-    }
-    // Industrial buildings - flat roofs with features
-    else if (building.type === 'factory' || building.category === 'industrial') {
-      // Flat roof with chimney(s)
-      const numChimneys = subtype === 'large_factory' || subtype === 'power_plant' ? 2 : 1;
-      for (let i = 0; i < numChimneys; i++) {
-        const chimneyGeometry = new THREE.CylinderGeometry(1, 1.5, building.height * 0.5, 8);
-        const chimneyMesh = new THREE.Mesh(chimneyGeometry, this.materials.factory);
-        const xOffset = numChimneys > 1 ? (i === 0 ? -0.2 : 0.2) : 0.3;
-        chimneyMesh.position.set(
-          building.width * xOffset,
-          building.height + building.height * 0.25,
-          building.depth * 0.3
-        );
-        chimneyMesh.castShadow = true;
-        group.add(chimneyMesh);
+    } else if (buildingSubtype === 'l_building') {
+      bodyMesh.visible = false;
+      const wing1Geo = new THREE.BoxGeometry(building.width, building.height, building.depth * 0.4);
+      const wing1 = new THREE.Mesh(wing1Geo, wallMaterial);
+      wing1.position.set(0, building.height / 2, -building.depth * 0.3);
+      group.add(wing1);
+      const wing2Geo = new THREE.BoxGeometry(building.width * 0.4, building.height, building.depth);
+      const wing2 = new THREE.Mesh(wing2Geo, wallMaterial);
+      wing2.position.set(-building.width * 0.3, building.height / 2, 0);
+      group.add(wing2);
+    } else if (buildingSubtype === 'tenement') {
+      // Add balconies
+      for (let f = 1; f < (building.floors || 1); f++) {
+        const balconyGeo = new THREE.BoxGeometry(building.width * 0.8, 0.5, 1);
+        const balcony = new THREE.Mesh(balconyGeo, this.materials.roof);
+        balcony.position.set(0, f * 3, building.depth / 2 + 0.5);
+        group.add(balcony);
       }
-    }
-    // Agricultural buildings - barn style or windmill
-    else if (building.category === 'agricultural') {
-      if (subtype === 'windmill') {
-        // Windmill blades
-        const bladeGroup = new THREE.Group();
-        const bladeGeometry = new THREE.BoxGeometry(0.5, building.height * 0.6, 1);
-        for (let i = 0; i < 4; i++) {
-          const blade = new THREE.Mesh(bladeGeometry, this.materials.building);
-          blade.rotation.z = (i * Math.PI) / 2;
-          blade.position.y = building.height * 0.3;
-          bladeGroup.add(blade);
+    } else if (buildingSubtype === 'warehouse_complex') {
+      // Add skylights
+      const rows = 3;
+      const cols = 4;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const skyGeo = new THREE.BoxGeometry(building.width * 0.1, 0.5, building.depth * 0.15);
+          const sky = new THREE.Mesh(skyGeo, this.materials.roof);
+          sky.position.set(
+            (c / (cols - 1) - 0.5) * building.width * 0.8,
+            building.height + 0.2,
+            (r / (rows - 1) - 0.5) * building.depth * 0.8
+          );
+          group.add(sky);
         }
-        bladeGroup.position.set(0, building.height + 2, building.depth * 0.5 + 1);
-        bladeGroup.rotation.x = Math.PI / 6;
-        group.add(bladeGroup);
-      } else if (subtype === 'silo') {
-        // Silo is cylindrical - replace box with cylinder
-        bodyMesh.visible = false;
-        const siloGeometry = new THREE.CylinderGeometry(building.width / 2, building.width / 2, building.height, 12);
-        const siloMesh = new THREE.Mesh(siloGeometry, wallMaterial);
-        siloMesh.position.y = building.height / 2;
-        siloMesh.castShadow = true;
-        siloMesh.receiveShadow = true;
-        group.add(siloMesh);
-        // Domed top
-        const domeGeometry = new THREE.SphereGeometry(building.width / 2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-        const domeMesh = new THREE.Mesh(domeGeometry, this.materials.roof);
-        domeMesh.position.y = building.height;
-        domeMesh.castShadow = true;
-        group.add(domeMesh);
-      } else {
-        // Barn - gambrel roof
-        const roofGeometry = new THREE.ConeGeometry(
-          Math.max(building.width, building.depth) * 0.75,
-          building.height * 0.5,
-          4
-        );
+      }
+    } else if (buildingSubtype === 'department_store') {
+      // Recessed windows
+      const windowGeo = new THREE.BoxGeometry(building.width * 0.9, building.height * 0.6, 1);
+      const windowMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+      const win = new THREE.Mesh(windowGeo, windowMat);
+      win.position.set(0, building.height * 0.4, building.depth / 2 - 0.1);
+      group.add(win);
+    } else if (buildingSubtype === 'library') {
+      // Columns
+      for (let i = -2; i <= 2; i++) {
+        const colGeo = new THREE.CylinderGeometry(0.5, 0.5, building.height, 8);
+        const column = new THREE.Mesh(colGeo, wallMaterial);
+        column.position.set(i * (building.width / 5), building.height / 2, building.depth / 2 + 2);
+        group.add(column);
+      }
+      const pedimentGeo = new THREE.ConeGeometry(building.width * 0.6, 3, 4);
+      pedimentGeo.rotateY(Math.PI / 4);
+      const pediment = new THREE.Mesh(pedimentGeo, wallMaterial);
+      pediment.position.set(0, building.height + 1.5, building.depth / 2 + 2);
+      group.add(pediment);
+    } else if (buildingSubtype === 'clock_tower') {
+      bodyMesh.visible = false;
+      const shaftGeo = new THREE.BoxGeometry(building.width, building.height - 5, building.depth);
+      const shaft = new THREE.Mesh(shaftGeo, wallMaterial);
+      shaft.position.y = (building.height - 5) / 2;
+      group.add(shaft);
+
+      const headGeo = new THREE.BoxGeometry(building.width * 1.2, 5, building.depth * 1.2);
+      const head = new THREE.Mesh(headGeo, wallMaterial);
+      head.position.y = building.height - 2.5;
+      group.add(head);
+
+      const clockGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.2, 16);
+      const clock = new THREE.Mesh(clockGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      clock.rotation.x = Math.PI / 2;
+      clock.position.set(0, building.height - 2.5, building.depth * 0.6 + 0.1);
+      group.add(clock);
+    } else if (buildingSubtype === 'silo_cluster') {
+      bodyMesh.visible = false;
+      const baseGeo = new THREE.BoxGeometry(building.width, 1, building.depth);
+      const base = new THREE.Mesh(baseGeo, this.materials.factory);
+      base.position.y = 0.5;
+      group.add(base);
+      for (let i = 0; i < 4; i++) {
+        const siloGeo = new THREE.CylinderGeometry(building.width * 0.2, building.width * 0.2, building.height, 12);
+        const silo = new THREE.Mesh(siloGeo, wallMaterial);
+        silo.position.set(i < 2 ? -2.5 : 2.5, building.height / 2, i % 2 === 0 ? -2.5 : 2.5);
+        group.add(silo);
+        const topGeo = new THREE.SphereGeometry(building.width * 0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const top = new THREE.Mesh(topGeo, this.materials.roof);
+        top.position.set(i < 2 ? -2.5 : 2.5, building.height, i % 2 === 0 ? -2.5 : 2.5);
+        group.add(top);
+      }
+    } else if (buildingSubtype === 'radio_station') {
+      const antennaGeo = new THREE.CylinderGeometry(0.1, 0.5, 15, 4);
+      const antenna = new THREE.Mesh(antennaGeo, this.materials.factory);
+      antenna.position.set(0, building.height + 7.5, 0);
+      group.add(antenna);
+    } else if (buildingSubtype === 'government_office') {
+      const domeGeo = new THREE.SphereGeometry(building.width * 0.3, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      const dome = new THREE.Mesh(domeGeo, this.materials.roof);
+      dome.position.y = building.height;
+      group.add(dome);
+    }
+
+    // Default roof logic for standard buildings
+    const needsDefaultRoof = !['skyscraper', 'l_building', 'silo_cluster', 'water_tower', 'windmill', 'silo'].includes(buildingSubtype || '');
+
+    if (needsDefaultRoof) {
+      if (building.type === 'church' || buildingSubtype === 'church' || buildingSubtype === 'cathedral' || buildingSubtype === 'chapel') {
+        const spireGeometry = new THREE.ConeGeometry(building.width * 0.3, building.height * 0.8, 8);
+        const spireMesh = new THREE.Mesh(spireGeometry, this.materials.roof);
+        spireMesh.position.y = building.height + building.height * 0.4;
+        spireMesh.castShadow = true;
+        group.add(spireMesh);
+
+        if (buildingSubtype === 'cathedral') {
+          const sideSpireGeometry = new THREE.ConeGeometry(building.width * 0.2, building.height * 0.5, 6);
+          [-1, 1].forEach(side => {
+            const sideSpire = new THREE.Mesh(sideSpireGeometry, this.materials.roof);
+            sideSpire.position.set(building.width * 0.3 * side, building.height + building.height * 0.25, 0);
+            sideSpire.castShadow = true;
+            group.add(sideSpire);
+          });
+        }
+      } else if (building.type === 'factory' || building.category === 'industrial') {
+        const numChimneys = (buildingSubtype === 'large_factory' || buildingSubtype === 'power_plant' || buildingSubtype === 'warehouse_complex') ? 2 : 1;
+        for (let i = 0; i < numChimneys; i++) {
+          const chimneyGeometry = new THREE.CylinderGeometry(1, 1.5, building.height * 0.5, 8);
+          const chimneyMesh = new THREE.Mesh(chimneyGeometry, this.materials.factory);
+          const xOffset = numChimneys > 1 ? (i === 0 ? -0.2 : 0.2) : 0.3;
+          chimneyMesh.position.set(building.width * xOffset, building.height + building.height * 0.25, building.depth * 0.3);
+          chimneyMesh.castShadow = true;
+          group.add(chimneyMesh);
+        }
+      } else if (building.category === 'agricultural' && buildingSubtype !== 'windmill' && buildingSubtype !== 'silo' && buildingSubtype !== 'silo_cluster') {
+        const roofGeometry = new THREE.ConeGeometry(Math.max(building.width, building.depth) * 0.75, building.height * 0.5, 4);
         roofGeometry.rotateY(Math.PI / 4);
         const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
         roofMesh.position.y = building.height + building.height * 0.25;
         roofMesh.castShadow = true;
         group.add(roofMesh);
-      }
-    }
-    // Infrastructure - special cases
-    else if (building.category === 'infrastructure') {
-      if (subtype === 'water_tower') {
-        // Water tower - cylinder on legs
-        bodyMesh.visible = false;
-        // Legs
-        const legGeometry = new THREE.CylinderGeometry(0.5, 0.5, building.height * 0.7, 6);
-        const legPositions = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
-        legPositions.forEach(([lx, lz]) => {
-          const leg = new THREE.Mesh(legGeometry, this.materials.factory);
-          leg.position.set((lx ?? 0) * building.width * 0.3, building.height * 0.35, (lz ?? 0) * building.depth * 0.3);
-          leg.castShadow = true;
-          group.add(leg);
-        });
-        // Tank
-        const tankGeometry = new THREE.CylinderGeometry(building.width * 0.4, building.width * 0.4, building.height * 0.4, 12);
-        const tankMesh = new THREE.Mesh(tankGeometry, wallMaterial);
-        tankMesh.position.y = building.height * 0.8;
-        tankMesh.castShadow = true;
-        group.add(tankMesh);
-      } else {
-        // Standard pitched roof for other infrastructure
-        const roofGeometry = new THREE.ConeGeometry(
-          Math.max(building.width, building.depth) * 0.7,
-          building.height * 0.3,
-          4
-        );
+      } else if (building.category === 'infrastructure' && buildingSubtype !== 'water_tower' && buildingSubtype !== 'radio_station') {
+        const roofGeometry = new THREE.ConeGeometry(Math.max(building.width, building.depth) * 0.7, building.height * 0.3, 4);
         roofGeometry.rotateY(Math.PI / 4);
         const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
         roofMesh.position.y = building.height + building.height * 0.15;
         roofMesh.castShadow = true;
         group.add(roofMesh);
+      } else if (building.type === 'house' || building.type === 'shop' || building.category === 'residential' || building.category === 'commercial') {
+        const roofHeight = (building.floors && building.floors > 2) ? building.height * 0.3 : building.height * 0.4;
+        const roofGeometry = new THREE.ConeGeometry(Math.max(building.width, building.depth) * 0.7, roofHeight, 4);
+        roofGeometry.rotateY(Math.PI / 4);
+        const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
+        roofMesh.position.y = building.height + roofHeight * 0.5;
+        roofMesh.castShadow = true;
+        group.add(roofMesh);
+      } else if (building.category === 'civic' && buildingSubtype !== 'clock_tower' && buildingSubtype !== 'library') {
+        const roofGeometry = new THREE.ConeGeometry(Math.max(building.width, building.depth) * 0.75, building.height * 0.25, 4);
+        roofGeometry.rotateY(Math.PI / 4);
+        const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
+        roofMesh.position.y = building.height + building.height * 0.125;
+        roofMesh.castShadow = true;
+        group.add(roofMesh);
       }
-    }
-    // Residential/Commercial - pitched roofs
-    else if (building.type === 'house' || building.type === 'shop' || building.category === 'residential' || building.category === 'commercial') {
-      // Pitched roof - steeper for taller buildings
-      const roofHeight = (building.floors && building.floors > 2) ? building.height * 0.3 : building.height * 0.4;
-      const roofGeometry = new THREE.ConeGeometry(
-        Math.max(building.width, building.depth) * 0.7,
-        roofHeight,
-        4
-      );
-      roofGeometry.rotateY(Math.PI / 4);
-      const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
-      roofMesh.position.y = building.height + roofHeight * 0.5;
-      roofMesh.castShadow = true;
-      group.add(roofMesh);
-    }
-    // Civic buildings (non-religious) - flat or low-pitched
-    else if (building.category === 'civic') {
-      // Low pitched roof for civic buildings
-      const roofGeometry = new THREE.ConeGeometry(
-        Math.max(building.width, building.depth) * 0.75,
-        building.height * 0.25,
-        4
-      );
-      roofGeometry.rotateY(Math.PI / 4);
-      const roofMesh = new THREE.Mesh(roofGeometry, this.materials.roof);
-      roofMesh.position.y = building.height + building.height * 0.125;
-      roofMesh.castShadow = true;
-      group.add(roofMesh);
     }
 
     // Apply rotation if specified
@@ -1956,39 +2024,62 @@ export class MapRenderer {
       const centerX = (zone.minX + zone.maxX) / 2;
       const centerZ = (zone.minZ + zone.maxZ) / 2;
 
-      // Get terrain elevation at zone center
-      const terrainElevation = getElevationAt(centerX, centerZ);
+      // Use a segmented plane that conforms to the terrain
+      const segmentsX = Math.max(2, Math.floor(width / 4)); // Grid every ~4m
+      const segmentsZ = Math.max(2, Math.floor(depth / 4));
 
-      const geometry = new THREE.PlaneGeometry(width, depth);
+      const geometry = new THREE.PlaneGeometry(width, depth, segmentsX, segmentsZ);
       geometry.rotateX(-Math.PI / 2);
+
+      // Adjust each vertex Y to match terrain height
+      const positions = geometry.attributes.position!;
+      for (let i = 0; i < positions.count; i++) {
+        // Local position (relative to center)
+        const lx = positions.getX(i);
+        const lz = positions.getZ(i);
+
+        // World position
+        const wx = centerX + lx;
+        const wz = centerZ + lz;
+
+        // Sample elevation
+        const y = getElevationAt(wx, wz);
+
+        // Update Y with offset
+        positions.setY(i, y - terrainElevation + 1.0); // +1m above ground
+      }
+
+      geometry.computeVertexNormals();
 
       const material = zone.team === 'player'
         ? this.materials.deploymentPlayer
         : this.materials.deploymentEnemy;
 
+      // Update material to be visible from both sides for safety on steep slopes
+      if (material.side !== THREE.DoubleSide) {
+        material.side = THREE.DoubleSide;
+        material.depthTest = true; // Ensure depth testing is ON
+        material.depthWrite = false; // Transparent
+      }
+
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(
-        centerX,
-        terrainElevation + 0.5, // Above terrain
-        centerZ
-      );
-      mesh.renderOrder = 99; // Render after terrain
+      mesh.position.set(centerX, terrainElevation, centerZ);
+      mesh.renderOrder = 99;
 
       zoneGroup.add(mesh);
 
-      // Border
-      const borderGeometry = new THREE.EdgesGeometry(
-        new THREE.PlaneGeometry(width, depth)
-      );
+      // Border using the same conforming geometry (wireframe) or EdgesGeometry?
+      // EdgesGeometry on a bumpy plane looks good
+      const borderGeometry = new THREE.EdgesGeometry(geometry, 15); // Threshold angle
       const borderMaterial = new THREE.LineBasicMaterial({
         color: zone.team === 'player' ? 0x4a9eff : 0xff4a4a,
         depthWrite: false,
-        depthTest: false,
+        depthTest: false, // Always visible border
+        linewidth: 2,
       });
       const border = new THREE.LineSegments(borderGeometry, borderMaterial);
-      border.rotation.x = -Math.PI / 2;
       border.position.copy(mesh.position);
-      border.position.y = terrainElevation + 1.0; // Above the zone mesh
+      border.position.y += 0.5; // Slightly higher
       border.renderOrder = 100;
 
       zoneGroup.add(border);
@@ -2012,15 +2103,12 @@ export class MapRenderer {
     const zoneGroup = new THREE.Group();
     zoneGroup.name = 'capture-zones';
 
-    // Helper to get elevation at world position
-    const rows = map.terrain.length;
-    const cols = map.terrain[0]?.length ?? 0;
-    const cellSizeX = map.width / cols;
-    const cellSizeZ = map.height / rows;
-
     const getElevationAt = (worldX: number, worldZ: number): number => {
-      const gx = (worldX + map.width / 2) / cellSizeX;
-      const gz = (worldZ + map.height / 2) / cellSizeZ;
+      // Re-use logic from renderTerrain for consistency
+      const rows = map.terrain.length;
+      const cols = map.terrain[0]?.length ?? 0;
+      const gx = (worldX + map.width / 2) / (map.width / cols);
+      const gz = (worldZ + map.height / 2) / (map.height / rows);
       const x0 = Math.floor(gx);
       const z0 = Math.floor(gz);
       const cx0 = Math.max(0, Math.min(cols - 1, x0));
@@ -2048,28 +2136,31 @@ export class MapRenderer {
       // Get terrain elevation at zone position
       const terrainElevation = getElevationAt(zone.x, zone.z);
 
-      // Zone border ring (outline of the capture zone)
-      const ringGeometry = new THREE.RingGeometry(zone.radius - 0.5, zone.radius, 64);
-      ringGeometry.rotateX(-Math.PI / 2);
-      const ringMaterial = new THREE.MeshBasicMaterial({
+      // Zone border (rectangular outline)
+      const borderGeometry = new THREE.EdgesGeometry(
+        new THREE.PlaneGeometry(zone.width, zone.height)
+      );
+      const borderMaterial = new THREE.LineBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.6,
-        side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: false,
       });
-      const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-      ringMesh.position.set(zone.x, terrainElevation + 2.0, zone.z);
-      ringMesh.userData.isBorderRing = true;
-      ringMesh.renderOrder = 92;
-      group.add(ringMesh);
+      const borderMesh = new THREE.LineSegments(borderGeometry, borderMaterial);
+      borderMesh.rotation.x = -Math.PI / 2;
+      borderMesh.position.set(zone.x, terrainElevation + 1.5, zone.z);
+      borderMesh.userData.isBorderRing = true;
+      borderMesh.renderOrder = 92;
+      group.add(borderMesh);
 
-      // Zone flag/marker
-      const poleGeometry = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
+      // FLAG POLE (always present but small if objective is large)
+      const poleGeometry = new THREE.CylinderGeometry(0.15, 0.15, 10, 8);
       const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
       const poleMesh = new THREE.Mesh(poleGeometry, poleMaterial);
-      poleMesh.position.set(zone.x, terrainElevation + 4, zone.z);
+      // Offset slightly to NOT be dead center if there's an objective model
+      const poleOffsetX = zone.objectiveType ? 4 : 0;
+      poleMesh.position.set(zone.x + poleOffsetX, terrainElevation + 5, zone.z);
       poleMesh.castShadow = true;
       group.add(poleMesh);
 
@@ -2080,18 +2171,1198 @@ export class MapRenderer {
         side: THREE.DoubleSide,
       });
       const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
-      flagMesh.position.set(zone.x + 2, terrainElevation + 7, zone.z);
+      flagMesh.position.set(zone.x + poleOffsetX + 2, terrainElevation + 9, zone.z);
       flagMesh.userData.isFlag = true;
       group.add(flagMesh);
+
+      // STRATEGIC OBJECTIVE MODEL
+      if (zone.objectiveType) {
+        // Pass location and map for context-aware generation (e.g., avoiding roads)
+        const objectiveModel = this.createObjectiveModel(
+          zone.objectiveType,
+          zone.visualVariant || 0,
+          zone.x,
+          zone.z,
+          map
+        );
+        objectiveModel.position.set(zone.x, terrainElevation, zone.z);
+        group.add(objectiveModel);
+      }
 
       this.captureZoneMeshes.set(zone.id, group);
       zoneGroup.add(group);
 
       // Initialize zone in fill renderer
-      this.zoneFillRenderer.initializeZone(zone.id, zone.x, zone.z, zone.radius);
+      this.zoneFillRenderer.initializeZone(zone.id, zone.x, zone.z, zone.width, zone.height);
     }
 
     this.mapGroup.add(zoneGroup);
+  }
+
+  /**
+   * Create a 3D visual model based on objective type
+   */
+  private createObjectiveModel(
+    type: ObjectiveType,
+    variant: number,
+    worldX: number = 0,
+    worldZ: number = 0,
+    map?: GameMap
+  ): THREE.Group {
+    const group = new THREE.Group();
+    group.name = `objective-${type}`;
+
+    switch (type) {
+      case 'radio_tower':
+      case 'communication_tower':
+      case 'comms_array': {
+        // Lattice tower structure
+        const height = type === 'communication_tower' ? 40 : (type === 'comms_array' ? 15 : 25);
+        const towerGeo = new THREE.CylinderGeometry(0.5, 2, height, 4);
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
+        const tower = new THREE.Mesh(towerGeo, towerMat);
+        tower.position.y = height / 2;
+        group.add(tower);
+
+        // Cross-bracing for detail
+        const braceGeo = new THREE.BoxGeometry(0.2, height * 1.1, 0.2);
+        for (let i = 0; i < 4; i++) {
+          const brace = new THREE.Mesh(braceGeo, towerMat);
+          brace.position.y = height / 2;
+          brace.rotation.y = (i * Math.PI) / 2;
+          brace.rotation.z = i % 2 === 0 ? 0.05 : -0.05;
+          group.add(brace);
+        }
+
+        if (type === 'comms_array') {
+          // Multiple dishes on a platform
+          const platformGeo = new THREE.BoxGeometry(10, 1, 10);
+          const platform = new THREE.Mesh(platformGeo, towerMat);
+          platform.position.y = 0.5;
+          group.add(platform);
+          for (let i = 0; i < 4; i++) {
+            const dishGeo = new THREE.SphereGeometry(2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+            const dishMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+            const dish = new THREE.Mesh(dishGeo, dishMat);
+            dish.position.set(i < 2 ? -3 : 3, 1, i % 2 === 0 ? -3 : 3);
+            dish.rotation.x = -Math.PI / 4;
+            dish.rotation.y = (i * Math.PI) / 2;
+            group.add(dish);
+          }
+        } else {
+          // Antennas/Dishes for towers
+          const dishGeo = new THREE.SphereGeometry(2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+          const dishMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+          const dish = new THREE.Mesh(dishGeo, dishMat);
+          dish.position.y = height - 2;
+          dish.rotation.x = Math.PI / 4;
+          group.add(dish);
+
+          if (type === 'communication_tower' || variant === 0) {
+            const dish2 = dish.clone();
+            dish2.position.set(1, height - 8, 1);
+            dish2.rotation.y = Math.PI;
+            group.add(dish2);
+          }
+        }
+        break;
+      }
+
+      case 'bunker':
+      case 'hq_bunker':
+      case 'military_base': {
+        const isHQ = type === 'hq_bunker';
+        const scale = isHQ ? 1.5 : 1.0;
+
+        if (type === 'military_base') {
+          // Watchtower for military base
+          const legGeo = new THREE.BoxGeometry(0.5, 12, 0.5);
+          const watchMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+          for (let i = 0; i < 4; i++) {
+            const leg = new THREE.Mesh(legGeo, watchMat);
+            leg.position.set(i < 2 ? -2 : 2, 6, i % 2 === 0 ? -2 : 2);
+            group.add(leg);
+          }
+          const cabinGeo = new THREE.BoxGeometry(5, 3, 5);
+          const cabin = new THREE.Mesh(cabinGeo, watchMat);
+          cabin.position.y = 13.5;
+          group.add(cabin);
+        } else {
+          // Concrete bunker
+          const bunkerGeo = new THREE.BoxGeometry(10 * scale, 4 * scale, 10 * scale);
+          const bunkerMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 });
+          const bunker = new THREE.Mesh(bunkerGeo, bunkerMat);
+          bunker.position.y = 2 * scale;
+          group.add(bunker);
+
+          const roofGeo = new THREE.BoxGeometry(12 * scale, 1 * scale, 12 * scale);
+          const roof = new THREE.Mesh(roofGeo, bunkerMat);
+          roof.position.y = 4.5 * scale;
+          group.add(roof);
+
+          // Details: Slit, Vents, Door
+          const detailMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+          const slitGeo = new THREE.BoxGeometry(6 * scale, 0.5 * scale, 1);
+          const slit = new THREE.Mesh(slitGeo, detailMat);
+          slit.position.set(0, 3 * scale, 5 * scale);
+          group.add(slit);
+
+          const ventGeo = new THREE.BoxGeometry(1, 1, 1);
+          for (let i = 0; i < 2; i++) {
+            const vent = new THREE.Mesh(ventGeo, detailMat);
+            vent.position.set(i === 0 ? -4 * scale : 4 * scale, 4.2 * scale, 0);
+            group.add(vent);
+          }
+
+          if (isHQ) {
+            // Comms on top of HQ
+            const antennaGeo = new THREE.CylinderGeometry(0.2, 0.2, 8, 4);
+            const antenna = new THREE.Mesh(antennaGeo, new THREE.MeshStandardMaterial({ color: 0x444444 }));
+            antenna.position.set(-3, 8 * scale, -3);
+            group.add(antenna);
+
+            const dishGeo = new THREE.SphereGeometry(2, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+            const dish = new THREE.Mesh(dishGeo, new THREE.MeshStandardMaterial({ color: 0xcccccc }));
+            dish.position.set(3, 5 * scale, 3);
+            dish.rotation.x = -0.5;
+            group.add(dish);
+          }
+        }
+        break;
+      }
+
+      case 'supply_cache':
+      case 'fuel_depot':
+      case 'supply_depot': {
+        const isDepot = type === 'supply_depot';
+
+        if (type === 'supply_cache') {
+          // --- MUNITIONS CACHE / SMALL BASE ---
+          // 1. Concrete Bollard Perimeter (20x20m ring)
+          const bollardGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8);
+          const bollardMat = new THREE.MeshStandardMaterial({ color: 0x888888 }); // Concrete
+          const perimeterSize = 10; // +/- 10m from center
+          const spacing = 2; // Every 2m
+
+          for (let x = -perimeterSize; x <= perimeterSize; x += spacing) {
+            // Top/Bottom rows
+            if (x !== 0) { // Skip gate at center bottom
+              [-perimeterSize, perimeterSize].forEach(z => {
+                if (z === perimeterSize && Math.abs(x) < 3) return; // Gate opening at z=perimeterSize
+                const b = new THREE.Mesh(bollardGeo, bollardMat);
+                b.position.set(x, 0.6, z);
+                group.add(b);
+              });
+            }
+          }
+          for (let z = -perimeterSize; z <= perimeterSize; z += spacing) {
+            // Left/Right cols
+            [-perimeterSize, perimeterSize].forEach(x => {
+              const b = new THREE.Mesh(bollardGeo, bollardMat);
+              b.position.set(x, 0.6, z);
+              group.add(b);
+            });
+          }
+
+          // 2. Gate (Barrier Arm)
+          const armPillarGeo = new THREE.BoxGeometry(0.5, 1.5, 0.5);
+          const armPillar = new THREE.Mesh(armPillarGeo, new THREE.MeshStandardMaterial({ color: 0xffff00 }));
+          armPillar.position.set(-3, 0.75, perimeterSize);
+          group.add(armPillar);
+
+          const armGeo = new THREE.BoxGeometry(6, 0.2, 0.2);
+          const arm = new THREE.Mesh(armGeo, new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+          arm.position.set(0, 1.4, perimeterSize);
+          group.add(arm);
+
+          // 3. Command Tent (Central)
+          // Main tent body
+          const tentGeo = new THREE.CylinderGeometry(0.1, 4, 3, 4, 1, false, Math.PI * 0.25); // Pyramid-ish
+          const tentMat = new THREE.MeshStandardMaterial({ color: 0x556b2f, roughness: 0.9 }); // Olive Drab
+          const tent = new THREE.Mesh(tentGeo, tentMat);
+          tent.position.y = 1.5;
+          tent.rotation.y = Math.PI / 4; // Align with axes
+          // Scale to make it rectangular-ish footprint if needed, or just use cone
+          tent.scale.set(1.5, 1, 1);
+          group.add(tent);
+
+          // Tent entrance
+          const tentDoorGeo = new THREE.BoxGeometry(1.5, 2, 2);
+          const tentDoor = new THREE.Mesh(tentDoorGeo, new THREE.MeshStandardMaterial({ color: 0x1a240e })); // Darker inner
+          tentDoor.position.set(0, 1, 3); // Front
+          group.add(tentDoor);
+
+          // 4. Munitions Stacks
+          const crateGeo = new THREE.BoxGeometry(1, 1, 1);
+          const crateMat = new THREE.MeshStandardMaterial({ color: 0x3d3d3d }); // Dark grey ammo boxes
+
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+              // Stack 1
+              const c = new THREE.Mesh(crateGeo, crateMat);
+              c.position.set(-6 + i * 1.1, 0.5, -4 + j * 1.1);
+              group.add(c);
+
+              // Random 2nd layer
+              if (Math.random() > 0.3) {
+                const c2 = c.clone();
+                c2.position.y += 1;
+                group.add(c2);
+              }
+            }
+          }
+
+          // Stack 2 (Fuel drums?)
+          const drumGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8);
+          const drumMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 }); // Red
+          for (let k = 0; k < 5; k++) {
+            const d = new THREE.Mesh(drumGeo, drumMat);
+            d.position.set(5 + (Math.random() - 0.5) * 2, 0.6, -3 + (Math.random() - 0.5) * 2);
+            group.add(d);
+          }
+
+        } else {
+          // --- OLD CRATE CLUSTER FALLBACK (Fuel/Supply Depot) ---
+          const iterations = isDepot ? 15 : 8;
+          for (let i = 0; i < iterations; i++) {
+            const crateGeo = new THREE.BoxGeometry(2, 2, 2);
+            const crateMat = new THREE.MeshStandardMaterial({ color: i < 4 ? 0x8b4513 : 0x556b2f, roughness: 0.8 });
+            const crate = new THREE.Mesh(crateGeo, crateMat);
+            crate.position.set(
+              (i % 5 - 2) * 2.5 + (Math.random() - 0.5) * 2,
+              1,
+              Math.floor(i / 5) * 2.5 + (Math.random() - 0.5) * 2
+            );
+            crate.rotation.y = Math.random() * Math.PI;
+            group.add(crate);
+
+            if (isDepot && i % 4 === 0) {
+              const topCrate = crate.clone();
+              topCrate.position.y += 2;
+              group.add(topCrate);
+            }
+          }
+        }
+        // Barrels
+        const barrelCount = type === 'fuel_depot' ? 12 : (isDepot ? 8 : 4);
+        for (let i = 0; i < barrelCount; i++) {
+          const barrelGeo = new THREE.CylinderGeometry(0.8, 0.8, 2, 8);
+          const barrelMat = new THREE.MeshStandardMaterial({ color: type === 'fuel_depot' && i % 3 === 0 ? 0xcc3333 : 0x444444, metalness: 0.5 });
+          const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+          barrel.position.set(
+            (Math.random() - 0.5) * 15,
+            1,
+            (Math.random() - 0.5) * 15
+          );
+          group.add(barrel);
+        }
+
+        if (isDepot) {
+          // Add a simple shelter/tent
+          const tentGeo = new THREE.BoxGeometry(8, 4, 12);
+          const tentMat = new THREE.MeshStandardMaterial({ color: 0x556b2f });
+          const tent = new THREE.Mesh(tentGeo, tentMat);
+          tent.position.set(5, 2, -5);
+          group.add(tent);
+
+          const tentRoofGeo = new THREE.ConeGeometry(6, 4, 4);
+          const tentRoof = new THREE.Mesh(tentRoofGeo, tentMat);
+          tentRoof.position.set(5, 5, -5);
+          tentRoof.rotation.y = Math.PI / 4;
+          group.add(tentRoof);
+        }
+        break;
+      }
+
+      case 'radar_station': {
+        // Concrete base
+        const baseGeo = new THREE.BoxGeometry(10, 2, 10);
+        const concreteMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+        const base = new THREE.Mesh(baseGeo, concreteMat);
+        base.position.y = 1;
+        group.add(base);
+
+        // Rotating pillar
+        const pillarGeo = new THREE.CylinderGeometry(1, 1.5, 6, 8);
+        const pillar = new THREE.Mesh(pillarGeo, concreteMat);
+        pillar.position.y = 5;
+        group.add(pillar);
+
+        // Radar dish
+        const dishGeo = new THREE.CylinderGeometry(6, 6, 0.5, 16);
+        const dishMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.5 });
+        const dish = new THREE.Mesh(dishGeo, dishMat);
+        dish.position.y = 8;
+        dish.rotation.x = Math.PI / 2.5;
+        group.add(dish);
+
+        // Feed horn
+        const hornGeo = new THREE.BoxGeometry(0.5, 4, 0.5);
+        const horn = new THREE.Mesh(hornGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        horn.position.set(0, 10, 2);
+        horn.rotation.x = -0.5;
+        group.add(horn);
+        break;
+      }
+
+      case 'vehicle_park': {
+        const floorGeo = new THREE.PlaneGeometry(20, 20);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0.05;
+        group.add(floor);
+
+        // Parking bays (lines)
+        for (let i = -2; i <= 2; i++) {
+          const lineGeo = new THREE.BoxGeometry(0.2, 0.1, 15);
+          const line = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+          line.position.set(i * 4, 0.1, 0);
+          group.add(line);
+
+          // Simple vehicle silhouettes
+          if (i !== 0) {
+            const vBaseGeo = new THREE.BoxGeometry(3, 2, 6);
+            const vMat = new THREE.MeshStandardMaterial({ color: 0x2a3d2a });
+            const vBase = new THREE.Mesh(vBaseGeo, vMat);
+            vBase.position.set(i * 4, 1.1, 0);
+            group.add(vBase);
+            const vCabGeo = new THREE.BoxGeometry(3, 1.5, 2);
+            const vCab = new THREE.Mesh(vCabGeo, vMat);
+            vCab.position.set(i * 4, 2.5, 2);
+            group.add(vCab);
+          }
+        }
+        break;
+      }
+
+      case 'temple_complex': {
+        // Stepped pyramid
+        for (let i = 0; i < 4; i++) {
+          const size = 16 - i * 4;
+          const stepGeo = new THREE.BoxGeometry(size, 3, size);
+          const stepMat = new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 1.0 });
+          const step = new THREE.Mesh(stepGeo, stepMat);
+          step.position.y = 1.5 + i * 3;
+          group.add(step);
+
+          if (i === 3) {
+            // Temple shrine on top
+            const shrineGeo = new THREE.BoxGeometry(3, 4, 3);
+            const shrine = new THREE.Mesh(shrineGeo, stepMat);
+            shrine.position.y = 1.5 + i * 3 + 2;
+            group.add(shrine);
+          }
+        }
+        break;
+      }
+
+      case 'bio_dome': {
+        const researchMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+        const domeGeo = new THREE.SphereGeometry(10, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        const dome = new THREE.Mesh(domeGeo, researchMat);
+        dome.position.y = 0;
+        group.add(dome);
+
+        // Wireframe overlay
+        const wireGeo = new THREE.SphereGeometry(10.1, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        const wireMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        const wire = new THREE.Mesh(wireGeo, wireMat);
+        group.add(wire);
+
+        // Inner greenery
+        const groundGeo = new THREE.CircleGeometry(9, 16);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x2a5a2a });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0.2;
+        group.add(ground);
+        break;
+      }
+
+      case 'harvester_rig': {
+        const oilMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const baseGeo5 = new THREE.BoxGeometry(10, 2, 10);
+        const base5 = new THREE.Mesh(baseGeo5, oilMat);
+        base5.position.y = 1;
+        group.add(base5);
+
+        const towerGeo3 = new THREE.BoxGeometry(2, 20, 2);
+        const tower3 = new THREE.Mesh(towerGeo3, oilMat);
+        tower3.position.set(0, 10, 0);
+        group.add(tower3);
+
+        const beamGeo3 = new THREE.BoxGeometry(1, 15, 1);
+        const beam3 = new THREE.Mesh(beamGeo3, oilMat);
+        beam3.position.set(0, 18, 5);
+        beam3.rotation.x = Math.PI / 2;
+        group.add(beam3);
+
+        const drillGeo = new THREE.CylinderGeometry(0.5, 0.5, 12, 8);
+        const drill = new THREE.Mesh(drillGeo, new THREE.MeshStandardMaterial({ color: 0x777777 }));
+        drill.position.set(0, 10, 10);
+        group.add(drill);
+        break;
+      }
+
+      case 'orbital_uplink': {
+        const height = 60;
+        const towerGeo4 = new THREE.CylinderGeometry(0.5, 4, height, 4);
+        const towerMat4 = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.1 });
+        const tower4 = new THREE.Mesh(towerGeo4, towerMat4);
+        tower4.position.y = height / 2;
+        group.add(tower4);
+
+        const ringGeo = new THREE.TorusGeometry(5, 0.5, 8, 24);
+        for (let i = 0; i < 3; i++) {
+          const ring = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x4a9eff, emissive: 0x4a9eff, emissiveIntensity: 2 }));
+          ring.position.y = 20 + i * 15;
+          ring.rotation.x = Math.PI / 2;
+          group.add(ring);
+        }
+
+        const ballGeo = new THREE.SphereGeometry(3, 16, 16);
+        const ball = new THREE.Mesh(ballGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 5 }));
+        ball.position.y = height;
+        group.add(ball);
+        break;
+      }
+
+      case 'cooling_tower': {
+        const segments = 12;
+        const towerHeight = 25;
+        const bottomRadius = 10;
+        const midRadius = 6;
+        const topRadius = 8;
+
+        const points = [];
+        for (let i = 0; i <= segments; i++) {
+          const t = i / segments;
+          const y = t * towerHeight;
+          const r = t < 0.5
+            ? bottomRadius + (midRadius - bottomRadius) * (t / 0.5)
+            : midRadius + (topRadius - midRadius) * ((t - 0.5) / 0.5);
+          points.push(new THREE.Vector2(r, y));
+        }
+
+        const towerGeo5 = new THREE.LatheGeometry(points, 24);
+        const towerMat5 = new THREE.MeshStandardMaterial({ color: 0xdddddd, side: THREE.DoubleSide });
+        const tower5 = new THREE.Mesh(towerGeo5, towerMat5);
+        group.add(tower5);
+
+        // Steam/Vapor (simplified as white cone)
+        const steamGeo = new THREE.ConeGeometry(topRadius, 15, 16, 1, true);
+        const steamMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+        const steam = new THREE.Mesh(steamGeo, steamMat);
+        steam.position.y = towerHeight + 7.5;
+        group.add(steam);
+        break;
+      }
+
+      case 'grain_silo': {
+        const siloHeight = 15;
+        const siloGeo = new THREE.CylinderGeometry(4, 4, siloHeight, 12);
+        const siloMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+        const silo = new THREE.Mesh(siloGeo, siloMat);
+        silo.position.y = siloHeight / 2;
+        group.add(silo);
+
+        const siloRoofGeo = new THREE.ConeGeometry(4.5, 3, 12);
+        const siloRoof = new THREE.Mesh(siloRoofGeo, new THREE.MeshStandardMaterial({ color: 0x884444 }));
+        siloRoof.position.y = siloHeight + 1.5;
+        group.add(siloRoof);
+
+        // Ladder
+        const ladderGeo = new THREE.BoxGeometry(0.1, siloHeight, 0.8);
+        const ladder = new THREE.Mesh(ladderGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        ladder.position.set(4, siloHeight / 2, 0);
+        group.add(ladder);
+        break;
+      }
+
+      case 'windmill':
+      case 'wind_farm': {
+        // Wind Farm: 5-20 mills
+        // const isFarm = type === 'wind_farm'; // Unused
+        // "at least 5 mills up to 20"
+        const millCount = 5 + Math.floor(Math.random() * 16); // 5 to 20
+
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
+        const bladeMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+
+        // Helper to create a single mill mesh
+        const createMill = (scale: number) => {
+          const millGroup = new THREE.Group();
+
+          const h = 20 * scale;
+          const towerGeo = new THREE.CylinderGeometry(0.6 * scale, 1.8 * scale, h, 8);
+          const tower = new THREE.Mesh(towerGeo, towerMat);
+          tower.position.y = h / 2;
+          millGroup.add(tower);
+
+          // Nacelle
+          const nacelleGeo = new THREE.BoxGeometry(2 * scale, 1.5 * scale, 3 * scale);
+          const nacelle = new THREE.Mesh(nacelleGeo, towerMat);
+          nacelle.position.set(0, h, 0); // At top
+          millGroup.add(nacelle);
+
+          // Blades
+          const blades = new THREE.Group();
+          blades.position.set(0, h, 1.5 * scale); // Front of nacelle
+
+          for (let i = 0; i < 3; i++) {
+            const bladeP = new THREE.Group();
+            bladeP.rotation.z = i * (Math.PI * 2 / 3);
+
+            const bGeo = new THREE.BoxGeometry(0.5 * scale, 12 * scale, 0.2 * scale);
+            // Offset so it rotates around end
+            bGeo.translate(0, 6 * scale, 0);
+            const b = new THREE.Mesh(bGeo, bladeMat);
+            bladeP.add(b);
+            blades.add(bladeP);
+          }
+
+          // Random initial rotation for variety
+          blades.rotation.z = Math.random() * Math.PI * 2;
+          millGroup.add(blades);
+
+          return millGroup;
+        };
+
+        // Distribute mills with collision avoidance
+        const placedMills: Array<{ x: number, z: number, r: number }> = [];
+        const range = 45; // Spread area
+        const buffer = 15; // Minimum distance between mills (prevent blade collision)
+
+        for (let i = 0; i < millCount; i++) {
+          let bestX = 0, bestZ = 0;
+          let valid = false;
+
+          // Try up to 20 times to find a clear spot
+          for (let attempt = 0; attempt < 20; attempt++) {
+            // Random pos in circle
+            const r = Math.random() * range;
+            const theta = Math.random() * Math.PI * 2;
+            const x = r * Math.cos(theta);
+            const z = r * Math.sin(theta);
+
+            // Check distance to all other mills
+            let overlap = false;
+            for (const existing of placedMills) {
+              const dx = existing.x - x;
+              const dz = existing.z - z;
+              const dist = Math.sqrt(dx * dx + dz * dz);
+              if (dist < buffer) {
+                overlap = true;
+                break;
+              }
+            }
+
+            if (!overlap) {
+              bestX = x;
+              bestZ = z;
+              valid = true;
+              break;
+            }
+          }
+
+          // Place if valid
+          if (valid) {
+            placedMills.push({ x: bestX, z: bestZ, r: buffer });
+
+            const scale = 0.8 + Math.random() * 0.4;
+            const mill = createMill(scale);
+            mill.position.set(bestX, 0, bestZ);
+
+            // Random yaw rotation for the whole tower? No, usually face wind.
+            // But let's vary them slightly for realism (wind variation)
+            mill.rotation.y = (Math.random() - 0.5) * 0.5;
+
+            mill.castShadow = true;
+            group.add(mill);
+          }
+        }
+        break;
+      }
+
+      case 'oil_field': {
+        // Pumpjack
+        const baseGeo2 = new THREE.BoxGeometry(4, 1, 12);
+        const oilMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const base2 = new THREE.Mesh(baseGeo2, oilMat);
+        base2.position.y = 0.5;
+        group.add(base2);
+
+        const frameGeo = new THREE.CylinderGeometry(0.2, 0.2, 8, 4);
+        for (let i = 0; i < 2; i++) {
+          const frame = new THREE.Mesh(frameGeo, oilMat);
+          frame.position.set(i === 0 ? -1.5 : 1.5, 4, 0);
+          frame.rotation.z = i === 0 ? -0.2 : 0.2;
+          group.add(frame);
+        }
+
+        const beamGeo = new THREE.BoxGeometry(1, 1, 15);
+        const beam = new THREE.Mesh(beamGeo, oilMat);
+        beam.position.y = 8;
+        beam.rotation.x = -0.1;
+        group.add(beam);
+
+        const headGeo = new THREE.SphereGeometry(2, 8, 8, 0, Math.PI, 0, Math.PI);
+        const head = new THREE.Mesh(headGeo, oilMat);
+        head.position.set(0, 8, 7.5);
+        head.rotation.y = Math.PI / 2;
+        group.add(head);
+
+        // Concrete tank nearby
+        const tankGeo = new THREE.CylinderGeometry(4, 4, 5, 12);
+        const tank = new THREE.Mesh(tankGeo, new THREE.MeshStandardMaterial({ color: 0x777777 }));
+        tank.position.set(8, 2.5, -5);
+        group.add(tank);
+        break;
+      }
+
+      case 'research_station': {
+        // Observatory dome
+        const baseGeo3 = new THREE.CylinderGeometry(6, 6, 4, 16);
+        const researchMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const base3 = new THREE.Mesh(baseGeo3, researchMat);
+        base3.position.y = 2;
+        group.add(base3);
+
+        const domeGeo = new THREE.SphereGeometry(6, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        const dome = new THREE.Mesh(domeGeo, researchMat);
+        dome.position.y = 4;
+        group.add(dome);
+
+        const slitGeo2 = new THREE.BoxGeometry(1.5, 8, 1);
+        const slitMat2 = new THREE.MeshBasicMaterial({ color: 0x222222 });
+        const slit2 = new THREE.Mesh(slitGeo2, slitMat2);
+        slit2.position.set(0, 7, 5);
+        slit2.rotation.x = -0.5;
+        group.add(slit2);
+
+        // Satellite dish
+        const dishGeo2 = new THREE.SphereGeometry(3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const dish2 = new THREE.Mesh(dishGeo2, researchMat);
+        dish2.position.set(-8, 3, -8);
+        dish2.rotation.x = -0.8;
+        group.add(dish2);
+        break;
+      }
+
+      case 'mine':
+      case 'mining_operation': {
+        // Mine entrance structure
+        const beamMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+        const beamGeo2 = new THREE.BoxGeometry(0.5, 6, 0.5);
+        for (let i = 0; i < 4; i++) {
+          const side = new THREE.Mesh(beamGeo2, beamMat);
+          side.position.set(i < 2 ? -3 : 3, 3, i % 2 === 0 ? -2 : 2);
+          group.add(side);
+        }
+        const crossGeo = new THREE.BoxGeometry(7, 0.5, 0.5);
+        const cross1 = new THREE.Mesh(crossGeo, beamMat);
+        cross1.position.set(0, 6, -2);
+        group.add(cross1);
+        const cross2 = cross1.clone();
+        cross2.position.set(0, 6, 2);
+        group.add(cross2);
+
+        // Entrance plane (darkness)
+        const darkGeo = new THREE.PlaneGeometry(5.5, 5.5);
+        const darkMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const dark = new THREE.Mesh(darkGeo, darkMat);
+        dark.position.set(0, 3, -1.8);
+        group.add(dark);
+
+        // Mining equipment/carts
+        const cartGeo = new THREE.BoxGeometry(2, 1.5, 3);
+        const cartMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+        const cart = new THREE.Mesh(cartGeo, cartMat);
+        cart.position.set(5, 0.75, 5);
+        group.add(cart);
+        break;
+      }
+
+      case 'logging_camp': {
+        // Stacks of logs
+        const logMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+        const logGeo = new THREE.CylinderGeometry(0.8, 0.8, 8, 8);
+        logGeo.rotateZ(Math.PI / 2);
+
+        for (let stack = 0; stack < 3; stack++) {
+          const stackX = (stack - 1) * 8;
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3 - i; j++) {
+              const log = new THREE.Mesh(logGeo, logMat);
+              log.position.set(stackX, 0.8 + i * 1.5, (j - (3 - i) / 2) * 1.6);
+              log.castShadow = true;
+              group.add(log);
+            }
+          }
+        }
+
+        // Sawmill shelter
+        const shelterGeo = new THREE.BoxGeometry(6, 4, 8);
+        const shelterMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+        const shelter = new THREE.Mesh(shelterGeo, shelterMat);
+        shelter.position.set(0, 2, -8);
+        group.add(shelter);
+        break;
+      }
+
+      case 'indigenous_settlement': {
+        // Cluster of huts
+        const hutMat = new THREE.MeshStandardMaterial({ color: 0xc2b280 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+
+        const hutGeo = new THREE.CylinderGeometry(3, 3, 3, 8);
+        const roofGeo = new THREE.ConeGeometry(3.5, 2, 8);
+
+        const positions: [number, number][] = [[0, 0], [6, 4], [-5, 5], [4, -6], [-4, -4]];
+
+        for (const pos of positions) {
+          const x = pos[0];
+          const z = pos[1];
+          const hut = new THREE.Mesh(hutGeo, hutMat);
+          hut.position.set(x, 1.5, z);
+          hut.castShadow = true;
+          group.add(hut);
+
+          const roof = new THREE.Mesh(roofGeo, roofMat);
+          roof.position.set(x, 4, z);
+          roof.castShadow = true;
+          group.add(roof);
+        }
+        break;
+      }
+
+      case 'observation_post': {
+        // Tall wooden tower
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+
+        // Legs
+        const legGeo = new THREE.BoxGeometry(0.5, 12, 0.5);
+        for (let x of [-2, 2]) {
+          for (let z of [-2, 2]) {
+            const leg = new THREE.Mesh(legGeo, woodMat);
+            leg.position.set(x, 6, z);
+            // Tapering
+            leg.rotation.z = x > 0 ? 0.1 : -0.1;
+            leg.rotation.x = z > 0 ? 0.1 : -0.1;
+            group.add(leg);
+          }
+        }
+
+        // Platform
+        const platGeo = new THREE.BoxGeometry(6, 0.5, 6);
+        const plat = new THREE.Mesh(platGeo, woodMat);
+        plat.position.y = 12;
+        group.add(plat);
+
+        // Roof
+        const roofGeo = new THREE.ConeGeometry(4, 2, 4);
+        roofGeo.rotateY(Math.PI / 4);
+        const roof = new THREE.Mesh(roofGeo, woodMat);
+        roof.position.y = 14;
+        group.add(roof);
+        break;
+      }
+
+      case 'water_well': {
+        // Stone well
+        const wellGeo = new THREE.CylinderGeometry(2, 2, 1.5, 16);
+        const stoneMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+        const well = new THREE.Mesh(wellGeo, stoneMat);
+        well.position.y = 0.75;
+        group.add(well);
+
+        // Water surface
+        const waterGeo = new THREE.CircleGeometry(1.8, 16);
+        const waterMat = new THREE.MeshBasicMaterial({ color: 0x4444ff });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 1;
+        group.add(water);
+
+        // Roof structure
+        const postGeo = new THREE.BoxGeometry(0.3, 4, 0.3);
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+
+        const leftPost = new THREE.Mesh(postGeo, woodMat);
+        leftPost.position.set(-2, 2, 0);
+        group.add(leftPost);
+
+        const rightPost = new THREE.Mesh(postGeo, woodMat);
+        rightPost.position.set(2, 2, 0);
+        group.add(rightPost);
+
+        const roofGeo = new THREE.ConeGeometry(3, 1.5, 4);
+        roofGeo.rotateY(Math.PI / 4);
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0xa52a2a }));
+        roof.position.y = 4.5;
+        group.add(roof);
+        break;
+      }
+
+      case 'ski_resort': {
+        // Large lodge
+        const lodgeGeo = new THREE.BoxGeometry(12, 6, 8);
+        const lodgeMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+        const lodge = new THREE.Mesh(lodgeGeo, lodgeMat);
+        lodge.position.y = 3;
+        group.add(lodge);
+
+        // Steep roof
+        // Used simpler Cone for now
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // Snowy roof
+
+        const simpleRoofGeo = new THREE.ConeGeometry(9, 6, 4);
+        simpleRoofGeo.rotateY(Math.PI / 4); // Align to box
+        simpleRoofGeo.scale(1.2, 1, 0.8); // Make it oblong
+        const simpleRoof = new THREE.Mesh(simpleRoofGeo, roofMat);
+        simpleRoof.position.y = 9;
+        group.add(simpleRoof);
+        break;
+      }
+
+      case 'rail_junction': {
+        // Tracks
+        const trackGeo = new THREE.BoxGeometry(20, 0.2, 1.5);
+        const tieGeo = new THREE.BoxGeometry(0.8, 0.3, 3);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const tieMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+
+        // Two crossing tracks
+        for (let r = 0; r < 2; r++) {
+          const trackGroup = new THREE.Group();
+          trackGroup.rotation.y = r * Math.PI / 2;
+
+          // Rails
+          const rail1 = new THREE.Mesh(trackGeo, railMat);
+          rail1.position.z = -0.6;
+          trackGroup.add(rail1);
+          const rail2 = new THREE.Mesh(trackGeo, railMat);
+          rail2.position.z = 0.6;
+          trackGroup.add(rail2);
+
+          // Ties
+          for (let i = -8; i <= 8; i++) {
+            const tie = new THREE.Mesh(tieGeo, tieMat);
+            tie.position.x = i * 1.2;
+            trackGroup.add(tie);
+          }
+          group.add(trackGroup);
+        }
+
+        // Signal Box
+        const cabinGeo = new THREE.BoxGeometry(3, 4, 3);
+        const cabinMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+        const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+        cabin.position.set(4, 2, 4);
+        group.add(cabin);
+        break;
+      }
+
+      case 'processing_plant': {
+        // Factory with tanks
+        const mainGeo = new THREE.BoxGeometry(8, 6, 12);
+        const factoryMat = new THREE.MeshStandardMaterial({ color: 0x707070 });
+        const main = new THREE.Mesh(mainGeo, factoryMat);
+        main.position.y = 3;
+        group.add(main);
+
+        // Smokestack
+        const stackGeo = new THREE.CylinderGeometry(1, 1.5, 12, 8);
+        const stack = new THREE.Mesh(stackGeo, factoryMat);
+        stack.position.set(2, 6, 3);
+        group.add(stack);
+
+        // Large Tanks
+        const tankGeo = new THREE.CylinderGeometry(2.5, 2.5, 5, 12);
+        const tankMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+        for (let i = 0; i < 2; i++) {
+          const tank = new THREE.Mesh(tankGeo, tankMat);
+          tank.position.set(-6, 2.5, i * 6 - 3);
+          group.add(tank);
+        }
+        break;
+      }
+
+      case 'irrigation_station': {
+        // Pump house
+        const houseGeo = new THREE.BoxGeometry(5, 3, 5);
+        const houseMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+        const house = new THREE.Mesh(houseGeo, houseMat);
+        house.position.y = 1.5;
+        group.add(house);
+
+        // Pipes
+        const pipeGeo = new THREE.CylinderGeometry(0.5, 0.5, 10, 8);
+        pipeGeo.rotateZ(Math.PI / 2);
+        const pipeMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+        pipe.position.set(5, 0.5, 0);
+        group.add(pipe);
+
+        // Sprinkler/Pivot point
+        const pivotGeo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8);
+        const pivot = new THREE.Mesh(pivotGeo, pipeMat);
+        pivot.position.set(10, 1.5, 0);
+        group.add(pivot);
+        break;
+      }
+
+      case 'market_town': {
+        // Stalls
+        const tableGeo = new THREE.BoxGeometry(3, 1, 2);
+        const tableMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
+        const awningGeo = new THREE.BoxGeometry(3.2, 0.2, 2.2);
+        const awningMat1 = new THREE.MeshStandardMaterial({ color: 0xcc3333 });
+        const awningMat2 = new THREE.MeshStandardMaterial({ color: 0x3333cc });
+
+        for (let i = 0; i < 4; i++) {
+          const stallGroup = new THREE.Group();
+
+          const table = new THREE.Mesh(tableGeo, tableMat);
+          table.position.y = 0.5;
+          stallGroup.add(table);
+
+          // Awning posts
+          const postGeo = new THREE.BoxGeometry(0.1, 2.5, 0.1);
+          for (let x of [-1.4, 1.4]) {
+            for (let z of [-0.9, 0.9]) {
+              const post = new THREE.Mesh(postGeo, tableMat);
+              post.position.set(x, 1.25, z);
+              stallGroup.add(post);
+            }
+          }
+
+          const awning = new THREE.Mesh(awningGeo, i % 2 === 0 ? awningMat1 : awningMat2);
+          awning.position.y = 2.5;
+          stallGroup.add(awning);
+
+          stallGroup.position.set(i < 2 ? -4 : 4, 0, i % 2 === 0 ? -4 : 4);
+          // Random rotation
+          stallGroup.rotation.y = (i * Math.PI) / 4;
+          group.add(stallGroup);
+        }
+        break;
+      }
+
+      case 'city_district': {
+        // Dense block of tall buildings
+        const buildMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const windowMat = new THREE.MeshBasicMaterial({ color: 0x88ccff });
+
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            // Varied heights
+            const h = 5 + Math.random() * 10;
+            const w = 3 + Math.random();
+            const d = 3 + Math.random();
+
+            const bGeo = new THREE.BoxGeometry(w, h, d);
+            const b = new THREE.Mesh(bGeo, buildMat);
+            b.position.set((i - 1) * 5, h / 2, (j - 1) * 5);
+            b.castShadow = true;
+            group.add(b);
+
+            // Simple window strip
+            const winGeo = new THREE.BoxGeometry(w + 0.1, h * 0.5, d + 0.1);
+            const win = new THREE.Mesh(winGeo, windowMat);
+            win.position.y = h * 0.6;
+            win.visible = Math.random() > 0.5; // Randomly lit
+            group.add(win);
+          }
+        }
+        // Small park in center? No, just buildings for now
+        break;
+      }
+
+      case 'hamlet':
+      case 'village':
+      case 'town':
+      case 'city': {
+        // --- Configuration based on type ---
+        let minBuildings = 6;
+        let maxBuildings = 8;
+        let radius = 25;
+        let baseScale = 0.5; // Reduced by 50%
+        let buildingColor = 0xc9b896; // Cottage
+        let roofColor = 0x8b4513;     // Thatch/wood
+        let isUrban = false;
+
+        if (type === 'village') {
+          minBuildings = 8;
+          maxBuildings = 12;
+          radius = 35;
+          baseScale = 0.6; // Reduced
+          buildingColor = 0xd4c4a8; // Plaster/Stone
+        } else if (type === 'town') {
+          minBuildings = 12;
+          maxBuildings = 16;
+          radius = 50;
+          baseScale = 0.7; // Reduced
+          buildingColor = 0xd4c4a8; // Stone
+          roofColor = 0x555555;     // Slate
+        } else if (type === 'city') {
+          minBuildings = 16;
+          maxBuildings = 20;
+          radius = 65;
+          baseScale = 0.75; // Reduced
+          buildingColor = 0x888888; // Concrete/Brick
+          isUrban = true;
+        }
+
+        const count = minBuildings + Math.floor(Math.random() * (maxBuildings - minBuildings + 1));
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: buildingColor });
+        const roofMat = new THREE.MeshStandardMaterial({ color: roofColor });
+        const windowMat = new THREE.MeshBasicMaterial({ color: 0xffdd88 }); // Lit windows for city
+
+        const buildings: { x: number, z: number, r: number }[] = [];
+
+        for (let i = 0; i < count; i++) {
+          // Attempt to place building without overlap
+          let bestX = 0, bestZ = 0, bestR = 0;
+          let valid = false;
+
+          // Width/Depth for collision check
+          // Generate dimensions
+          const isTall = isUrban && Math.random() > 0.3;
+          let w = (8 + Math.random() * 6) * baseScale;
+          let d = (8 + Math.random() * 6) * baseScale;
+          let h = (isTall ? 20 + Math.random() * 30 : 8 + Math.random() * 8) * baseScale;
+
+          if (!isUrban && Math.random() < 0.3) {
+            // L-shape or irregular? Simplified as box for now, maybe add wings later
+            // Just make some squat and wide
+            w *= 1.5;
+          }
+
+          // Simple rejection sampling
+          for (let attempt = 0; attempt < 20; attempt++) {
+            const r = Math.random() * radius * Math.sqrt(Math.random()); // Uniform-ish distribution in circle
+            const theta = Math.random() * Math.PI * 2;
+            const x = r * Math.cos(theta);
+            const z = r * Math.sin(theta);
+            const size = Math.max(w, d);
+
+            // Check collision with existing
+            let overlap = false;
+            for (const b of buildings) {
+              const dx = b.x - x;
+              const dz = b.z - z;
+              const dist = Math.sqrt(dx * dx + dz * dz);
+              if (dist < (b.r + size * 0.7)) { // Approximate radius check
+                overlap = true;
+                break;
+              }
+            }
+
+            // Check Map Obstacles (Rivers, Roads)
+            if (!overlap && map) {
+              const absX = worldX + x;
+              const absZ = worldZ + z;
+
+              if (map.waterBodies) {
+                for (const wb of map.waterBodies) {
+                  if (wb.type === 'river' && wb.points) {
+                    for (let k = 0; k < wb.points.length - 1; k++) {
+                      const p1 = wb.points[k]!;
+                      const dx = absX - p1.x;
+                      const dz = absZ - p1.z;
+                      const riverWidthHalf = (wb.width || 15) / 2;
+                      if (dx * dx + dz * dz < (riverWidthHalf + size + 5) ** 2) {
+                        overlap = true; break;
+                      }
+                    }
+                  }
+                  if (overlap) break;
+                }
+              }
+
+              if (!overlap && map.roads) {
+                for (const road of map.roads) {
+                  for (let k = 0; k < road.points.length - 1; k++) {
+                    const p1 = road.points[k]!;
+                    const dx = absX - p1.x;
+                    const dz = absZ - p1.z;
+                    if (dx * dx + dz * dz < (8 + size + 2) ** 2) {
+                      overlap = true; break;
+                    }
+                  }
+                  if (overlap) break;
+                }
+              }
+            }
+
+            if (!overlap) {
+              bestX = x;
+              bestZ = z;
+              bestR = size / 2; // Approximate collision radius
+              valid = true;
+              break;
+            }
+          }
+
+          if (valid) {
+            buildings.push({ x: bestX, z: bestZ, r: bestR });
+
+            // Create Mesh
+            const bGroup = new THREE.Group();
+            bGroup.position.set(bestX, 0, bestZ);
+            bGroup.rotation.y = Math.random() * Math.PI * 2; // Random orientation
+
+            const bGeo = new THREE.BoxGeometry(w, h, d);
+            const b = new THREE.Mesh(bGeo, wallMat);
+            b.position.y = h / 2;
+            b.castShadow = true;
+            bGroup.add(b);
+
+            // Roof (if not urban/modern tall building)
+            if (!isTall) {
+              const roofH = Math.min(w, d) * 0.5;
+              const roofGeo = new THREE.ConeGeometry(Math.max(w, d) * 0.75, roofH, 4);
+              roofGeo.rotateY(Math.PI / 4);
+              const roof = new THREE.Mesh(roofGeo, roofMat);
+              roof.position.y = h + roofH / 2;
+              bGroup.add(roof);
+            } else {
+              // Flat roof detail
+              const rimGeo = new THREE.BoxGeometry(w * 0.9, 1, d * 0.9);
+              const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+              rim.position.y = h + 0.5;
+              bGroup.add(rim);
+
+              // Windows
+              if (Math.random() > 0.4) {
+                const winGeo = new THREE.BoxGeometry(w + 0.2, h * 0.7, d + 0.2);
+                const win = new THREE.Mesh(winGeo, windowMat);
+                win.position.y = h * 0.5;
+                bGroup.add(win);
+              }
+            }
+
+            group.add(bGroup);
+          }
+        }
+        break;
+      }
+
+      default:
+        // Generic "Objective" Marker for others
+        const genericHeight = 8;
+        const baseGeo4 = new THREE.BoxGeometry(4, genericHeight, 4);
+        const baseMat4 = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+        const base4 = new THREE.Mesh(baseGeo4, baseMat4);
+        base4.position.y = genericHeight / 2;
+        group.add(base4);
+        break;
+    }
+
+    return group;
   }
 
   private renderResupplyPoints(resupplyPoints: ResupplyPoint[]): void {

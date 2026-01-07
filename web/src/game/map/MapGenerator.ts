@@ -18,6 +18,8 @@ import type {
   Building,
   CaptureZone,
   DeploymentZone,
+  BuildingSubtype,
+  LegacyBuildingType,
   EntryPoint,
   ResupplyPoint,
   TerrainCell,
@@ -194,6 +196,9 @@ export class MapGenerator {
 
     // Generate ponds near farm buildings
     this.generatePonds(buildings);
+
+    // Generate farm fields with crop variants
+    this.generateFarmFields(buildings);
 
     // Generate natural terrain (forests, fields)
     this.generateNaturalTerrain(roads, buildings);
@@ -435,11 +440,13 @@ export class MapGenerator {
     samples.push(this.getElevationAt(worldX, worldZ));
 
     // Check elevation variance (max 10m change)
+    // Relaxed for cities (allow up to 25m variance) to ensure they spawn in more varied terrain
+    const maxAllowedVariance = this.biome === 'cities' ? 25 : 10;
     const minElevation = Math.min(...samples);
     const maxElevation = Math.max(...samples);
     const elevationVariance = maxElevation - minElevation;
 
-    if (elevationVariance > 10) {
+    if (elevationVariance > maxAllowedVariance) {
       return false; // Too steep/varied
     }
 
@@ -453,7 +460,7 @@ export class MapGenerator {
   /**
    * Get elevation at a world position using bilinear interpolation
    */
-  private getElevationAt(worldX: number, worldZ: number): number {
+  public getElevationAt(worldX: number, worldZ: number): number {
     // Convert world coords to grid coords
     const gridX = (worldX + this.width / 2) / this.cellSize;
     const gridZ = (worldZ + this.height / 2) / this.cellSize;
@@ -557,8 +564,9 @@ export class MapGenerator {
 
       if (nearestSettlement) {
         nearestSettlement.captureZoneId = zone.id;
-        // Update zone name to match settlement
-        zone.name = nearestSettlement.name;
+        // Update zone name to be more descriptive: "Settlement Name - Objective"
+        const baseName = this.getObjectiveName(zone.objectiveType || 'radio_tower');
+        zone.name = `${nearestSettlement.name} ${baseName}`;
       }
     }
   }
@@ -620,17 +628,38 @@ export class MapGenerator {
         const offset = this.rng.nextFloat(15, 25) * (this.rng.next() > 0.5 ? 1 : -1);
 
         if (this.rng.next() > 0.6) {
-          const isFactory = this.rng.next() > 0.8;
+          const typeRoll = this.rng.next();
+          let subtype: BuildingSubtype = 'detached_house';
+          let bWidth = 12;
+          let bDepth = 12;
+          let bHeight = 4;
+          let bType: LegacyBuildingType = 'house';
+
+          if (typeRoll > 0.9) {
+            subtype = 'small_factory';
+            bWidth = 20; bDepth = 30; bHeight = 8; bType = 'factory';
+          } else if (typeRoll > 0.8) {
+            subtype = 'warehouse';
+            bWidth = 20; bDepth = 25; bHeight = 6; bType = 'factory';
+          } else if (typeRoll > 0.7) {
+            subtype = 'gas_station';
+            bWidth = 15; bDepth = 12; bHeight = 4; bType = 'shop';
+          } else if (typeRoll > 0.6) {
+            subtype = 'shop';
+            bWidth = 10; bDepth = 12; bHeight = 6; bType = 'shop';
+          }
+
           const building: Building = {
             x: x + perpX * offset,
             z: z + perpZ * offset,
-            width: isFactory ? this.rng.nextFloat(15, 25) : this.rng.nextFloat(6, 10),
-            depth: isFactory ? this.rng.nextFloat(20, 30) : this.rng.nextFloat(8, 12),
-            height: isFactory ? this.rng.nextFloat(10, 15) : this.rng.nextFloat(5, 8),
-            type: isFactory ? 'factory' : 'house',
-            category: isFactory ? 'industrial' : 'residential',
-            subtype: isFactory ? 'small_factory' : 'detached_house',
-            garrisonCapacity: isFactory ? 12 : 4,
+            width: bWidth,
+            depth: bDepth,
+            height: bHeight,
+            type: bType,
+            subtype: subtype,
+            garrisonCapacity: Math.max(2, Math.min(5, Math.floor(Math.sqrt(bWidth * bDepth) / 5))),
+            defenseBonus: 0.5,
+            stealthBonus: 0.5,
           };
           buildings.push(building);
         }
@@ -748,7 +777,7 @@ export class MapGenerator {
 
         // Check if position is within map bounds with edge margin
         if (Math.abs(x) > this.width / 2 - edgeMargin - radius ||
-            Math.abs(z) > this.height / 2 - edgeMargin - radius) {
+          Math.abs(z) > this.height / 2 - edgeMargin - radius) {
           continue;
         }
 
@@ -999,6 +1028,14 @@ export class MapGenerator {
 
         // Normalize noise to [-1, 1] and scale by amplitude
         noiseValue = (noiseValue / maxValue) * config.baseNoiseAmplitude;
+
+        // 1.5 Add gentle rolling hills (very large scale, low frequency)
+        // This prevents open areas from looking unnaturaly flat
+        const hillScale = 0.008; // Very low frequency (~125m wavelength)
+        const hillAmplitude = 3.5; // Gentle 3.5m height variation
+        // Use a different offset so it doesn't align with base noise
+        const hillNoise = this.gradientNoise((worldX + 500) * hillScale, (worldZ - 500) * hillScale);
+        noiseValue += hillNoise * hillAmplitude;
 
         // 2. Calculate feature contributions with diminishing returns for overlapping features
         // Group contributions by feature type to prevent excessive stacking
@@ -1668,17 +1705,23 @@ export class MapGenerator {
     // Note: This is called before captureZones in generate(), so we create temp town positions
     const townPositions = this.getTownPositions();
 
+    // List of zones to avoid (future bridges/ramps)
+    const bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }> = [];
+
     // Step 1: Generate main corridor (interstate or highway)
-    const mainRoad = this.generateMainCorridor(townPositions, isLargeMap);
+    const mainRoad = this.generateMainCorridor(townPositions, isLargeMap, bridgeAvoidanceZones);
+    this.detectBridgeZones(mainRoad, bridgeAvoidanceZones);
     roads.push(mainRoad);
 
     // Step 2: Generate highways connecting towns
-    const highways = this.generateHighwayNetwork(townPositions, mainRoad);
+    // Note: detectBridgeZones is now handled inside generateHighwayNetwork for incremental updates
+    const highways = this.generateHighwayNetwork(townPositions, mainRoad, bridgeAvoidanceZones);
     roads.push(...highways);
 
     // Step 3: Generate town streets (organic European style)
     for (const town of townPositions) {
-      const townStreets = this.generateTownStreets(town, roads);
+      const townStreets = this.generateTownStreets(town, roads, bridgeAvoidanceZones);
+      townStreets.forEach(road => this.detectBridgeZones(road, bridgeAvoidanceZones));
       roads.push(...townStreets);
     }
 
@@ -1692,6 +1735,36 @@ export class MapGenerator {
     this.ensureMapConnectivity(mergedRoads, townPositions);
 
     return mergedRoads;
+  }
+
+  /**
+   * Detect potential bridge locations (river crossings) for a road
+   * and add them to avoidance zones for future roads
+   */
+  private detectBridgeZones(
+    road: Road,
+    zones: Array<{ x: number; z: number; radius: number }>
+  ): void {
+    const rivers = this.waterBodies.filter((w) => w.type === 'river');
+    const bridgeLength = 30;
+    const rampLength = 30; // Extra buffer for the ramp leading up to the bridge
+    const avoidanceRadius = (bridgeLength / 2) + rampLength + 10; // Total radius to avoid
+
+    for (let i = 0; i < road.points.length - 1; i++) {
+      const p1 = road.points[i]!;
+      const p2 = road.points[i + 1]!;
+
+      for (const river of rivers) {
+        const crossing = this.findRiverCrossing(p1, p2, river);
+        if (crossing) {
+          zones.push({
+            x: crossing.x,
+            z: crossing.z,
+            radius: avoidanceRadius,
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -1714,7 +1787,8 @@ export class MapGenerator {
    */
   private generateMainCorridor(
     towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>,
-    isLargeMap: boolean
+    isLargeMap: boolean,
+    bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road {
     const roadType: RoadType = isLargeMap ? 'interstate' : 'highway';
     const bypassDistance = isLargeMap ? 80 : 30; // Interstate stays further from towns
@@ -1738,7 +1812,7 @@ export class MapGenerator {
       { x: corridorX + this.rng.nextFloat(-20, 20), z: startZ },
       { x: corridorX + this.rng.nextFloat(-20, 20), z: endZ },
       roadType,
-      isLargeMap ? towns : [] // Only avoid towns for interstate
+      isLargeMap ? [...towns, ...bridgeAvoidanceZones] : bridgeAvoidanceZones // Avoid towns + existing bridges
     );
 
     return {
@@ -1797,7 +1871,8 @@ export class MapGenerator {
    */
   private generateHighwayNetwork(
     towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>,
-    mainRoad: Road
+    mainRoad: Road,
+    bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
     const roads: Road[] = [];
     const connected = new Set<number>();
@@ -1810,18 +1885,22 @@ export class MapGenerator {
     for (let i = 0; i < significantTowns.length; i++) {
       const town = significantTowns[i]!;
 
-      // Find closest point on main road to connect to
-      const mainRoadConnection = this.findClosestPointOnRoad(town, mainRoad);
+      // Find closest point on main road to connect to, avoiding bridges
+      const mainRoadConnection = this.findClosestPointOnRoad(town, mainRoad, bridgeAvoidanceZones);
 
       // Only create highway connection if not already connected and distance is reasonable
       if (mainRoadConnection.distance > town.radius && mainRoadConnection.distance < this.width / 2) {
         const highway = this.createRoadBetweenPoints(
           { x: town.x, z: town.z },
           mainRoadConnection.point,
-          'highway'
+          'highway',
+          bridgeAvoidanceZones
         );
         roads.push(highway);
         connected.add(i);
+
+        // Update avoidance zones immediately so future roads avoid this new bridge
+        this.detectBridgeZones(highway, bridgeAvoidanceZones);
       }
 
       // Connect to nearest unconnected town
@@ -1842,9 +1921,13 @@ export class MapGenerator {
         const highway = this.createRoadBetweenPoints(
           { x: town.x, z: town.z },
           { x: other.x, z: other.z },
-          roadType
+          roadType,
+          bridgeAvoidanceZones
         );
         roads.push(highway);
+
+        // Update avoidance zones immediately
+        this.detectBridgeZones(highway, bridgeAvoidanceZones);
       }
     }
 
@@ -1853,15 +1936,48 @@ export class MapGenerator {
 
   /**
    * Find closest point on a road to a given position
+   * Optionally avoids points within specified zones
    */
   private findClosestPointOnRoad(
     pos: { x: number; z: number },
-    road: Road
+    road: Road,
+    avoidZones: Array<{ x: number; z: number; radius: number }> = []
   ): { point: { x: number; z: number }; distance: number } {
     let closestPoint = road.points[0]!;
     let closestDist = Infinity;
 
     for (const point of road.points) {
+      // Skip points inside avoid zones (e.g. bridges)
+      let inAvoidZone = false;
+      for (const zone of avoidZones) {
+        const distToZone = Math.sqrt((point.x - zone.x) ** 2 + (point.z - zone.z) ** 2);
+        if (distToZone < zone.radius) {
+          inAvoidZone = true;
+          break;
+        }
+      }
+      if (inAvoidZone) continue;
+
+      // Also avoid points too close to any river (to prevent intersections on ramps)
+      let nearRiver = false;
+      const riverBuffer = 60; // 60m buffer from river center (covers bank + potential bridge ramp)
+      const rivers = this.waterBodies.filter(w => w.type === 'river');
+
+      for (const river of rivers) {
+        // Quick check against river bounding box could be added here for performance if needed
+        for (let i = 0; i < river.points.length - 1; i++) {
+          const r1 = river.points[i]!;
+          const r2 = river.points[i + 1]!;
+          const distToRiverSegment = this.pointToSegmentDistance(point.x, point.z, r1.x, r1.z, r2.x, r2.z);
+          if (distToRiverSegment < riverBuffer) {
+            nearRiver = true;
+            break;
+          }
+        }
+        if (nearRiver) break;
+      }
+      if (nearRiver) continue;
+
       const dist = Math.sqrt((pos.x - point.x) ** 2 + (pos.z - point.z) ** 2);
       if (dist < closestDist) {
         closestDist = dist;
@@ -1878,9 +1994,10 @@ export class MapGenerator {
   private createRoadBetweenPoints(
     start: { x: number; z: number },
     end: { x: number; z: number },
-    type: RoadType
+    type: RoadType,
+    bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }> = []
   ): Road {
-    const points = this.generateSmoothBezierPath(start, end, type, []);
+    const points = this.generateSmoothBezierPath(start, end, type, bridgeAvoidanceZones);
 
     return {
       id: `road_${this.roadIdCounter++}`,
@@ -1898,7 +2015,8 @@ export class MapGenerator {
    */
   private generateTownStreets(
     town: { x: number; z: number; radius: number; size: SettlementSize },
-    existingRoads: Road[]
+    existingRoads: Road[],
+    bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
     const streets: Road[] = [];
 
@@ -1931,12 +2049,12 @@ export class MapGenerator {
       const targetPoint = town.size === 'hamlet'
         ? { x: town.x, z: town.z }
         : {
-            x: town.x + Math.cos(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
-            z: town.z + Math.sin(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
-          };
+          x: town.x + Math.cos(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
+          z: town.z + Math.sin(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
+        };
 
       // Create a single connecting road
-      const connectionRoad = this.createOrganicStreet(connectionPoint, targetPoint, roadType);
+      const connectionRoad = this.createOrganicStreet(connectionPoint, targetPoint, roadType, bridgeAvoidanceZones);
       streets.push(connectionRoad);
     }
 
@@ -1950,9 +2068,10 @@ export class MapGenerator {
   private createOrganicStreet(
     start: { x: number; z: number },
     end: { x: number; z: number },
-    type: RoadType = 'town'
+    type: RoadType = 'town',
+    bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }> = []
   ): Road {
-    const points = this.generateSmoothBezierPath(start, end, type, []);
+    const points = this.generateSmoothBezierPath(start, end, type, bridgeAvoidanceZones);
 
     return {
       id: `road_${this.roadIdCounter++}`,
@@ -2850,27 +2969,27 @@ export class MapGenerator {
   private isTerrainSuitableForCaptureZone(
     worldX: number,
     worldZ: number,
-    radius: number
+    width: number,
+    height: number
   ): boolean {
     // Sample terrain at several points within the capture zone footprint
-    const numSamples = 12; // Sample at 12 points in a circle plus center
+    // Check center, corners, and midpoints of edges
+    const positions = [
+      { x: worldX, z: worldZ }, // Center
+      { x: worldX - width / 2, z: worldZ - height / 2 }, // Top-left
+      { x: worldX + width / 2, z: worldZ - height / 2 }, // Top-right
+      { x: worldX - width / 2, z: worldZ + height / 2 }, // Bottom-left
+      { x: worldX + width / 2, z: worldZ + height / 2 }, // Bottom-right
+      { x: worldX, z: worldZ - height / 2 }, // Top-mid
+      { x: worldX, z: worldZ + height / 2 }, // Bottom-mid
+      { x: worldX - width / 2, z: worldZ }, // Left-mid
+      { x: worldX + width / 2, z: worldZ }, // Right-mid
+    ];
+
     const elevations: number[] = [];
 
-    // Check center point
-    const centerTerrain = this.getTerrainAt(worldX, worldZ);
-    if (!centerTerrain) return false;
-    if (centerTerrain.type === 'water' || centerTerrain.type === 'river') {
-      return false;
-    }
-    elevations.push(centerTerrain.elevation);
-
-    // Check points around the perimeter
-    for (let i = 0; i < numSamples; i++) {
-      const angle = (i / numSamples) * Math.PI * 2;
-      const sampleX = worldX + Math.cos(angle) * radius;
-      const sampleZ = worldZ + Math.sin(angle) * radius;
-
-      const terrain = this.getTerrainAt(sampleX, sampleZ);
+    for (const pos of positions) {
+      const terrain = this.getTerrainAt(pos.x, pos.z);
       if (!terrain) continue;
 
       // Reject if any point is water or river
@@ -2880,32 +2999,18 @@ export class MapGenerator {
       elevations.push(terrain.elevation);
     }
 
-    // Also check at half radius for better coverage
-    for (let i = 0; i < numSamples / 2; i++) {
-      const angle = (i / (numSamples / 2)) * Math.PI * 2;
-      const sampleX = worldX + Math.cos(angle) * (radius * 0.5);
-      const sampleZ = worldZ + Math.sin(angle) * (radius * 0.5);
-
-      const terrain = this.getTerrainAt(sampleX, sampleZ);
-      if (!terrain) continue;
-
-      if (terrain.type === 'water' || terrain.type === 'river') {
-        return false;
-      }
-      elevations.push(terrain.elevation);
-    }
+    if (elevations.length === 0) return false;
 
     // Check elevation variance - reject mountain peaks with steep slopes
-    if (elevations.length > 1) {
-      const minElevation = Math.min(...elevations);
-      const maxElevation = Math.max(...elevations);
-      const elevationVariance = maxElevation - minElevation;
+    const minElevation = Math.min(...elevations);
+    const maxElevation = Math.max(...elevations);
+    const elevationVariance = maxElevation - minElevation;
 
-      // Allow more variance for larger zones, but cap at 15m
-      const maxAllowedVariance = Math.min(15, radius * 0.5);
-      if (elevationVariance > maxAllowedVariance) {
-        return false; // Too steep (likely mountain peak)
-      }
+    // Allow more variance for larger zones, but cap at 15m
+    const maxDim = Math.max(width, height);
+    const maxAllowedVariance = Math.min(15, maxDim * 0.5);
+    if (elevationVariance > maxAllowedVariance) {
+      return false; // Too steep (likely mountain peak)
     }
 
     return true;
@@ -2918,16 +3023,17 @@ export class MapGenerator {
   private findValidCaptureZonePosition(
     targetX: number,
     targetZ: number,
-    radius: number,
+    width: number,
+    height: number,
     maxSearchRadius: number
   ): { x: number; z: number } | null {
     // First check if target position is valid
-    if (this.isTerrainSuitableForCaptureZone(targetX, targetZ, radius)) {
+    if (this.isTerrainSuitableForCaptureZone(targetX, targetZ, width, height)) {
       return { x: targetX, z: targetZ };
     }
 
     // Search in expanding rings
-    const searchStep = radius * 0.5;
+    const searchStep = Math.min(width, height) * 0.5;
     const numAngles = 8;
 
     for (let searchDist = searchStep; searchDist <= maxSearchRadius; searchDist += searchStep) {
@@ -2937,12 +3043,13 @@ export class MapGenerator {
         const testZ = targetZ + Math.sin(angle) * searchDist;
 
         // Stay within map bounds
-        const margin = radius + 10;
-        if (Math.abs(testX) > this.width / 2 - margin || Math.abs(testZ) > this.height / 2 - margin) {
+        const marginX = width / 2 + 10;
+        const marginZ = height / 2 + 10;
+        if (Math.abs(testX) > this.width / 2 - marginX || Math.abs(testZ) > this.height / 2 - marginZ) {
           continue;
         }
 
-        if (this.isTerrainSuitableForCaptureZone(testX, testZ, radius)) {
+        if (this.isTerrainSuitableForCaptureZone(testX, testZ, width, height)) {
           return { x: testX, z: testZ };
         }
       }
@@ -2956,25 +3063,45 @@ export class MapGenerator {
    */
   private getObjectiveName(type: ObjectiveType): string {
     const names: Record<ObjectiveType, string[]> = {
+      // Generic objectives
+      radio_tower: ['Radio Tower', 'Signal Relay', 'Comms Outpost', 'Antenna Hill'],
+      supply_cache: ['Supply Cache', 'Logistics Dump', 'Storage Site', 'Fuel Reserve'],
+      bunker: ['Fortified Bunker', 'Command Post', 'Observation Bunker', 'Defensive Node'],
+      hq_bunker: ['Command HQ', 'Strategic Command', 'Underground Base', 'General Staff HQ'],
+      radar_station: ['Radar Array', 'Early Warning Site', 'Scanning Station', 'Signal Intelligence'],
+      supply_depot: ['Main Supply Depot', 'Logistics Hub', 'Regional Warehouse', 'Army Supply Base'],
+      vehicle_park: ['Motor Pool', 'Armor Reserve', 'Vehicle Staging', 'Transport Hub'],
+      comms_array: ['Satellite Uplink', 'Global Comms Node', 'Encryption Center', 'Network Hub'],
+
+      // Settlement objectives (common for larger zones)
+      hamlet: ['Crossroads Hamlet', 'Rural Hamlet', 'Farmstead Cluster', 'Countryside Hamlet'],
+      village: ['Village Center', 'Market Village', 'River Village', 'Hillside Village'],
+      town: ['County Town', 'Regional Hub', 'Market Town', 'Provincial Capital'],
+      city: ['City Center', 'Metropolitan District', 'Urban Core', 'Capital City'],
+
       // Rainforest objectives
       oil_field: ['Oil Derrick Alpha', 'Petroleum Site', 'Refinery Complex', 'Drilling Station'],
       logging_camp: ['Logging Camp', 'Timber Yard', 'Sawmill', 'Forest Station'],
       indigenous_settlement: ['Village Site', 'Sacred Grove', 'River Settlement', 'Tribal Outpost'],
+      temple_complex: ['Ancient Temple', 'Ruined Plaza', 'Jungle Shrine', 'Sacred Site'],
 
       // Tundra objectives
       research_station: ['Research Base', 'Science Outpost', 'Observatory', 'Survey Station'],
       mine: ['Mining Complex', 'Extraction Site', 'Ore Processing', 'Quarry'],
       fuel_depot: ['Fuel Depot', 'Supply Cache', 'Heating Station', 'Energy Hub'],
+      bio_dome: ['Research Dome', 'Artificial Biosphere', 'Arctic Habitat', 'Life Support Station'],
 
       // Mesa objectives
       mining_operation: ['Mining Operation', 'Copper Mine', 'Extraction Point', 'Mineral Site'],
       observation_post: ['Observation Post', 'Lookout Point', 'Survey Station', 'Watch Tower'],
       water_well: ['Water Well', 'Oasis', 'Aquifer Station', 'Water Pump'],
+      harvester_rig: ['Extraction Rig', 'Mineral Harvester', 'Resource Platform', 'Mesa Rig'],
 
       // Mountains objectives
       communication_tower: ['Communication Tower', 'Radio Station', 'Signal Relay', 'Antenna Array'],
       ski_resort: ['Ski Resort', 'Mountain Lodge', 'Alpine Station', 'Recreation Center'],
       military_base: ['Military Base', 'Mountain Fortress', 'Strategic Point', 'Command Post'],
+      orbital_uplink: ['Orbital Uplink', 'Space Comms', 'High-Altitude Relay', 'Satellite Ground Station'],
 
       // Plains objectives
       grain_silo: ['Grain Elevator', 'Silo Complex', 'Storage Depot', 'Harvest Center'],
@@ -2985,9 +3112,11 @@ export class MapGenerator {
       processing_plant: ['Processing Plant', 'Food Factory', 'Packaging Center', 'Distribution Hub'],
       irrigation_station: ['Irrigation Station', 'Water Control', 'Pump Station', 'Canal Hub'],
       market_town: ['Market Town', 'Trading Post', 'Commerce Center', 'Exchange'],
+      windmill: ['Old Windmill', 'Stone Mill', 'Rustic Windmill', 'Flour Mill'],
 
       // Cities objectives
       city_district: ['Financial District', 'Industrial Zone', 'Shopping Quarter', 'Old Town', 'Business Center', 'Waterfront', 'Tech Campus'],
+      cooling_tower: ['Power Plant Coolant', 'Reactor Cooling', 'Industrial Vent', 'Ventilation Stack'],
     };
 
     const options = names[type];
@@ -2998,87 +3127,147 @@ export class MapGenerator {
     const sizeConfig = MAP_SIZES[this.size];
     const numZones = sizeConfig.zones;
     const zones: CaptureZone[] = [];
+    const minZoneDistance = 60; // Minimum distance between zone edges
 
-    // Scale zone radius with map size
-    const mapScale = Math.max(this.width, this.height) / 300;
-    const baseRadius = Math.max(20, 15 * Math.sqrt(mapScale));
-    const centerRadius = Math.max(25, 20 * Math.sqrt(mapScale));
+    // Scale factors
+    const mapRadius = Math.min(this.width, this.height) * 0.45; // Safe generating area
 
-    // Maximum search radius for finding valid positions
-    const maxSearchRadius = Math.min(this.width, this.height) * 0.15;
+    // Helper to check for overlaps with existing zones
+    const checkOverlap = (x: number, z: number, w: number, h: number): boolean => {
+      for (const zone of zones) {
+        // loose AABB check with buffer
+        const xDist = Math.abs(x - zone.x);
+        const zDist = Math.abs(z - zone.z);
+        const minX = (w + zone.width) / 2 + minZoneDistance;
+        const minZ = (h + zone.height) / 2 + minZoneDistance;
 
-    // Get biome-specific objective types and shuffle them
-    const objectiveTypes = this.rng.shuffle([...this.biomeConfig.objectiveTypes]);
-    // Extend array if we need more zones than objective types
-    while (objectiveTypes.length < numZones) {
-      objectiveTypes.push(...this.biomeConfig.objectiveTypes);
-    }
+        if (xDist < minX && zDist < minZ) {
+          return true; // Overlap
+        }
+      }
+      return false;
+    };
 
-    // Central zone
-    const centerOffset = Math.max(20, this.width * 0.03);
-    const centerTargetX = this.rng.nextFloat(-centerOffset, centerOffset);
-    const centerTargetZ = this.rng.nextFloat(-centerOffset, centerOffset);
-
-    const centerPos = this.findValidCaptureZonePosition(
-      centerTargetX,
-      centerTargetZ,
-      centerRadius,
-      maxSearchRadius
-    );
+    // 1. PLACE CENTRAL OBJECTIVE (Large, low value)
+    const centerW = this.rng.nextFloat(100, 210);
+    const centerH = this.rng.nextFloat(100, 210);
+    const centerPos = this.findHighGroundPosition(0, 0, 100, centerW, centerH);
 
     if (centerPos) {
-      const objectiveType = objectiveTypes[0]!;
       zones.push({
-        id: 'zone_center',
-        name: this.getObjectiveName(objectiveType),
+        id: 'zone_central',
+        name: this.getObjectiveName('radio_tower'),
         x: centerPos.x,
         z: centerPos.z,
-        radius: centerRadius,
-        pointsPerTick: 3,
+        width: centerW,
+        height: centerH,
+        pointsPerTick: 1, // Central, easy to find, hard to hold but low value
         owner: 'neutral',
         captureProgress: 0,
-        objectiveType,
-        visualVariant: this.rng.nextInt(0, 2),
+        objectiveType: 'radio_tower',
+        visualVariant: 0,
       });
     }
 
-    // Distribute remaining zones
-    const angleStep = (Math.PI * 2) / (numZones - 1);
-    const distRadius = Math.min(this.width, this.height) / 3;
+    // 2. PLACE REMAINING ZONES
+    let failures = 0;
+    const maxFailures = 50;
+    const biomeObjectives = this.rng.shuffle([...this.biomeConfig.objectiveTypes]);
+    let biomeObjIndex = 0;
 
-    for (let i = 1; i < numZones; i++) {
-      const angle = angleStep * (i - 1) + this.rng.nextFloat(-0.3, 0.3);
-      const dist = distRadius * this.rng.nextFloat(0.7, 1.0);
+    while (zones.length < numZones && failures < maxFailures) {
+      // Random position in the map
+      const angle = this.rng.nextFloat(0, Math.PI * 2);
+      // Distribute from near center to edge, but push outwards for variety
+      const distPercent = Math.sqrt(this.rng.nextFloat(0.1, 1.0)); // Bias away from center
+      const dist = distPercent * mapRadius;
 
       const targetX = Math.cos(angle) * dist;
       const targetZ = Math.sin(angle) * dist;
 
-      const validPos = this.findValidCaptureZonePosition(
-        targetX,
-        targetZ,
-        baseRadius,
-        maxSearchRadius
-      );
+      // Determine size and points based on distance
+      let width: number, height: number, points: number;
 
-      if (validPos) {
-        const objectiveType = objectiveTypes[i]!;
-        zones.push({
-          id: `zone_${i}`,
-          name: this.getObjectiveName(objectiveType),
-          x: validPos.x,
-          z: validPos.z,
-          radius: baseRadius,
-          pointsPerTick: 2,
-          owner: 'neutral',
-          captureProgress: 0,
-          objectiveType,
-          visualVariant: this.rng.nextInt(0, 2),
-        });
+      if (distPercent < 0.3) {
+        // Inner ring: Large size, low points
+        width = this.rng.nextFloat(80, 180);
+        height = this.rng.nextFloat(80, 180);
+        points = 1;
+      } else if (distPercent < 0.6) {
+        // Mid ring: Medium size, medium points
+        width = this.rng.nextFloat(60, 150);
+        height = this.rng.nextFloat(60, 150);
+        points = 2;
+      } else {
+        // Outer ring: Small size, high points
+        width = this.rng.nextFloat(40, 105);
+        height = this.rng.nextFloat(40, 105);
+        points = 3;
       }
+
+      // Try to find valid terrain
+      const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100) as { x: number; z: number } | null;
+
+      if (pos) {
+        // Check for overlap with buffer
+        if (!checkOverlap(pos.x, pos.z, width, height)) {
+          const objType = biomeObjectives[biomeObjIndex % biomeObjectives.length]!;
+          biomeObjIndex++;
+
+          zones.push({
+            id: `zone_${zones.length}`,
+            name: this.getObjectiveName(objType),
+            x: pos.x,
+            z: pos.z,
+            width: width,
+            height: height,
+            pointsPerTick: points,
+            owner: 'neutral',
+            captureProgress: 0,
+            objectiveType: objType,
+            visualVariant: this.rng.nextInt(0, 2),
+          });
+          failures = 0; // Reset failures on success
+        } else {
+          failures++;
+        }
+      } else {
+        failures++;
+      }
+    }
+
+    if (zones.length < numZones) {
+      console.warn(`Could only generate ${zones.length}/${numZones} capture zones due to placement constraints.`);
     }
 
     return zones;
   }
+
+  /**
+   * Find a position with high elevation within a search area
+   */
+  private findHighGroundPosition(centerX: number, centerZ: number, searchRadius: number, width: number, height: number): { x: number; z: number } | null {
+    let bestPos = { x: centerX, z: centerZ };
+    let maxElevation = -Infinity;
+    const samples = 12;
+
+    for (let i = 0; i < samples; i++) {
+      const angle = (i / samples) * Math.PI * 2;
+      const dist = this.rng.nextFloat(0, searchRadius);
+      const x = centerX + Math.cos(angle) * dist;
+      const z = centerZ + Math.sin(angle) * dist;
+
+      const elev = this.getElevationAt(x, z);
+      if (elev > maxElevation && this.isTerrainSuitableForCaptureZone(x, z, width, height)) {
+        maxElevation = elev;
+        bestPos = { x, z };
+      }
+    }
+
+    return maxElevation > -Infinity ? bestPos : null;
+  }
+
+
 
   // Old generateBuildings, generateTown, and generateRoadBuildings methods
   // have been replaced by the settlement system (see generateSettlements() and
@@ -3217,7 +3406,7 @@ export class MapGenerator {
 
         // Interpolate between the two directional radii
         const baseEffectiveRadius = directionalRadii[lowerIndex]! * (1 - smoothBlend) +
-                                    directionalRadii[upperIndex]! * smoothBlend;
+          directionalRadii[upperIndex]! * smoothBlend;
 
         // Add fine detail noise for jagged edges (smaller scale variation)
         const fineNoise1 = this.pseudoNoise(
@@ -3235,8 +3424,8 @@ export class MapGenerator {
         if (dist < effectiveRadius) {
           // Check if not on road, building, or water
           if (!this.isOnRoad(worldX, worldZ, roads) &&
-              !this.isOnBuilding(worldX, worldZ, buildings) &&
-              !this.isOnWater(worldX, worldZ)) {
+            !this.isOnBuilding(worldX, worldZ, buildings) &&
+            !this.isOnWater(worldX, worldZ)) {
             this.terrain[z]![x]!.type = 'forest';
             this.terrain[z]![x]!.cover = 'heavy';
           }
@@ -3269,8 +3458,8 @@ export class MapGenerator {
 
           // Only process non-forest cells
           if (cell.type === 'forest' || cell.type === 'road' ||
-              cell.type === 'building' || cell.type === 'river' ||
-              cell.type === 'water') {
+            cell.type === 'building' || cell.type === 'river' ||
+            cell.type === 'water') {
             continue;
           }
 
@@ -3321,8 +3510,8 @@ export class MapGenerator {
 
               // Make sure not on road, building, or water
               if (!this.isOnRoad(worldX, worldZ, roads) &&
-                  !this.isOnBuilding(worldX, worldZ, buildings) &&
-                  !this.isOnWater(worldX, worldZ)) {
+                !this.isOnBuilding(worldX, worldZ, buildings) &&
+                !this.isOnWater(worldX, worldZ)) {
                 cellsToForest.push({ x, z });
               }
             }
@@ -3870,9 +4059,9 @@ export class MapGenerator {
     // Generate lake (70% chance)
     const lake = this.generateLake(deploymentZones);
 
-    // Generate river system (always if lake exists, 80% otherwise)
+    // Generate river system (always if lake exists, 90% otherwise - increased from 80%)
     const hasLake = lake !== null;
-    if (hasLake || this.rng.next() < 0.8) {
+    if (hasLake || this.rng.next() < 0.9) {
       this.generateRiverSystem(lake);
     }
 
@@ -4114,8 +4303,8 @@ export class MapGenerator {
     this.waterBodies.push(mainRiver);
     this.paintRiverToTerrain(mainRiver);
 
-    if (this.rng.next() < 0.5) {
-      const numTributaries = this.rng.nextInt(1, 2);
+    if (this.rng.next() < 0.8) { // Increased from 0.5
+      const numTributaries = this.rng.nextInt(1, 3); // Increased from 1-2
       for (let i = 0; i < numTributaries; i++) {
         const tributary = this.generateTributary(mainRiver);
         if (tributary) {
@@ -4163,26 +4352,33 @@ export class MapGenerator {
     const tributaryWidth = this.rng.nextFloat(4, 8) * Math.sqrt(mapScale);
 
     const mainPoints = mainRiver.points;
-    const joinIndex = this.rng.nextInt(
-      Math.floor(mainPoints.length * 0.3),
-      Math.floor(mainPoints.length * 0.7)
-    );
-    const joinPoint = mainPoints[joinIndex]!;
+    // Try multiple join points to find a valid one
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const joinIndex = this.rng.nextInt(
+        Math.floor(mainPoints.length * 0.2), // Expanded search range
+        Math.floor(mainPoints.length * 0.8)
+      );
+      const joinPoint = mainPoints[joinIndex]!;
 
-    const edges = ['north', 'south', 'east', 'west'] as const;
-    const startEdge = edges[this.rng.nextInt(0, 3)]!;
-    const start = this.getEdgePoint(startEdge);
+      const edges = ['north', 'south', 'east', 'west'] as const;
+      const startEdge = edges[this.rng.nextInt(0, 3)]!;
+      const start = this.getEdgePoint(startEdge);
 
-    const dist = Math.sqrt((start.x - joinPoint.x) ** 2 + (start.z - joinPoint.z) ** 2);
-    if (dist < Math.min(this.width, this.height) * 0.2) return null;
+      const dist = Math.sqrt((start.x - joinPoint.x) ** 2 + (start.z - joinPoint.z) ** 2);
 
-    const points = this.generateMeanderingPath(start, joinPoint);
-    return {
-      id: `tributary_${this.waterBodies.length}`,
-      type: 'river',
-      points,
-      width: tributaryWidth,
-    };
+      // Minimum length check (15% of map size)
+      if (dist > Math.min(this.width, this.height) * 0.15) {
+        const points = this.generateMeanderingPath(start, joinPoint);
+        return {
+          id: `tributary_${this.waterBodies.length}`,
+          type: 'river',
+          points,
+          width: tributaryWidth,
+        };
+      }
+    }
+
+    return null;
   }
 
   private getEdgePoint(edge: 'north' | 'south' | 'east' | 'west'): { x: number; z: number } {
@@ -4266,8 +4462,9 @@ export class MapGenerator {
 
     // If we found an intersection, extend it a bit further into the lake
     // This creates a more natural connection where the river enters the lake
+    // Increased to 25m to ensure it cuts through the 15m lake bank completely
     if (closestIntersection) {
-      const extensionDistance = 8; // Push 8m further into the lake
+      const extensionDistance = 25; // Push 25m further into the lake
       return {
         x: closestIntersection.x + dirX * extensionDistance,
         z: closestIntersection.z + dirZ * extensionDistance,
@@ -4406,21 +4603,132 @@ export class MapGenerator {
           minDist = Math.min(minDist, dist);
         }
 
-        if (minDist < halfWidth) {
-          // Inside river - set to water
-          this.terrain[z]![x]!.type = 'river';
-          this.terrain[z]![x]!.cover = 'none';
+        const flatBuffer = 2; // Extra flat area to ensure edges aren't bumpy
+        if (minDist < halfWidth + flatBuffer) {
+          // Inside river - set to water and flat elevation
+          if (minDist < halfWidth) {
+            this.terrain[z]![x]!.type = 'river';
+            this.terrain[z]![x]!.cover = 'none';
+          }
           this.terrain[z]![x]!.elevation = 0;
         } else if (minDist < halfWidth + bankWidth) {
           // On river bank - create gradual slope
           const currentElevation = this.terrain[z]![x]!.elevation;
-          const distFromEdge = minDist - halfWidth;
-          const slopeFactor = distFromEdge / bankWidth; // 0 at river edge, 1 at bankWidth distance
+          const distFromEdge = minDist - (halfWidth + flatBuffer);
+          const effectiveBankWidth = bankWidth - flatBuffer;
+          const slopeFactor = Math.max(0, distFromEdge / effectiveBankWidth); // 0 at flat edge, 1 at bank end
 
           // Smooth cubic interpolation for natural slope
           const smoothFactor = slopeFactor * slopeFactor * (3 - 2 * slopeFactor);
           const targetElevation = Math.max(0, currentElevation * smoothFactor);
           this.terrain[z]![x]!.elevation = targetElevation;
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if a point on a road is currently on a bridge
+   */
+  private isPointOnBridge(x: number, z: number, roadId?: string): boolean {
+    if (!roadId) return false;
+    const roadBridges = this.bridgeElevations.get(roadId);
+    if (!roadBridges) return false;
+    for (const bridge of roadBridges) {
+      const dist = Math.sqrt((x - bridge.x) ** 2 + (z - bridge.z) ** 2);
+      if (dist < bridge.length / 2) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generate farm fields (paddocks) around agricultural buildings
+   * Creates rectangular or organic fields with varied crop colors
+   */
+  private generateFarmFields(buildings: Building[]): void {
+    const farmBuildings = buildings.filter(b =>
+      b.category === 'agricultural' ||
+      b.subtype === 'farmhouse' ||
+      b.subtype === 'barn'
+    );
+
+    const fieldVariants = 4; // 0=Green, 1=Wheat, 2=Pasture, 3=Dirt
+
+    for (const farm of farmBuildings) {
+      // Generate 2-4 fields per farm
+      const numFields = this.rng.nextInt(2, 4);
+
+      for (let i = 0; i < numFields; i++) {
+        // Random dimensions (20-60m)
+        const width = this.rng.nextInt(3, 8) * this.cellSize;
+        const length = this.rng.nextInt(4, 10) * this.cellSize;
+
+        // Offset from farm building (random direction)
+        const angle = this.rng.next() * Math.PI * 2;
+        const dist = this.rng.nextFloat(20, 60);
+
+        const cx = farm.x + Math.cos(angle) * dist;
+        const cz = farm.z + Math.sin(angle) * dist;
+
+        // Determine rotation (align with farm or random)
+        const rotation = (this.rng.next() < 0.7 && farm.rotation !== undefined) ? farm.rotation : this.rng.next() * Math.PI * 2;
+
+        // Pick a crop variant
+        const variant = this.rng.nextInt(0, fieldVariants - 1);
+
+        // Rasterize rotated rectangle into grid
+        this.paintField(cx, cz, width, length, rotation, variant);
+      }
+    }
+  }
+
+  /**
+   * Paint a rotated rectangular field onto the terrain
+   */
+  private paintField(cx: number, cz: number, width: number, length: number, rotation: number, variant: number): void {
+    const cosR = Math.cos(-rotation);
+    const sinR = Math.sin(-rotation);
+
+    // Calculate bounding box to minimize iteration
+    const radius = Math.sqrt(width * width + length * length) / 2;
+    const minX = cx - radius;
+    const maxX = cx + radius;
+    const minZ = cz - radius;
+    const maxZ = cz + radius;
+
+    const minGridX = Math.max(0, Math.floor((minX + this.width / 2) / this.cellSize));
+    const maxGridX = Math.min(this.terrain[0]!.length - 1, Math.ceil((maxX + this.width / 2) / this.cellSize));
+    const minGridZ = Math.max(0, Math.floor((minZ + this.height / 2) / this.cellSize));
+    const maxGridZ = Math.min(this.terrain.length - 1, Math.ceil((maxZ + this.height / 2) / this.cellSize));
+
+    for (let z = minGridZ; z <= maxGridZ; z++) {
+      for (let x = minGridX; x <= maxGridX; x++) {
+        const cell = this.terrain[z]![x]!;
+
+        // Don't overwrite existing important features
+        if (cell.type === 'road' || cell.type === 'river' || cell.type === 'water' || cell.type === 'building' || cell.type === 'forest') {
+          continue;
+        }
+
+        const worldX = x * this.cellSize - this.width / 2;
+        const worldZ = z * this.cellSize - this.height / 2;
+
+        // Transform point to local field space
+        const dx = worldX - cx;
+        const dz = worldZ - cz;
+
+        const localX = dx * cosR - dz * sinR;
+        const localZ = dx * sinR + dz * cosR;
+
+        // Check if inside rectangle
+        if (Math.abs(localX) <= width / 2 && Math.abs(localZ) <= length / 2) {
+          // Add some noise to edges for natural look
+          const edgeDist = Math.min(width / 2 - Math.abs(localX), length / 2 - Math.abs(localZ));
+          if (edgeDist > 1 || this.rng.next() > 0.5) {
+            cell.type = 'field';
+            cell.variant = variant;
+            cell.cover = 'none'; // Fields have no heavy cover
+          }
         }
       }
     }
@@ -4503,8 +4811,21 @@ export class MapGenerator {
             // Use river.width * 1.5 + 15 to ensure it covers the painted water area
             const bridgeLength = Math.max(river.width * 1.5 + 15, 25);
 
-            // Get elevation at crossing point for the bridge
-            const bridgeElevation = this.getTerrainElevationAt(crossing.x, crossing.z);
+            // Calculate bridge endpoints to sample bank elevation
+            const bridgeHalfLength = bridgeLength / 2;
+            const startX = crossing.x - Math.cos(angle) * bridgeHalfLength;
+            const startZ = crossing.z - Math.sin(angle) * bridgeHalfLength;
+            const endX = crossing.x + Math.cos(angle) * bridgeHalfLength;
+            const endZ = crossing.z + Math.sin(angle) * bridgeHalfLength;
+
+            const startElev = this.getTerrainElevationAt(startX, startZ);
+            const endElev = this.getTerrainElevationAt(endX, endZ);
+            const centerElev = this.getTerrainElevationAt(crossing.x, crossing.z);
+
+            // Bridge height should be the higher of the two banks, plus a small clearance
+            // Also ensure it's at least 3m above the water/riverbed
+            let bridgeElevation = Math.max(startElev, endElev) + 0.5;
+            bridgeElevation = Math.max(bridgeElevation, centerElev + 3.0);
 
             const bridge: Bridge = {
               id: `bridge_${this.bridges.length}`,
@@ -4513,6 +4834,7 @@ export class MapGenerator {
               length: bridgeLength,
               width: road.width + 2, // Slightly wider than road for visual connection
               angle,
+              elevation: bridgeElevation,
             };
             if (road.id) {
               bridge.roadId = road.id;
@@ -4577,6 +4899,7 @@ export class MapGenerator {
               length: bridgeLength,
               width: higherRoad.width + 2,
               angle,
+              elevation: higherElevation,
             };
 
             if (higherRoad.id) {
@@ -4674,13 +4997,20 @@ export class MapGenerator {
           const px = p1.x + dx * t;
           const pz = p1.z + dz * t;
 
+          // Skip terrain grading if this point is on a bridge
+          // Bridges should fly OVER the terrain, so we don't want to raise the ground level under them
+          // The road ramping happens before/after the bridge structure
+          if (this.isPointOnBridge(px, pz, road.id)) {
+            continue;
+          }
+
           // Get smoothed road elevation from profile (not raw terrain)
           const roadElevation = this.getRoadElevationFromProfile(px, pz, road.points, elevationProfile);
 
           // Grade width based on road type
           const gradeWidth = road.type === 'interstate' ? 30 :
-                            road.type === 'highway' ? 25 :
-                            road.type === 'town' ? 20 : 15;
+            road.type === 'highway' ? 25 :
+              road.type === 'town' ? 20 : 15;
 
           // Apply directional grading that cuts into hillsides
           this.applyDirectionalTerrainGrading(px, pz, perpX, perpZ, roadElevation, road.width, gradeWidth);

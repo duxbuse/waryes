@@ -11,6 +11,7 @@
 import type { Game } from '../../core/Game';
 import type { Building } from '../../data/types';
 import type { Unit } from '../units/Unit';
+import { getWeaponById } from '../../data/factions';
 import * as THREE from 'three';
 
 interface GarrisonedBuilding {
@@ -24,6 +25,9 @@ interface GarrisonedBuilding {
 export class BuildingManager {
   private readonly game: Game;
   private readonly garrisonedBuildings: Map<Building, GarrisonedBuilding> = new Map();
+  // Spatial lookup for buildings (key: "x,z" grid coord)
+  private readonly buildingGrid: Map<string, Building> = new Map();
+  private readonly cellSize = 2; // Match grid resolution (2m is fine for building bounds)
 
   constructor(game: Game) {
     this.game = game;
@@ -56,7 +60,39 @@ export class BuildingManager {
           garrisonedMaterial,
         });
       }
+
+
+      // Populate spatial grid
+      this.addBuildingToGrid(building);
     }
+  }
+
+  private addBuildingToGrid(building: Building): void {
+    const halfWidth = building.width / 2;
+    const halfDepth = building.depth / 2;
+
+    // Calculate grid bounds
+    const startX = Math.floor((building.x - halfWidth) / this.cellSize);
+    const endX = Math.floor((building.x + halfWidth) / this.cellSize);
+    const startZ = Math.floor((building.z - halfDepth) / this.cellSize);
+    const endZ = Math.floor((building.z + halfDepth) / this.cellSize);
+
+    for (let x = startX; x <= endX; x++) {
+      for (let z = startZ; z <= endZ; z++) {
+        const key = `${x},${z}`;
+        // Store reference. If overlapping, last one wins (acceptable for now)
+        this.buildingGrid.set(key, building);
+      }
+    }
+  }
+
+  /**
+   * Get building at world position
+   */
+  getBuildingAt(position: THREE.Vector3): Building | null {
+    const cellX = Math.floor(position.x / this.cellSize);
+    const cellZ = Math.floor(position.z / this.cellSize);
+    return this.buildingGrid.get(`${cellX},${cellZ}`) ?? null;
   }
 
   /**
@@ -111,8 +147,72 @@ export class BuildingManager {
     // Update visuals
     this.updateBuildingVisuals(garrisonData);
 
+    // Apply building bonuses to unit (optional, but good for tracking)
+    // CombatManager will use these directly from the building anyway
+
     console.log(`${unit.name} garrisoned in building. Occupants: ${garrisonData.occupants.length}/${building.garrisonCapacity}`);
     return true;
+  }
+
+  /**
+   * Spawn a defensive structure (Trench or Fighting Position)
+   */
+  spawnDefensiveStructure(unit: Unit): Building | null {
+    const isHeavy = unit.getWeapons().some(w => {
+      const data = getWeaponById(w.weaponId);
+      return (data as any)?.tags?.includes('heavy');
+    });
+
+    const type = isHeavy ? 'fighting_position' : 'trench';
+    const building: Building = {
+      x: unit.position.x,
+      z: unit.position.z,
+      width: isHeavy ? 6 : 8,
+      depth: isHeavy ? 6 : 4,
+      height: 0.2, // Low profile
+      type: 'factory', // Fallback type
+      subtype: isHeavy ? 'warehouse' : 'workshop', // Fallback subtypes
+      garrisonCapacity: isHeavy ? 1 : 2,
+      defenseBonus: isHeavy ? 0.75 : 0.5,
+      stealthBonus: isHeavy ? 0.8 : 0.5,
+      rotation: unit.mesh.rotation.y,
+    };
+
+    // Create 3D representation
+    this.createDefensiveStructureMesh(building, type);
+
+    // Track it
+    if (this.game.currentMap) {
+      this.game.currentMap.buildings.push(building);
+    }
+    this.initialize([building]); // Add to garrisonedBuildings map
+
+    return building;
+  }
+
+  private createDefensiveStructureMesh(building: Building, type: 'trench' | 'fighting_position'): void {
+    const group = new THREE.Group();
+    group.position.set(building.x, 0, building.z);
+    group.rotation.y = building.rotation || 0;
+    group.userData['building'] = building;
+
+    const material = new THREE.MeshStandardMaterial({ color: 0x554433 }); // Dirt color
+
+    if (type === 'trench') {
+      // Small "L" or "W" shape (simplified for now as two boxes)
+      const box1 = new THREE.Mesh(new THREE.BoxGeometry(building.width, 0.2, 1), material);
+      box1.position.z = -1.5;
+      group.add(box1);
+      const box2 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, building.depth), material);
+      box2.position.x = building.width / 2 - 0.5;
+      group.add(box2);
+    } else {
+      // Fighting position: Box
+      const box = new THREE.Mesh(new THREE.BoxGeometry(building.width, 0.2, building.depth), material);
+      group.add(box);
+    }
+
+    this.game.scene.add(group);
   }
 
   /**
@@ -207,13 +307,14 @@ export class BuildingManager {
 
     // Split damage among occupants
     const splitDamage = damage / garrisonData.occupants.length;
+    const defenseBonus = building.defenseBonus ?? 0.5;
 
     // Iterate backwards in case units die
     for (let i = garrisonData.occupants.length - 1; i >= 0; i--) {
       const unit = garrisonData.occupants[i];
       if (unit) {
-        // Apply reduced damage (50% protection from garrison)
-        unit.takeDamage(splitDamage * 0.5);
+        // Apply reduced damage (using building's specific bonus)
+        unit.takeDamage(splitDamage * (1 - defenseBonus));
 
         // If unit died, remove from occupants
         if (unit.health <= 0) {

@@ -146,6 +146,7 @@ export interface TerrainCell {
   type: TerrainType;
   elevation: number;
   cover: CoverType;
+  variant?: number; // Visual variant (e.g. crop type for fields)
 }
 
 export type TerrainType = 'road' | 'field' | 'forest' | 'building' | 'river' | 'hill' | 'water';
@@ -154,15 +155,16 @@ export type CoverType = 'none' | 'light' | 'heavy' | 'full';
 // Biome types for map generation
 export type BiomeType = 'rainforest' | 'tundra' | 'mesa' | 'mountains' | 'plains' | 'farmland' | 'cities';
 
-// Strategic objective types for capture zones
 export type ObjectiveType =
-  | 'oil_field' | 'logging_camp' | 'indigenous_settlement'  // Rainforest
-  | 'research_station' | 'mine' | 'fuel_depot'  // Tundra
-  | 'mining_operation' | 'observation_post' | 'water_well'  // Mesa
-  | 'communication_tower' | 'ski_resort' | 'military_base'  // Mountains
-  | 'grain_silo' | 'wind_farm' | 'rail_junction'  // Plains
-  | 'processing_plant' | 'irrigation_station' | 'market_town'  // Farmland
-  | 'city_district';  // Cities
+  | 'radio_tower' | 'supply_cache' | 'bunker' | 'hq_bunker' | 'radar_station' | 'supply_depot' | 'vehicle_park' | 'comms_array' // Generic
+  | 'hamlet' | 'village' | 'town' | 'city' // Settlements (common for larger zones)
+  | 'oil_field' | 'logging_camp' | 'indigenous_settlement' | 'temple_complex' // Rainforest
+  | 'research_station' | 'mine' | 'fuel_depot' | 'bio_dome' // Tundra
+  | 'mining_operation' | 'observation_post' | 'water_well' | 'harvester_rig' // Mesa
+  | 'communication_tower' | 'ski_resort' | 'military_base' | 'orbital_uplink' // Mountains
+  | 'grain_silo' | 'wind_farm' | 'rail_junction' // Plains
+  | 'processing_plant' | 'irrigation_station' | 'market_town' | 'windmill' // Farmland
+  | 'city_district' | 'cooling_tower';  // Cities
 
 // Road types with standard lane widths (meters)
 export type RoadType = 'dirt' | 'town' | 'highway' | 'interstate' | 'bridge';
@@ -251,12 +253,12 @@ export const FEATURE_PARAMS: Record<TerrainFeatureType, {
   radiusRange: { min: number; max: number };
   radiusScaleWithMap: boolean;
 }> = {
-  hill:     { elevationRange: { min: 10, max: 30 },   radiusRange: { min: 30, max: 80 },   radiusScaleWithMap: true },
-  ridge:    { elevationRange: { min: 20, max: 50 },   radiusRange: { min: 20, max: 50 },   radiusScaleWithMap: true },
-  mountain: { elevationRange: { min: 50, max: 100 },  radiusRange: { min: 120, max: 300 }, radiusScaleWithMap: true },  // Wider base for more realistic mountains
-  valley:   { elevationRange: { min: -30, max: -10 }, radiusRange: { min: 40, max: 100 },  radiusScaleWithMap: true },
-  plateau:  { elevationRange: { min: 30, max: 60 },   radiusRange: { min: 40, max: 200 },  radiusScaleWithMap: true },  // Wide range for varied sizes, elongated by 3-7x in length
-  plains:   { elevationRange: { min: -5, max: 5 },    radiusRange: { min: 100, max: 300 }, radiusScaleWithMap: true },
+  hill: { elevationRange: { min: 10, max: 30 }, radiusRange: { min: 30, max: 80 }, radiusScaleWithMap: true },
+  ridge: { elevationRange: { min: 20, max: 50 }, radiusRange: { min: 20, max: 50 }, radiusScaleWithMap: true },
+  mountain: { elevationRange: { min: 50, max: 100 }, radiusRange: { min: 120, max: 300 }, radiusScaleWithMap: true },  // Wider base for more realistic mountains
+  valley: { elevationRange: { min: -30, max: -10 }, radiusRange: { min: 40, max: 100 }, radiusScaleWithMap: true },
+  plateau: { elevationRange: { min: 30, max: 60 }, radiusRange: { min: 40, max: 200 }, radiusScaleWithMap: true },  // Wide range for varied sizes, elongated by 3-7x in length
+  plains: { elevationRange: { min: -5, max: 5 }, radiusRange: { min: 100, max: 300 }, radiusScaleWithMap: true },
 };
 
 // Biome Configuration System
@@ -306,12 +308,12 @@ export type LayoutType = 'organic' | 'grid' | 'mixed';
 // Building categories and subtypes
 export type BuildingCategory = 'residential' | 'commercial' | 'industrial' | 'civic' | 'agricultural' | 'infrastructure';
 
-export type ResidentialType = 'cottage' | 'townhouse' | 'detached_house' | 'row_house' | 'apartment_block' | 'manor';
-export type CommercialType = 'shop' | 'inn' | 'market_hall' | 'hotel' | 'office_building';
-export type IndustrialType = 'workshop' | 'warehouse' | 'small_factory' | 'large_factory' | 'power_plant';
-export type CivicType = 'chapel' | 'church' | 'cathedral' | 'town_hall' | 'school' | 'hospital';
-export type AgriculturalType = 'farmhouse' | 'barn' | 'silo' | 'windmill' | 'stable';
-export type InfrastructureType = 'gas_station' | 'water_tower' | 'train_station' | 'fire_station' | 'police_station';
+export type ResidentialType = 'cottage' | 'townhouse' | 'detached_house' | 'row_house' | 'apartment_block' | 'manor' | 'tenement' | 'l_building';
+export type CommercialType = 'shop' | 'inn' | 'market_hall' | 'hotel' | 'office_building' | 'department_store' | 'skyscraper';
+export type IndustrialType = 'workshop' | 'warehouse' | 'small_factory' | 'large_factory' | 'power_plant' | 'warehouse_complex';
+export type CivicType = 'chapel' | 'church' | 'cathedral' | 'town_hall' | 'school' | 'hospital' | 'library' | 'clock_tower' | 'government_office';
+export type AgriculturalType = 'farmhouse' | 'barn' | 'silo' | 'windmill' | 'stable' | 'silo_cluster';
+export type InfrastructureType = 'gas_station' | 'water_tower' | 'train_station' | 'fire_station' | 'police_station' | 'radio_station';
 
 export type BuildingSubtype =
   | ResidentialType
@@ -335,6 +337,8 @@ export interface Building {
   subtype?: BuildingSubtype;
   floors?: number;
   garrisonCapacity: number;
+  defenseBonus?: number; // 0-1 (e.g., 0.5 = 50% damage reduction)
+  stealthBonus?: number; // 0-1 (e.g., 0.5 = 50% visibility)
   settlementId?: string; // Reference to parent settlement
   rotation?: number; // Rotation in radians
 }
@@ -347,6 +351,8 @@ export interface BuildingSpec {
   floors: number | string; // Can be "1 + tower" etc
   footprint: { width: number; depth: number };
   garrisonCapacity: number;
+  defenseBonus?: number;
+  stealthBonus?: number;
   allowedIn: SettlementSize[];
 }
 
@@ -394,13 +400,13 @@ export const SETTLEMENT_PARAMS: Record<SettlementSize, {
     layoutWeights: { organic: 0.8, grid: 0.1, mixed: 0.1 },
   },
   town: {
-    buildingCount: { min: 30, max: 60 },
+    buildingCount: { min: 80, max: 120 },
     radius: { min: 200, max: 350 },
     roadConnections: { min: 2, max: 4 },
     layoutWeights: { organic: 0.4, grid: 0.3, mixed: 0.3 },
   },
   city: {
-    buildingCount: { min: 80, max: 150 },
+    buildingCount: { min: 300, max: 500 },
     radius: { min: 400, max: 750 },
     roadConnections: { min: 4, max: 8 },
     layoutWeights: { organic: 0.2, grid: 0.3, mixed: 0.5 },
@@ -451,6 +457,8 @@ export const BUILDING_SPECS: BuildingSpec[] = [
   { subtype: 'detached_house', category: 'residential', size: 'medium', floors: 2, footprint: { width: 10, depth: 12 }, garrisonCapacity: 8, allowedIn: ['village', 'town'] },
   { subtype: 'row_house', category: 'residential', size: 'medium', floors: 3, footprint: { width: 6, depth: 15 }, garrisonCapacity: 4, allowedIn: ['town', 'city'] },
   { subtype: 'apartment_block', category: 'residential', size: 'large', floors: 4, footprint: { width: 20, depth: 30 }, garrisonCapacity: 16, allowedIn: ['city'] },
+  { subtype: 'tenement', category: 'residential', size: 'large', floors: 5, footprint: { width: 20, depth: 25 }, garrisonCapacity: 12, allowedIn: ['city'] },
+  { subtype: 'l_building', category: 'residential', size: 'medium', floors: 3, footprint: { width: 15, depth: 15 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
   { subtype: 'manor', category: 'residential', size: 'large', floors: 2, footprint: { width: 15, depth: 20 }, garrisonCapacity: 12, allowedIn: ['village'] },
   // Commercial
   { subtype: 'shop', category: 'commercial', size: 'small', floors: 2, footprint: { width: 8, depth: 10 }, garrisonCapacity: 4, allowedIn: ['hamlet', 'village', 'town', 'city'] },
@@ -458,11 +466,14 @@ export const BUILDING_SPECS: BuildingSpec[] = [
   { subtype: 'market_hall', category: 'commercial', size: 'medium', floors: 2, footprint: { width: 15, depth: 20 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
   { subtype: 'hotel', category: 'commercial', size: 'large', floors: 4, footprint: { width: 20, depth: 25 }, garrisonCapacity: 16, allowedIn: ['town', 'city'] },
   { subtype: 'office_building', category: 'commercial', size: 'large', floors: 6, footprint: { width: 25, depth: 30 }, garrisonCapacity: 24, allowedIn: ['city'] },
+  { subtype: 'department_store', category: 'commercial', size: 'large', floors: 3, footprint: { width: 30, depth: 40 }, garrisonCapacity: 16, allowedIn: ['city'] },
+  { subtype: 'skyscraper', category: 'commercial', size: 'large', floors: 12, footprint: { width: 25, depth: 25 }, garrisonCapacity: 32, allowedIn: ['city'] },
   // Industrial
   { subtype: 'workshop', category: 'industrial', size: 'small', floors: 1, footprint: { width: 10, depth: 12 }, garrisonCapacity: 4, allowedIn: ['village', 'town', 'city'] },
   { subtype: 'warehouse', category: 'industrial', size: 'medium', floors: 2, footprint: { width: 20, depth: 30 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
   { subtype: 'small_factory', category: 'industrial', size: 'medium', floors: 2, footprint: { width: 25, depth: 40 }, garrisonCapacity: 12, allowedIn: ['town', 'city'] },
   { subtype: 'large_factory', category: 'industrial', size: 'large', floors: 3, footprint: { width: 40, depth: 60 }, garrisonCapacity: 24, allowedIn: ['city'] },
+  { subtype: 'warehouse_complex', category: 'industrial', size: 'large', floors: 2, footprint: { width: 40, depth: 50 }, garrisonCapacity: 16, allowedIn: ['city'] },
   { subtype: 'power_plant', category: 'industrial', size: 'large', floors: 2, footprint: { width: 30, depth: 40 }, garrisonCapacity: 8, allowedIn: ['city'] },
   // Civic
   { subtype: 'chapel', category: 'civic', size: 'small', floors: 1, footprint: { width: 8, depth: 12 }, garrisonCapacity: 4, allowedIn: ['hamlet', 'village'] },
@@ -471,18 +482,23 @@ export const BUILDING_SPECS: BuildingSpec[] = [
   { subtype: 'town_hall', category: 'civic', size: 'medium', floors: 3, footprint: { width: 20, depth: 25 }, garrisonCapacity: 12, allowedIn: ['town', 'city'] },
   { subtype: 'school', category: 'civic', size: 'medium', floors: 2, footprint: { width: 20, depth: 30 }, garrisonCapacity: 8, allowedIn: ['village', 'town', 'city'] },
   { subtype: 'hospital', category: 'civic', size: 'large', floors: 4, footprint: { width: 30, depth: 40 }, garrisonCapacity: 16, allowedIn: ['town', 'city'] },
+  { subtype: 'library', category: 'civic', size: 'medium', floors: 2, footprint: { width: 20, depth: 25 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
+  { subtype: 'clock_tower', category: 'civic', size: 'small', floors: 5, footprint: { width: 8, depth: 8 }, garrisonCapacity: 4, allowedIn: ['town', 'city'] },
+  { subtype: 'government_office', category: 'civic', size: 'large', floors: 4, footprint: { width: 35, depth: 45 }, garrisonCapacity: 24, allowedIn: ['city'] },
   // Agricultural
   { subtype: 'farmhouse', category: 'agricultural', size: 'medium', floors: 2, footprint: { width: 10, depth: 15 }, garrisonCapacity: 8, allowedIn: ['hamlet', 'village'] },
   { subtype: 'barn', category: 'agricultural', size: 'medium', floors: 2, footprint: { width: 15, depth: 25 }, garrisonCapacity: 8, allowedIn: ['hamlet', 'village'] },
   { subtype: 'silo', category: 'agricultural', size: 'small', floors: 1, footprint: { width: 5, depth: 5 }, garrisonCapacity: 0, allowedIn: ['hamlet', 'village'] },
   { subtype: 'windmill', category: 'agricultural', size: 'small', floors: 3, footprint: { width: 8, depth: 8 }, garrisonCapacity: 4, allowedIn: ['hamlet', 'village'] },
   { subtype: 'stable', category: 'agricultural', size: 'small', floors: 1, footprint: { width: 10, depth: 15 }, garrisonCapacity: 4, allowedIn: ['hamlet', 'village'] },
+  { subtype: 'silo_cluster', category: 'agricultural', size: 'medium', floors: 1, footprint: { width: 15, depth: 15 }, garrisonCapacity: 0, allowedIn: ['village'] },
   // Infrastructure
   { subtype: 'gas_station', category: 'infrastructure', size: 'small', floors: 1, footprint: { width: 10, depth: 15 }, garrisonCapacity: 4, allowedIn: ['village', 'town', 'city'] },
   { subtype: 'water_tower', category: 'infrastructure', size: 'small', floors: 1, footprint: { width: 8, depth: 8 }, garrisonCapacity: 0, allowedIn: ['village', 'town', 'city'] },
   { subtype: 'train_station', category: 'infrastructure', size: 'medium', floors: 2, footprint: { width: 15, depth: 40 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
   { subtype: 'fire_station', category: 'infrastructure', size: 'medium', floors: 2, footprint: { width: 15, depth: 20 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
   { subtype: 'police_station', category: 'infrastructure', size: 'medium', floors: 2, footprint: { width: 15, depth: 20 }, garrisonCapacity: 8, allowedIn: ['town', 'city'] },
+  { subtype: 'radio_station', category: 'infrastructure', size: 'medium', floors: 2, footprint: { width: 15, depth: 20 }, garrisonCapacity: 6, allowedIn: ['town', 'city'] },
 ];
 
 export interface CaptureZone {
@@ -490,7 +506,8 @@ export interface CaptureZone {
   name: string;
   x: number;
   z: number;
-  radius: number;
+  width: number;
+  height: number;
   pointsPerTick: number;
   owner: 'neutral' | 'player' | 'enemy';
   captureProgress: number;
@@ -547,6 +564,7 @@ export interface Bridge {
   length: number;  // Length of bridge segment
   width: number;   // Width matches road type
   angle: number;   // Rotation angle in radians
+  elevation?: number; // Elevation in meters
   roadId?: string; // Reference to the road this bridge belongs to
 }
 

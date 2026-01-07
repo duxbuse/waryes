@@ -384,8 +384,8 @@ export class SettlementGenerator {
 
     // Determine road type based on settlement size
     const roadType: RoadType = size === 'city' ? 'highway' :
-                               size === 'town' ? 'highway' :
-                               size === 'village' ? 'town' : 'dirt';
+      size === 'town' ? 'highway' :
+        size === 'village' ? 'town' : 'dirt';
 
     if (layoutType === 'grid') {
       // Grid settlements have entry points aligned with axes
@@ -622,17 +622,26 @@ export class SettlementGenerator {
     // Map subtype to legacy type for backwards compatibility
     const legacyType = this.mapToLegacyType(spec.category, spec.subtype);
 
+    // Base height calculation: 3m per floor + special adjustments
+    let baseHeight = floors * heightPerFloor;
+    if (spec.subtype === 'clock_tower') baseHeight += 15; // Tall spire
+    if (spec.subtype === 'church' || spec.subtype === 'cathedral') baseHeight += 10;
+    if (spec.subtype === 'skyscraper') baseHeight += 5; // Penthouse/mechanical
+    if (spec.subtype === 'silo_cluster') baseHeight = 15; // Fixed height for silos
+
     return {
       x,
       z,
       width: spec.footprint.width,
       depth: spec.footprint.depth,
-      height: floors * heightPerFloor + (spec.subtype.includes('church') || spec.subtype.includes('cathedral') ? 10 : 0),
+      height: baseHeight,
       type: legacyType,
       category: spec.category,
       subtype: spec.subtype,
       floors,
-      garrisonCapacity: spec.garrisonCapacity,
+      garrisonCapacity: Math.max(2, Math.min(5, Math.floor(Math.sqrt(spec.footprint.width * spec.footprint.depth) / 5))),
+      defenseBonus: 0.5,
+      stealthBonus: 0.5,
       settlementId,
       rotation,
     };
@@ -655,6 +664,7 @@ export class SettlementGenerator {
         return 'factory';
       case 'commercial':
       case 'infrastructure':
+        if (subtype === 'skyscraper' || subtype === 'office_building') return 'factory'; // Tall buildings feel more like factory blocks
         return 'shop';
       default:
         return 'house';

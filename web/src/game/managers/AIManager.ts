@@ -191,8 +191,9 @@ export class AIManager {
 
   private assessZone(zone: CaptureZone, friendlyUnits: Unit[], enemyUnits: Unit[]): ZoneAssessment {
     // Count units in/near zone
-    const zonePos = new THREE.Vector3(zone.x, 0, zone.z);
-    const detectionRadius = zone.radius + 30; // Include units approaching
+    const zoneY = this.game.getElevationAt(zone.x, zone.z);
+    const zonePos = new THREE.Vector3(zone.x, zoneY, zone.z);
+    const detectionRadius = Math.max(zone.width, zone.height) / 2 + 30; // Include units approaching
 
     let friendlyPresence = 0;
     let enemyPresence = 0;
@@ -300,7 +301,8 @@ export class AIManager {
       if (unitsNeeded <= 0) continue;
 
       // Find nearest available units
-      const zonePos = new THREE.Vector3(assessment.zone.x, 0, assessment.zone.z);
+      const zoneY = this.game.getElevationAt(assessment.zone.x, assessment.zone.z);
+      const zonePos = new THREE.Vector3(assessment.zone.x, zoneY, assessment.zone.z);
       const sortedUnits = [...availableUnits].sort((a, b) =>
         a.position.distanceTo(zonePos) - b.position.distanceTo(zonePos)
       );
@@ -342,7 +344,7 @@ export class AIManager {
 
       // Consider deploying smoke if taking significant damage
       if (damagePercent >= this.damageThresholdForSmoke &&
-          currentTime - state.lastSmokeTime >= this.smokeCooldown) {
+        currentTime - state.lastSmokeTime >= this.smokeCooldown) {
         this.deployDefensiveSmoke(unit, state, currentTime);
       }
     }
@@ -362,7 +364,7 @@ export class AIManager {
 
     // Emergency retreat for very low health
     if (unit.health / unit.maxHealth <= this.retreatHealthThreshold &&
-        state.behavior !== 'retreating') {
+      state.behavior !== 'retreating') {
       // Deploy smoke before retreating
       if (currentTime - state.lastSmokeTime >= this.smokeCooldown) {
         this.deployDefensiveSmoke(unit, state, currentTime);
@@ -428,10 +430,12 @@ export class AIManager {
 
       if (zone) {
         // Check if we're at the zone
-        const zonePos = new THREE.Vector3(zone.zone.x, 0, zone.zone.z);
+        const zoneY = this.game.getElevationAt(zone.zone.x, zone.zone.z);
+        const zonePos = new THREE.Vector3(zone.zone.x, zoneY, zone.zone.z);
         const distToZone = unit.position.distanceTo(zonePos);
+        const zoneRadiusEstimate = Math.max(zone.zone.width, zone.zone.height) / 2;
 
-        if (distToZone <= zone.zone.radius + 5) {
+        if (distToZone <= zoneRadiusEstimate + 5) {
           // At the zone - defend or capture
           const nearestEnemy = this.findNearestEnemyInRange(unit, this.engageRange);
 
@@ -510,7 +514,8 @@ export class AIManager {
   private findStrategicTarget(unit: Unit, state: AIUnitState): THREE.Vector3 | null {
     // If we have an assigned zone, go there
     if (state.targetZone) {
-      return new THREE.Vector3(state.targetZone.x, 0, state.targetZone.z);
+      const zoneY = this.game.getElevationAt(state.targetZone.x, state.targetZone.z);
+      return new THREE.Vector3(state.targetZone.x, zoneY, state.targetZone.z);
     }
 
     // Find the best zone to move toward
@@ -548,7 +553,8 @@ export class AIManager {
 
     if (bestZone) {
       state.targetZone = bestZone;
-      return new THREE.Vector3(bestZone.x, 0, bestZone.z);
+      const zoneY = this.game.getElevationAt(bestZone.x, bestZone.z);
+      return new THREE.Vector3(bestZone.x, zoneY, bestZone.z);
     }
 
     // Otherwise, move toward player units
@@ -604,17 +610,19 @@ export class AIManager {
       // Find nearest safe zone
       let nearest = friendlyZones[0];
       if (!nearest) return this.fallbackRetreatPosition(unit);
-      let nearestDist = unit.position.distanceTo(new THREE.Vector3(nearest.zone.x, 0, nearest.zone.z));
+      let nearestDist = unit.position.distanceTo(new THREE.Vector3(nearest.zone.x, this.game.getElevationAt(nearest.zone.x, nearest.zone.z), nearest.zone.z));
 
       for (const zone of friendlyZones) {
-        const dist = unit.position.distanceTo(new THREE.Vector3(zone.zone.x, 0, zone.zone.z));
+        const zoneY = this.game.getElevationAt(zone.zone.x, zone.zone.z);
+        const dist = unit.position.distanceTo(new THREE.Vector3(zone.zone.x, zoneY, zone.zone.z));
         if (dist < nearestDist) {
           nearestDist = dist;
           nearest = zone;
         }
       }
 
-      return new THREE.Vector3(nearest.zone.x, 0, nearest.zone.z);
+      const finalZoneY = this.game.getElevationAt(nearest.zone.x, nearest.zone.z);
+      return new THREE.Vector3(nearest.zone.x, finalZoneY, nearest.zone.z);
     }
 
     // Priority 2: Retreat toward deployment zone
@@ -622,11 +630,27 @@ export class AIManager {
   }
 
   private fallbackRetreatPosition(unit: Unit): THREE.Vector3 | null {
-    const enemyZone = this.game.currentMap?.deploymentZones.find(z => z.team === 'enemy');
-    if (enemyZone) {
-      const retreatX = (enemyZone.minX + enemyZone.maxX) / 2;
-      const retreatZ = (enemyZone.minZ + enemyZone.maxZ) / 2;
-      return new THREE.Vector3(retreatX, 0, retreatZ);
+    const enemyZones = this.game.currentMap?.deploymentZones.filter(z => z.team === 'enemy');
+    if (enemyZones && enemyZones.length > 0) {
+      // Find nearest enemy zone
+      let nearestZone = enemyZones[0]!;
+      let minDist = Infinity;
+
+      for (const zone of enemyZones) {
+        const centerX = (zone.minX + zone.maxX) / 2;
+        const centerZ = (zone.minZ + zone.maxZ) / 2;
+        const centerY = this.game.getElevationAt(centerX, centerZ);
+        const dist = unit.position.distanceTo(new THREE.Vector3(centerX, centerY, centerZ));
+        if (dist < minDist) {
+          minDist = dist;
+          nearestZone = zone;
+        }
+      }
+
+      const retreatX = (nearestZone.minX + nearestZone.maxX) / 2;
+      const retreatZ = (nearestZone.minZ + nearestZone.maxZ) / 2;
+      const retreatY = this.game.getElevationAt(retreatX, retreatZ);
+      return new THREE.Vector3(retreatX, retreatY, retreatZ);
     }
 
     // Last resort: Move away from nearest enemy

@@ -222,9 +222,8 @@ export class EconomyManager {
     for (const unit of units) {
       const dx = unit.position.x - zone.x;
       const dz = unit.position.z - zone.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
 
-      if (dist <= zone.radius) {
+      if (Math.abs(dx) <= zone.width / 2 && Math.abs(dz) <= zone.height / 2) {
         result.push({ id: unit.id, x: unit.position.x, z: unit.position.z });
       }
     }

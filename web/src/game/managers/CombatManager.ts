@@ -74,7 +74,11 @@ export class CombatManager {
     if (!weapon) return;
 
     // Calculate hit chance based on distance, accuracy, cover
-    const distance = attacker.position.distanceTo(target.position);
+    const attackerPos = attacker.isGarrisoned && attacker.garrisonedBuilding
+      ? new THREE.Vector3(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
+      : attacker.position;
+
+    const distance = attackerPos.distanceTo(target.position);
 
     // Out of range
     if (distance > weapon.range) return;
@@ -312,12 +316,17 @@ export class CombatManager {
   }
 
   private getTargetCover(target: Unit): number {
+    // Check if target is in a building
+    if (target.isGarrisoned && target.garrisonedBuilding) {
+      return target.garrisonedBuilding.stealthBonus ?? 0.5;
+    }
+
     // Get terrain at target position
     const terrain = this.game.currentMap
       ? new MapGenerator(this.game.currentMap.seed, this.game.currentMap.size).getTerrainAt(
-          target.position.x,
-          target.position.z
-        )
+        target.position.x,
+        target.position.z
+      )
       : null;
 
     if (!terrain) return 0;
@@ -370,10 +379,13 @@ export class CombatManager {
 
       const distance = unit.position.distanceTo(enemy.position);
       if (distance <= maxRange && distance < closestDistance) {
-        // Check line of sight
-        if (this.hasLineOfSight(unit, enemy)) {
-          closestTarget = enemy;
-          closestDistance = distance;
+        // Check if unit is visible to our team
+        if (this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
+          // Check line of sight
+          if (this.hasLineOfSight(unit, enemy)) {
+            closestTarget = enemy;
+            closestDistance = distance;
+          }
         }
       }
     }
@@ -382,29 +394,71 @@ export class CombatManager {
   }
 
   private hasLineOfSight(from: Unit, to: Unit): boolean {
-    // Simplified LOS check - could raycast through terrain
-    // For now, just check if any buildings block
-    const direction = to.position.clone().sub(from.position);
-    const distance = direction.length();
-    direction.normalize();
+    const map = this.game.currentMap;
+    if (!map) return true;
 
-    // Sample points along the line
+    // If attacker is garrisoned, check from multiple points of the building
+    if (from.isGarrisoned && from.garrisonedBuilding) {
+      const b = from.garrisonedBuilding;
+      const points = [
+        new THREE.Vector3(b.x, 2, b.z), // Center
+        new THREE.Vector3(b.x - b.width / 2, 2, b.z - b.depth / 2), // Corners
+        new THREE.Vector3(b.x + b.width / 2, 2, b.z - b.depth / 2),
+        new THREE.Vector3(b.x - b.width / 2, 2, b.z + b.depth / 2),
+        new THREE.Vector3(b.x + b.width / 2, 2, b.z + b.depth / 2),
+      ];
+
+      return points.some(p => this.checkLOSPath(p, to.position.clone().add(new THREE.Vector3(0, 2, 0))));
+    }
+
+    const startPos = from.position.clone().add(new THREE.Vector3(0, 2, 0));
+    const endPos = to.position.clone().add(new THREE.Vector3(0, 2, 0));
+
+    return this.checkLOSPath(startPos, endPos);
+  }
+
+  private checkLOSPath(startPos: THREE.Vector3, endPos: THREE.Vector3): boolean {
+    const map = this.game.currentMap;
+    if (!map) return true;
+
+    const mapGenerator = new MapGenerator(map.seed, map.size);
+    const direction = new THREE.Vector3().subVectors(endPos, startPos);
+    const distance = direction.length();
+
+    // Sample points along the line (every 5m)
     const steps = Math.ceil(distance / 5);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      const point = from.position.clone().add(direction.clone().multiplyScalar(distance * t));
+      const point = new THREE.Vector3().lerpVectors(startPos, endPos, t);
 
-      // Check terrain at point
-      if (this.game.currentMap) {
-        const terrain = new MapGenerator(this.game.currentMap.seed, this.game.currentMap.size)
-          .getTerrainAt(point.x, point.z);
+      // 1. Check terrain elevation blocking
+      const terrainHeight = mapGenerator.getElevationAt(point.x, point.z);
+      if (terrainHeight > point.y) {
+        return false;
+      }
 
-        if (terrain?.type === 'building') {
+      // 2. Check for buildings blocking
+      const terrain = mapGenerator.getTerrainAt(point.x, point.z);
+      if (terrain?.type === 'building') {
+        const building = this.game.buildingManager.getBuildingAt(point);
+        if (building) {
+          // Check if ray is below building top
+          if (point.y < building.height) {
+            // Ignore building if it's the one we are in or the one target is in
+            // (already partially handled by t check, but this is more robust)
+            if (t > 0.1 && t < 0.9) return false;
+          }
+        }
+      }
+
+      // 3. Check for forests blocking
+      if (terrain?.type === 'forest') {
+        // Forests block at approx 15m height
+        if (point.y < 15) {
           return false;
         }
       }
     }
-
     return true;
   }
 

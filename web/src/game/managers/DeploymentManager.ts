@@ -29,7 +29,7 @@ export class DeploymentManager {
   private deployableUnits: DeployableUnit[] = [];
   private selectedUnitIndex: number = -1;
   private selectedUnitTypeId: string | null = null;  // For multi-placement with shift
-  private deploymentZone: DeploymentZone | null = null;
+  private deploymentZones: DeploymentZone[] = [];
   private currentCategory: UnitCategory = 'INF';
   private battleBarCategory: UnitCategory = 'INF';  // Category for the top unit bar
   private credits: number = GAME_CONSTANTS.STARTING_CREDITS;
@@ -48,9 +48,9 @@ export class DeploymentManager {
     this.game = game;
   }
 
-  initialize(deck: DeckData, deploymentZone: DeploymentZone): void {
+  initialize(deck: DeckData, deploymentZones: DeploymentZone[]): void {
     this.deck = deck;
-    this.deploymentZone = deploymentZone;
+    this.deploymentZones = deploymentZones;
     this.credits = GAME_CONSTANTS.STARTING_CREDITS;
 
     // Create deployable units from deck
@@ -593,12 +593,14 @@ export class DeploymentManager {
   }
 
   private isInDeploymentZone(x: number, z: number): boolean {
-    if (!this.deploymentZone) return false;
+    if (this.deploymentZones.length === 0) return false;
 
-    return x >= this.deploymentZone.minX &&
-           x <= this.deploymentZone.maxX &&
-           z >= this.deploymentZone.minZ &&
-           z <= this.deploymentZone.maxZ;
+    return this.deploymentZones.some(zone =>
+      x >= zone.minX &&
+      x <= zone.maxX &&
+      z >= zone.minZ &&
+      z <= zone.maxZ
+    );
   }
 
   private deployUnit(index: number, position: THREE.Vector3, continueAfter: boolean = false): void {

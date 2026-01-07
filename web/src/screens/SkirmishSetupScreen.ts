@@ -727,225 +727,222 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         const generator = new MapGenerator(mapSeed, mapSize, selectedBiome);
         const map = generator.generate();
 
-      const canvasSize = 200;
-      const biomeConfig = BIOME_CONFIGS[map.biome];
+        const canvasSize = 200;
+        const biomeConfig = BIOME_CONFIGS[map.biome];
 
-      // Convert hex color to CSS color string
-      const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
+        // Convert hex color to CSS color string
+        const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
 
-      // Clear canvas with biome ground color
-      ctx.fillStyle = hexToCSS(biomeConfig.groundColor);
-      ctx.fillRect(0, 0, canvasSize, canvasSize);
+        // Clear canvas with biome ground color
+        ctx.fillStyle = hexToCSS(biomeConfig.groundColor);
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-      const scale = canvasSize / map.width;
+        const scale = canvasSize / map.width;
 
-      // Draw terrain (simplified) - use biome colors
-      const cellSize = map.cellSize * scale;
-      for (let z = 0; z < map.terrain.length; z++) {
-        for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
-          const cell = map.terrain[z]![x]!;
-          let color = hexToCSS(biomeConfig.groundColor); // field - use biome color
+        // Draw terrain (simplified) - use biome colors
+        const cellSize = map.cellSize * scale;
+        for (let z = 0; z < map.terrain.length; z++) {
+          for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
+            const cell = map.terrain[z]![x]!;
+            let color = hexToCSS(biomeConfig.groundColor); // field - use biome color
 
-          switch (cell.type) {
-            case 'forest':
-              color = hexToCSS(biomeConfig.forestColor);
-              break;
-            case 'road':
-              color = '#5a5a5a';
-              break;
-            case 'river':
-            case 'water':
-              color = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-              break;
-            case 'hill':
-              // Darken ground color slightly for hills
-              const hillColor = biomeConfig.groundColor;
-              const r = ((hillColor >> 16) & 0xFF) * 0.85;
-              const g = ((hillColor >> 8) & 0xFF) * 0.85;
-              const b = (hillColor & 0xFF) * 0.85;
-              color = `rgb(${r},${g},${b})`;
-              break;
-            case 'building':
-              color = '#8a7a6a';
-              break;
+            switch (cell.type) {
+              case 'forest':
+                color = hexToCSS(biomeConfig.forestColor);
+                break;
+              case 'road':
+                color = '#5a5a5a';
+                break;
+              case 'river':
+              case 'water':
+                color = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+                break;
+              case 'hill':
+                // Darken ground color slightly for hills
+                const hillColor = biomeConfig.groundColor;
+                const r = ((hillColor >> 16) & 0xFF) * 0.85;
+                const g = ((hillColor >> 8) & 0xFF) * 0.85;
+                const b = (hillColor & 0xFF) * 0.85;
+                color = `rgb(${r},${g},${b})`;
+                break;
+              case 'building':
+                color = '#8a7a6a';
+                break;
+            }
+
+            ctx.fillStyle = color;
+            ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
           }
-
-          ctx.fillStyle = color;
-          ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
         }
-      }
 
-      // Draw water bodies with bright outline
-      for (const waterBody of map.waterBodies) {
-        ctx.fillStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-        ctx.strokeStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-        ctx.lineWidth = 2;
+        // Draw water bodies with bright outline
+        for (const waterBody of map.waterBodies) {
+          ctx.fillStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+          ctx.strokeStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+          ctx.lineWidth = 2;
+          ctx.lineJoin = 'round';
+
+          ctx.beginPath();
+          for (let i = 0; i < waterBody.points.length; i++) {
+            const p = waterBody.points[i]!;
+            const screenX = (p.x + map.width / 2) * scale;
+            const screenZ = (p.z + map.height / 2) * scale;
+            if (i === 0) {
+              ctx.moveTo(screenX, screenZ);
+            } else {
+              ctx.lineTo(screenX, screenZ);
+            }
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        // Draw roads with better visibility
+        ctx.strokeStyle = '#888888';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-
-        ctx.beginPath();
-        for (let i = 0; i < waterBody.points.length; i++) {
-          const p = waterBody.points[i]!;
-          const screenX = (p.x + map.width / 2) * scale;
-          const screenZ = (p.z + map.height / 2) * scale;
-          if (i === 0) {
-            ctx.moveTo(screenX, screenZ);
-          } else {
-            ctx.lineTo(screenX, screenZ);
+        for (const road of map.roads) {
+          ctx.beginPath();
+          for (let i = 0; i < road.points.length; i++) {
+            const p = road.points[i]!;
+            const screenX = (p.x + map.width / 2) * scale;
+            const screenZ = (p.z + map.height / 2) * scale;
+            if (i === 0) {
+              ctx.moveTo(screenX, screenZ);
+            } else {
+              ctx.lineTo(screenX, screenZ);
+            }
           }
+          ctx.stroke();
         }
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
 
-      // Draw roads with better visibility
-      ctx.strokeStyle = '#888888';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      for (const road of map.roads) {
-        ctx.beginPath();
-        for (let i = 0; i < road.points.length; i++) {
-          const p = road.points[i]!;
-          const screenX = (p.x + map.width / 2) * scale;
-          const screenZ = (p.z + map.height / 2) * scale;
-          if (i === 0) {
-            ctx.moveTo(screenX, screenZ);
-          } else {
-            ctx.lineTo(screenX, screenZ);
-          }
+        // Draw buildings with outlines for better visibility
+        for (const building of map.buildings) {
+          const screenX = (building.x + map.width / 2) * scale;
+          const screenZ = (building.z + map.height / 2) * scale;
+          const w = Math.max(building.width * scale, 2); // Ensure minimum size
+          const d = Math.max(building.depth * scale, 2);
+
+          // Fill
+          ctx.fillStyle = '#d4c4a8';
+          ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
+
+          // Outline
+          ctx.strokeStyle = '#8a7a6a';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
         }
-        ctx.stroke();
-      }
 
-      // Draw buildings with outlines for better visibility
-      for (const building of map.buildings) {
-        const screenX = (building.x + map.width / 2) * scale;
-        const screenZ = (building.z + map.height / 2) * scale;
-        const w = Math.max(building.width * scale, 2); // Ensure minimum size
-        const d = Math.max(building.depth * scale, 2);
+        // Draw capture zones with better contrast
+        for (const zone of map.captureZones) {
+          const screenX = (zone.x + map.width / 2) * scale;
+          const screenZ = (zone.z + map.height / 2) * scale;
+          const w = Math.max(zone.width * scale, 4); // Ensure minimum visible size
+          const h = Math.max(zone.height * scale, 4);
 
-        // Fill
-        ctx.fillStyle = '#d4c4a8';
-        ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
+          // Outer glow
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+          ctx.fillRect(screenX - w / 2 - 1, screenZ - h / 2 - 1, w + 2, h + 2);
 
-        // Outline
-        ctx.strokeStyle = '#8a7a6a';
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
-      }
+          // Main rect
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
+          ctx.fillRect(screenX - w / 2, screenZ - h / 2, w, h);
 
-      // Draw capture zones with better contrast
-      for (const zone of map.captureZones) {
-        const screenX = (zone.x + map.width / 2) * scale;
-        const screenZ = (zone.z + map.height / 2) * scale;
-        const r = Math.max(zone.radius * scale, 3); // Ensure minimum visible size
+          // Bold outline
+          ctx.strokeStyle = '#ffff00';
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(screenX - w / 2, screenZ - h / 2, w, h);
 
-        // Outer glow
-        ctx.beginPath();
-        ctx.arc(screenX, screenZ, r + 1, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
-        ctx.fill();
+          // Center dot
+          ctx.beginPath();
+          ctx.arc(screenX, screenZ, 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffff00';
+          ctx.fill();
+        }
 
-        // Main circle
-        ctx.beginPath();
-        ctx.arc(screenX, screenZ, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
-        ctx.fill();
+        // Draw deployment zones with better contrast
+        for (const zone of map.deploymentZones) {
+          const x1 = (zone.minX + map.width / 2) * scale;
+          const x2 = (zone.maxX + map.width / 2) * scale;
+          const z1 = (zone.minZ + map.height / 2) * scale;
+          const z2 = (zone.maxZ + map.height / 2) * scale;
 
-        // Bold outline
-        ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+          const isPlayer = zone.team === 'player';
+          const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
+          const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
 
-        // Center dot
-        ctx.beginPath();
-        ctx.arc(screenX, screenZ, 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffff00';
-        ctx.fill();
-      }
+          // Fill
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
 
-      // Draw deployment zones with better contrast
-      for (const zone of map.deploymentZones) {
-        const x1 = (zone.minX + map.width / 2) * scale;
-        const x2 = (zone.maxX + map.width / 2) * scale;
-        const z1 = (zone.minZ + map.height / 2) * scale;
-        const z2 = (zone.maxZ + map.height / 2) * scale;
+          // Bold outline
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
+        }
 
-        const isPlayer = zone.team === 'player';
-        const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
-        const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
+        // Draw resupply points as directional arrows at map edges
+        for (const point of map.resupplyPoints) {
+          const screenX = (point.x + map.width / 2) * scale;
+          const screenY = (point.z + map.height / 2) * scale;
+          const r = point.radius * scale;
 
-        // Fill
-        ctx.fillStyle = fillColor;
-        ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
+          const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
 
-        // Bold outline
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
-      }
+          // Arrow dimensions
+          const arrowLength = r * 2.5;
+          const arrowWidth = r * 1.0;
+          const arrowHeadWidth = r * 1.5;
+          const arrowHeadLength = r * 0.8;
 
-      // Draw resupply points as directional arrows at map edges
-      for (const point of map.resupplyPoints) {
-        const screenX = (point.x + map.width / 2) * scale;
-        const screenY = (point.z + map.height / 2) * scale;
-        const r = point.radius * scale;
+          // Offset arrow base outside the map edge
+          const outsideOffset = r * 0.5;
+          const baseY = point.team === 'player'
+            ? screenY - outsideOffset  // Player: offset up (outside top edge)
+            : screenY + outsideOffset; // Enemy: offset down (outside bottom edge)
 
-        const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
+          // Save context and position at arrow base
+          ctx.save();
+          ctx.translate(screenX, baseY);
 
-        // Arrow dimensions
-        const arrowLength = r * 2.5;
-        const arrowWidth = r * 1.0;
-        const arrowHeadWidth = r * 1.5;
-        const arrowHeadLength = r * 0.8;
+          // Rotation: arrow shape points UP (-Y), flip based on team
+          // Player arrows point DOWN into battlefield, enemy arrows point UP
+          ctx.rotate(Math.PI - point.direction);
 
-        // Offset arrow base outside the map edge
-        const outsideOffset = r * 0.5;
-        const baseY = point.team === 'player'
-          ? screenY - outsideOffset  // Player: offset up (outside top edge)
-          : screenY + outsideOffset; // Enemy: offset down (outside bottom edge)
+          // Draw arrow shape (points UP in local space)
+          ctx.beginPath();
+          ctx.moveTo(-arrowWidth / 2, 0);
+          ctx.lineTo(-arrowWidth / 2, -arrowLength + arrowHeadLength);
+          ctx.lineTo(-arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+          ctx.lineTo(0, -arrowLength); // Arrow tip
+          ctx.lineTo(arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+          ctx.lineTo(arrowWidth / 2, -arrowLength + arrowHeadLength);
+          ctx.lineTo(arrowWidth / 2, 0);
+          ctx.closePath();
 
-        // Save context and position at arrow base
-        ctx.save();
-        ctx.translate(screenX, baseY);
+          ctx.fillStyle = color + 'A0'; // Semi-transparent
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
 
-        // Rotation: arrow shape points UP (-Y), flip based on team
-        // Player arrows point DOWN into battlefield, enemy arrows point UP
-        ctx.rotate(Math.PI - point.direction);
+          // Draw circle at base (spawn point)
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
 
-        // Draw arrow shape (points UP in local space)
-        ctx.beginPath();
-        ctx.moveTo(-arrowWidth / 2, 0);
-        ctx.lineTo(-arrowWidth / 2, -arrowLength + arrowHeadLength);
-        ctx.lineTo(-arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
-        ctx.lineTo(0, -arrowLength); // Arrow tip
-        ctx.lineTo(arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
-        ctx.lineTo(arrowWidth / 2, -arrowLength + arrowHeadLength);
-        ctx.lineTo(arrowWidth / 2, 0);
-        ctx.closePath();
+          ctx.restore();
+        }
 
-        ctx.fillStyle = color + 'A0'; // Semi-transparent
-        ctx.fill();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Draw circle at base (spawn point)
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        ctx.restore();
-      }
-
-      // Draw biome info at bottom of preview
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 190, 200, 10);
-      ctx.fillStyle = '#fff';
-      ctx.font = '10px monospace';
-      ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
+        // Draw biome info at bottom of preview
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 190, 200, 10);
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
       } catch (error) {
         console.error('Map generation failed:', error);
         ctx.fillStyle = '#ff4444';

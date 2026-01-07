@@ -39,6 +39,7 @@ export enum UnitCommand {
   Unload = 'unload',
   Reverse = 'reverse',
   FastMove = 'fastMove',
+  DigIn = 'digIn',
 }
 
 interface CommandData {
@@ -94,6 +95,18 @@ export class Unit {
   private _garrisonedIn: Building | null = null;
   private _mountedIn: Unit | null = null;
   public readonly transportCapacity: number = 0;
+
+  // New states for delayed garrison/digging
+  private _isEntering = false;
+  private _enterTimer = 0;
+  private _enterTargetBuilding: Building | null = null;
+
+  private _isExiting = false;
+  private _exitTimer = 0;
+
+  private _isDigging = false;
+  private _digTimer = 0;
+  private readonly DIG_DURATION = 30.0;
 
   // UI elements (health bars, morale bars)
   private unitUI: UnitUI | null = null;
@@ -579,6 +592,25 @@ export class Unit {
     this._isFrozen = frozen;
   }
 
+  // Getters for new states
+  get isDigging(): boolean { return this._isDigging; }
+  get isEntering(): boolean { return this._isEntering; }
+  get isExiting(): boolean { return this._isExiting; }
+
+  // Dig in command
+  setDigInCommand(): void {
+    const category = this.unitData?.category ?? 'INF';
+    if (category !== 'INF') return;
+
+    this.clearCommands();
+    this.currentCommand = { type: UnitCommand.DigIn };
+    this._isDigging = true;
+    this._digTimer = this.DIG_DURATION;
+
+    // Stop movement
+    this.targetPosition = null;
+  }
+
   // Movement commands
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
@@ -696,16 +728,39 @@ export class Unit {
     if (!this._garrisonedIn) return;
 
     this.commandQueue = [];
-    this.currentCommand = { type: UnitCommand.Unload };
+    this._isExiting = true;
+    this._exitTimer = this.getGarrisonDelay(this._garrisonedIn);
+  }
+
+  private performExitBuilding(): void {
+    if (!this._garrisonedIn) {
+      this._isExiting = false;
+      return;
+    }
 
     // BuildingManager will handle the actual exit
     const exitPos = this.game.buildingManager.ungarrison(this, this._garrisonedIn);
     if (exitPos) {
       this._garrisonedIn = null;
+      this._isExiting = false;
       this.position.copy(exitPos);
       this.mesh.position.copy(exitPos);
       this.targetPosition = null;
+      this.completeCommand();
     }
+  }
+
+  private getGarrisonDelay(_building: Building): number {
+    // Check weapons for "heavy" tag
+    if (this.unitData?.category === 'INF') {
+      for (const slot of this.weapons) {
+        const weapon = getWeaponById(slot.weaponId);
+        if (weapon && (weapon as any).tags?.includes('heavy')) {
+          return 5.0;
+        }
+      }
+    }
+    return 2.0;
   }
 
   // Check if garrisoned
@@ -796,6 +851,28 @@ export class Unit {
 
     // Calculate commander aura bonuses
     this.calculateCommanderAura();
+
+    // Handle Timers for entering/exiting/digging
+    if (this._isEntering && this._enterTimer > 0) {
+      this._enterTimer -= dt;
+      if (this._enterTimer <= 0) {
+        this.performEnterBuilding();
+      }
+    }
+
+    if (this._isExiting && this._exitTimer > 0) {
+      this._exitTimer -= dt;
+      if (this._exitTimer <= 0) {
+        this.performExitBuilding();
+      }
+    }
+
+    if (this._isDigging && this._digTimer > 0) {
+      this._digTimer -= dt;
+      if (this._digTimer <= 0) {
+        this.performCompleteDigIn();
+      }
+    }
 
     // Handle routing behavior
     if (this._isRouting) {
@@ -1136,8 +1213,7 @@ export class Unit {
   }
 
   private processGarrison(dt: number): void {
-    if (!this.targetPosition) {
-      this.completeCommand();
+    if (!this.targetPosition || this._isEntering) {
       return;
     }
 
@@ -1151,20 +1227,13 @@ export class Unit {
       // Find the building at target position
       const building = this.game.buildingManager.findNearestBuilding(this.targetPosition, 10);
 
-      if (building) {
-        // Attempt to garrison
-        const success = this.game.buildingManager.tryGarrison(this, building);
-
-        if (success) {
-          // Garrisoned successfully
-          this.targetPosition = null;
-          this.completeCommand();
-        } else {
-          // Building full or error - complete command anyway
-          this.completeCommand();
-        }
+      if (building && this.game.buildingManager.hasCapacity(building)) {
+        // Start entering delay
+        this._isEntering = true;
+        this._enterTimer = this.getGarrisonDelay(building);
+        this._enterTargetBuilding = building;
+        this.velocity.set(0, 0, 0); // Stop movement while waiting
       } else {
-        // No building found
         this.completeCommand();
       }
       return;
@@ -1179,6 +1248,41 @@ export class Unit {
     // Face movement direction
     const targetAngle = Math.atan2(direction.x, direction.z);
     this.mesh.rotation.y = targetAngle;
+  }
+
+  private performEnterBuilding(): void {
+    if (!this._enterTargetBuilding) {
+      this._isEntering = false;
+      return;
+    }
+
+    const success = this.game.buildingManager.tryGarrison(this, this._enterTargetBuilding);
+    this._isEntering = false;
+    this._enterTargetBuilding = null;
+    this._isDigging = false; // Reset digging if it was part of a dig-in command
+
+    if (success) {
+      this.targetPosition = null;
+      this.completeCommand();
+    } else {
+      this.completeCommand();
+    }
+  }
+
+  private performCompleteDigIn(): void {
+    if (!this._isDigging) return;
+
+    // Spawn the structure and auto-garrison
+    const building = this.game.buildingManager.spawnDefensiveStructure(this);
+    if (building) {
+      // Instant garrison after build completes?
+      // Actually, my plan says "spawns building ... then unit completes Dig In"
+      // Let's call BuildingManager to handle spawning and garrisoning
+      this.game.buildingManager.tryGarrison(this, building);
+    }
+
+    this._isDigging = false;
+    this.completeCommand();
   }
 
   private processMount(dt: number): void {

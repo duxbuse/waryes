@@ -20,7 +20,8 @@ interface ZoneFillState {
   zoneId: string;
   centerX: number;
   centerZ: number;
-  radius: number;
+  width: number;
+  height: number;
   resolution: number; // Pixels across the texture
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -32,7 +33,7 @@ interface ZoneFillState {
   // Distance from nearest same-team entry point (for expansion)
   playerDistances: Float32Array;
   enemyDistances: Float32Array;
-  // Current fill radius for each team
+  // Current fill radius for each team (still works conceptually as "expansion distance")
   playerFillRadius: number;
   enemyFillRadius: number;
   // Is the zone fully filled?
@@ -65,7 +66,7 @@ export class ZoneFillRenderer {
   /**
    * Initialize a capture zone for fill rendering
    */
-  initializeZone(zoneId: string, centerX: number, centerZ: number, radius: number): void {
+  initializeZone(zoneId: string, centerX: number, centerZ: number, width: number, height: number): void {
     // Create canvas for this zone
     const resolution = 128; // 128x128 texture
     const canvas = document.createElement('canvas');
@@ -89,7 +90,7 @@ export class ZoneFillRenderer {
     texture.magFilter = THREE.LinearFilter;
 
     // Create mesh for the fill visualization
-    const geometry = new THREE.CircleGeometry(radius, 64);
+    const geometry = new THREE.PlaneGeometry(width, height);
     geometry.rotateX(-Math.PI / 2);
 
     const material = new THREE.MeshBasicMaterial({
@@ -110,7 +111,8 @@ export class ZoneFillRenderer {
       zoneId,
       centerX,
       centerZ,
-      radius,
+      width,
+      height,
       resolution,
       canvas,
       ctx,
@@ -132,74 +134,56 @@ export class ZoneFillRenderer {
     // Initial render (empty zone)
     this.renderZoneTexture(state);
 
-    console.log(`ZoneFillRenderer: Initialized zone ${zoneId} at (${centerX}, ${centerZ}) with radius ${radius}`);
+    console.log(`ZoneFillRenderer: Initialized zone ${zoneId} at (${centerX}, ${centerZ}) with size ${width}x${height}`);
   }
 
   /**
    * Update fill state with current unit entries
    */
   updateZone(zoneId: string, entries: FillEntry[], dt: number): void {
+    // ... (rest of method, update logic mostly reusable as "fill radius" models expansion range)
+    // Refactoring only geometry dependent parts below
     const state = this.zones.get(zoneId);
-    if (!state) {
-      console.warn(`ZoneFillRenderer: No state for zone ${zoneId}`);
-      return;
-    }
-
-    // Debug: log first entry to zone
-    if (entries.length > 0 && state.playerFillRadius === 0 && state.enemyFillRadius === 0) {
-      console.log(`First entry to zone ${zoneId}:`, entries[0], `zone center: (${state.centerX}, ${state.centerZ})`);
-    }
-
-    const { radius, fillGrid, playerDistances, enemyDistances } = state;
+    if (!state) return;
 
     // Separate entries by team
     const playerEntries = entries.filter(e => e.team === 'player');
     const enemyEntries = entries.filter(e => e.team === 'enemy');
 
     // Update distance fields from entry points
-    this.updateDistanceField(state, playerEntries, playerDistances, 'player');
-    this.updateDistanceField(state, enemyEntries, enemyDistances, 'enemy');
+    this.updateDistanceField(state, playerEntries, state.playerDistances, 'player');
+    this.updateDistanceField(state, enemyEntries, state.enemyDistances, 'enemy');
 
-    // Expand fill radii based on unit presence
-    // Decay logic depends on capture state
+    // ... Fill expansion logic remains valid as abstract "expansion distance" ...
     if (playerEntries.length > 0) {
       state.playerFillRadius += this.FILL_SPEED * dt * Math.sqrt(playerEntries.length);
     } else {
-      // Only decay if zone is NOT captured by player, or if enemy is present to contest
       const shouldDecay = !state.isCaptured || state.capturedBy !== 'player' || enemyEntries.length > 0;
       if (shouldDecay && !state.isCaptured) {
-        // Decay only if not captured yet (unit left before completing capture)
         state.playerFillRadius = Math.max(0, state.playerFillRadius - this.FILL_SPEED * dt * 0.3);
       }
-      // If captured by player and no enemies, keep fill radius locked
     }
 
     if (enemyEntries.length > 0) {
       state.enemyFillRadius += this.FILL_SPEED * dt * Math.sqrt(enemyEntries.length);
     } else {
-      // Only decay if zone is NOT captured by enemy, or if player is present to contest
       const shouldDecay = !state.isCaptured || state.capturedBy !== 'enemy' || playerEntries.length > 0;
       if (shouldDecay && !state.isCaptured) {
-        // Decay only if not captured yet (unit left before completing capture)
         state.enemyFillRadius = Math.max(0, state.enemyFillRadius - this.FILL_SPEED * dt * 0.3);
       }
-      // If captured by enemy and no players, keep fill radius locked
     }
 
-    // Cap fill radius at zone radius
-    state.playerFillRadius = Math.min(state.playerFillRadius, radius * 2);
-    state.enemyFillRadius = Math.min(state.enemyFillRadius, radius * 2);
-
-    // Debug logging (throttled)
-    if (Math.random() < 0.01 && (playerEntries.length > 0 || enemyEntries.length > 0)) {
-      const entry = playerEntries[0] || enemyEntries[0];
-      console.log(`Zone ${zoneId} (center: ${state.centerX.toFixed(1)}, ${state.centerZ.toFixed(1)}, r=${radius}): entries=${playerEntries.length}p/${enemyEntries.length}e, fillRadius=${state.playerFillRadius.toFixed(1)}/${state.enemyFillRadius.toFixed(1)}, entry@(${entry?.entryX.toFixed(1)}, ${entry?.entryZ.toFixed(1)})`);
-    }
+    // Cap fill radius at max possible distance (diagonal of box)
+    const maxDist = Math.sqrt(state.width * state.width + state.height * state.height);
+    state.playerFillRadius = Math.min(state.playerFillRadius, maxDist);
+    state.enemyFillRadius = Math.min(state.enemyFillRadius, maxDist);
 
     // Update fill grid based on distances and fill radii
     let playerCells = 0;
     let enemyCells = 0;
     let emptyCells = 0;
+
+    const { fillGrid, playerDistances, enemyDistances } = state;
 
     for (let i = 0; i < fillGrid.length; i++) {
       const playerDist = playerDistances[i]!;
@@ -209,7 +193,6 @@ export class ZoneFillRenderer {
       const enemyCanFill = enemyDist <= state.enemyFillRadius && enemyDist < Infinity;
 
       if (playerCanFill && enemyCanFill) {
-        // Both teams trying to fill - closest wins
         if (playerDist < enemyDist) {
           fillGrid[i] = 1;
           playerCells++;
@@ -217,7 +200,6 @@ export class ZoneFillRenderer {
           fillGrid[i] = 2;
           enemyCells++;
         } else {
-          // Equal distance - keep current state or empty
           if (fillGrid[i] === 1) playerCells++;
           else if (fillGrid[i] === 2) enemyCells++;
           else emptyCells++;
@@ -235,45 +217,35 @@ export class ZoneFillRenderer {
     }
 
     // Check if zone is fully filled
-    const totalValidCells = this.countValidCells(state);
+    const totalValidCells = state.resolution * state.resolution; // All cells valid in rectangle
     const filledCells = playerCells + enemyCells;
-    state.isFullyFilled = filledCells >= totalValidCells * 0.95; // 95% threshold
+    state.isFullyFilled = filledCells >= totalValidCells * 0.95;
 
-    // Debug logging (throttled)
-    if (Math.random() < 0.02 && (playerCells > 0 || enemyCells > 0 || state.playerFillRadius > 0)) {
-      console.log(`Zone ${zoneId} fill: playerCells=${playerCells}, enemyCells=${enemyCells}, total=${totalValidCells}, fillRadius=${state.playerFillRadius.toFixed(1)}`);
-    }
-
-    // Check for capture (one team has 100% control)
+    // Check for capture
     if (state.isFullyFilled && !state.isCaptured) {
       if (playerCells > 0 && enemyCells === 0) {
-        // Player captured the zone
         state.isCaptured = true;
         state.capturedBy = 'player';
       } else if (enemyCells > 0 && playerCells === 0) {
-        // Enemy captured the zone
         state.isCaptured = true;
         state.capturedBy = 'enemy';
       }
     }
 
-    // If fully filled and contested, rebalance toward proportional control
+    // Rebalancing logic
     if (state.isFullyFilled && playerEntries.length > 0 && enemyEntries.length > 0) {
       const targetRatio = playerEntries.length / (playerEntries.length + enemyEntries.length);
       const currentRatio = playerCells / Math.max(1, playerCells + enemyCells);
 
-      // Slowly move toward target ratio
       if (currentRatio < targetRatio) {
         state.rebalanceRatio = Math.min(targetRatio, state.rebalanceRatio + this.REBALANCE_SPEED * dt);
       } else if (currentRatio > targetRatio) {
         state.rebalanceRatio = Math.max(targetRatio, state.rebalanceRatio - this.REBALANCE_SPEED * dt);
       }
 
-      // Apply rebalancing by adjusting fill radii
       this.applyRebalancing(state, targetRatio);
     }
 
-    // Render updated texture
     this.renderZoneTexture(state);
   }
 
@@ -286,7 +258,7 @@ export class ZoneFillRenderer {
     distances: Float32Array,
     _team: 'player' | 'enemy'
   ): void {
-    const { resolution, centerX, centerZ, radius } = state;
+    const { resolution, centerX, centerZ, width, height } = state;
 
     // Reset distances if no entries
     if (entries.length === 0) {
@@ -300,18 +272,9 @@ export class ZoneFillRenderer {
         const i = py * resolution + px;
 
         // Convert pixel to world coordinates
-        const worldX = centerX + (px / resolution - 0.5) * 2 * radius;
-        const worldZ = centerZ + (py / resolution - 0.5) * 2 * radius;
-
-        // Check if within zone circle
-        const dx = worldX - centerX;
-        const dz = worldZ - centerZ;
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-
-        if (distFromCenter > radius) {
-          distances[i] = Infinity;
-          continue;
-        }
+        // Map 0..1 to -width/2 .. width/2
+        const worldX = centerX + (px / resolution - 0.5) * width;
+        const worldZ = centerZ + (py / resolution - 0.5) * height;
 
         // Find minimum distance to any entry point
         let minDist = Infinity;
@@ -328,35 +291,17 @@ export class ZoneFillRenderer {
   }
 
   /**
-   * Count valid cells (cells within the zone circle)
+   * Count valid cells (cells within the zone)
    */
   private countValidCells(state: ZoneFillState): number {
-    const { resolution, centerX, centerZ, radius } = state;
-    let count = 0;
-
-    for (let py = 0; py < resolution; py++) {
-      for (let px = 0; px < resolution; px++) {
-        const worldX = centerX + (px / resolution - 0.5) * 2 * radius;
-        const worldZ = centerZ + (py / resolution - 0.5) * 2 * radius;
-
-        const dx = worldX - centerX;
-        const dz = worldZ - centerZ;
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-
-        if (distFromCenter <= radius) {
-          count++;
-        }
-      }
-    }
-
-    return count;
+    return state.resolution * state.resolution; // Rectangle fills entire texture
   }
 
   /**
    * Apply rebalancing when zone is contested and fully filled
    */
   private applyRebalancing(state: ZoneFillState, targetRatio: number): void {
-    // Adjust fill radii to achieve target ratio
+    // Logic mostly unchanged, just using abstract radius
     const totalRadius = state.playerFillRadius + state.enemyFillRadius;
     if (totalRadius > 0) {
       const newPlayerRadius = totalRadius * targetRatio;
@@ -372,7 +317,7 @@ export class ZoneFillRenderer {
    * Render the fill state to the canvas texture
    */
   private renderZoneTexture(state: ZoneFillState): void {
-    const { ctx, canvas, resolution, fillGrid, centerX, centerZ, radius } = state;
+    const { ctx, canvas, resolution, fillGrid, width, height } = state;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -386,25 +331,20 @@ export class ZoneFillRenderer {
         const i = py * resolution + px;
         const pixelIndex = i * 4;
 
-        // Check if within zone circle
-        const worldX = centerX + (px / resolution - 0.5) * 2 * radius;
-        const worldZ = centerZ + (py / resolution - 0.5) * 2 * radius;
-        const dx = worldX - centerX;
-        const dz = worldZ - centerZ;
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+        // Rectangular logic implies all pixels in texture are valid part of zone
+        // But we might want edge softening
 
-        if (distFromCenter > radius) {
-          // Outside zone - fully transparent
-          data[pixelIndex] = 0;
-          data[pixelIndex + 1] = 0;
-          data[pixelIndex + 2] = 0;
-          data[pixelIndex + 3] = 0;
-          continue;
-        }
+        // Distance from edge for softening
+        // u, v are 0..1
+        const u = px / resolution;
+        const v = py / resolution;
 
-        // Edge softening
-        const edgeDist = radius - distFromCenter;
-        const edgeAlpha = Math.min(1, edgeDist / (radius * 0.1));
+        // distance from edge in UV space (0.5 is center, 0 or 1 is edge)
+        const dEdgeU = 0.5 - Math.abs(u - 0.5);
+        const dEdgeV = 0.5 - Math.abs(v - 0.5);
+        const minEdgeDist = Math.min(dEdgeU * width, dEdgeV * height); // in world units approx
+
+        const edgeAlpha = Math.min(1, minEdgeDist / 2.0); // 2 unit soften edge
 
         const fillValue = fillGrid[i]!;
 

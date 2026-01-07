@@ -341,21 +341,21 @@ export class MinimapRenderer {
       // Convert world coordinates (centered at 0,0) to minimap coordinates
       const x = (zone.x + mapCenterX) * this.pixelsPerMeter;
       const z = (zone.z + mapCenterZ) * this.pixelsPerMeter;
-      const radius = zone.radius * this.pixelsPerMeter;
+      const w = zone.width * this.pixelsPerMeter;
+      const h = zone.height * this.pixelsPerMeter;
 
       // Determine color based on ownership
       let color = this.COLORS.neutral;
       if (zone.owner === 'player') color = this.COLORS.friendly;
       else if (zone.owner === 'enemy') color = this.COLORS.enemy;
 
-      // Draw zone circle
-      ctx.beginPath();
-      ctx.arc(x, z, radius, 0, Math.PI * 2);
+      // Draw zone rectangle
       ctx.fillStyle = color + '40'; // Semi-transparent fill
-      ctx.fill();
+      ctx.fillRect(x - w / 2, z - h / 2, w, h);
+
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.strokeRect(x - w / 2, z - h / 2, w, h);
     }
   }
 
@@ -441,7 +441,7 @@ export class MinimapRenderer {
       // Enemy units only visible if fog of war allows it
       if (unit.team !== 'player') {
         if (this.game.fogOfWarManager.isEnabled() &&
-            !this.game.fogOfWarManager.isUnitVisible(unit)) {
+          !this.game.fogOfWarManager.isUnitVisible(unit)) {
           continue; // Skip drawing unit not in vision
         }
       }

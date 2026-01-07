@@ -12,6 +12,8 @@
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import * as THREE from 'three';
+import { MapGenerator } from '../map/MapGenerator';
+import { opticsToNumber } from '../../data/types';
 
 export enum VisibilityState {
   Unexplored = 0,  // Never seen (black)
@@ -26,10 +28,10 @@ export class FogOfWarManager {
   // Vision map (grid-based for performance)
   private readonly cellSize = 10; // 10m cells
 
-  // Current visibility (cleared each frame)
-  private currentVision: Map<string, boolean> = new Map();
+  // Current visibility per team: Map<teamId, Map<cellKey, isVisible>>
+  private currentVision: Map<string, Map<string, boolean>> = new Map();
 
-  // Explored state (persistent - once explored, stays explored)
+  // Explored state only for player team
   private exploredGrid: Map<string, boolean> = new Map();
 
   constructor(game: Game) {
@@ -50,14 +52,15 @@ export class FogOfWarManager {
   update(_dt: number): void {
     if (!this.enabled) return;
 
-    // Clear current vision (but keep explored state)
+    // Clear current vision
     this.currentVision.clear();
 
-    // Get all friendly units (player + allies) - they share vision
-    const playerUnits = this.game.unitManager.getAllUnits().filter(u => u.team === 'player');
+    // Get all units
+    const allUnits = this.game.unitManager.getAllUnits();
 
-    // Update vision for each unit
-    for (const unit of playerUnits) {
+    // Update vision for each unit's team
+    for (const unit of allUnits) {
+      if (unit.health <= 0) continue;
       this.updateVisionForUnit(unit);
     }
 
@@ -71,6 +74,13 @@ export class FogOfWarManager {
   private updateVisionForUnit(unit: Unit): void {
     const visionRadius = this.getVisionRadius(unit);
     const unitPos = unit.position;
+    const team = unit.team;
+
+    // Ensure team map exists
+    if (!this.currentVision.has(team)) {
+      this.currentVision.set(team, new Map());
+    }
+    const teamVision = this.currentVision.get(team)!;
 
     // Mark cells within vision radius as visible
     const cellRadius = Math.ceil(visionRadius / this.cellSize);
@@ -84,12 +94,20 @@ export class FogOfWarManager {
         const distSq = (worldX - unitPos.x) ** 2 + (worldZ - unitPos.z) ** 2;
         if (distSq <= visionRadius ** 2) {
           // Check line of sight - blocked by smoke
-          const targetPos = new THREE.Vector3(worldX, unitPos.y, worldZ);
-          if (!this.isLOSBlocked(unitPos, targetPos)) {
+          // Use head height (2m) for both unit and target point
+          const startPos = unitPos.clone();
+          startPos.y += 2;
+          const targetPos = new THREE.Vector3(worldX, 0, worldZ);
+          targetPos.y = this.getTerrainHeight(worldX, worldZ) + 2;
+
+          if (!this.isLOSBlocked(startPos, targetPos)) {
             const key = this.getCellKey(worldX, worldZ);
-            this.currentVision.set(key, true);
-            // Also mark as explored (permanent)
-            this.exploredGrid.set(key, true);
+            teamVision.set(key, true);
+
+            // Only update explored grid for player team
+            if (team === 'player') {
+              this.exploredGrid.set(key, true);
+            }
           }
         }
       }
@@ -99,11 +117,23 @@ export class FogOfWarManager {
   /**
    * Get vision radius for a unit
    */
-  private getVisionRadius(_unit: Unit): number {
-    // Base vision radius (50m default)
-    // In a full implementation, this would read from unit's optics stat
-    const baseVision = 50;
-    return baseVision;
+  private getVisionRadius(unit: Unit): number {
+    if (!unit.data) return 50;
+
+    // Use unit data optics rating
+    const opticsVal = opticsToNumber(unit.data.optics);
+
+    // Scale vision: Poor(2) = 150m, Normal(3) = 250m, Good(4) = 400m, Exceptional(6) = 1000m
+    // This provides meaningful differences in spotting range
+    const scales: Record<number, number> = {
+      2: 150,
+      3: 250,
+      4: 400,
+      5: 700,
+      6: 1000
+    };
+
+    return scales[opticsVal] ?? 250;
   }
 
   /**
@@ -116,14 +146,14 @@ export class FogOfWarManager {
   }
 
   /**
-   * Get visibility state for a position
+   * Get visibility state for a position from player perspective
    */
   getVisibilityState(x: number, z: number): VisibilityState {
     if (!this.enabled) return VisibilityState.Visible;
 
     const key = this.getCellKey(x, z);
 
-    if (this.currentVision.has(key)) {
+    if (this.currentVision.get('player')?.has(key)) {
       return VisibilityState.Visible;
     }
 
@@ -154,11 +184,19 @@ export class FogOfWarManager {
    * Check if a unit is visible to player
    */
   isUnitVisible(unit: Unit): boolean {
-    // Player's own units are always visible
-    if (unit.team === 'player') return true;
+    return this.isUnitVisibleToTeam(unit, 'player');
+  }
 
-    // Enemy units only visible if currently in vision (not just explored)
-    return this.isVisible(unit.position.x, unit.position.z);
+  /**
+   * Check if a unit is visible to a specific team
+   */
+  isUnitVisibleToTeam(unit: Unit, viewerTeam: string): boolean {
+    if (!this.enabled) return true;
+    if (unit.team === viewerTeam) return true;
+
+    // For units, check 2m above ground (head height)
+    const key = this.getCellKey(unit.position.x, unit.position.z);
+    return this.currentVision.get(viewerTeam)?.has(key) ?? false;
   }
 
   /**
@@ -210,6 +248,51 @@ export class FogOfWarManager {
       return true;
     }
 
+    // Check terrain elevation blocking (hills/ridges)
+    if (this.isTerrainBlocking(start, end)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Get terrain height at a position
+   */
+  private getTerrainHeight(x: number, z: number): number {
+    if (!this.game.currentMap) return 0;
+    const map = this.game.currentMap;
+    const mapGenerator = new MapGenerator(map.seed, map.size);
+    return mapGenerator.getElevationAt(x, z);
+  }
+
+  /**
+   * Check if terrain elevation blocks line of sight
+   */
+  private isTerrainBlocking(start: THREE.Vector3, end: THREE.Vector3): boolean {
+    const map = this.game.currentMap;
+    if (!map) return false;
+
+    const mapGenerator = new MapGenerator(map.seed, map.size);
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const distance = direction.length();
+
+    // Sample every 5 meters along the line
+    const stepSize = 5;
+    const steps = Math.ceil(distance / stepSize);
+
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const point = new THREE.Vector3().lerpVectors(start, end, t);
+
+      const terrainHeight = mapGenerator.getElevationAt(point.x, point.z);
+
+      // If terrain is higher than the line of sight at this point, it's blocked
+      if (terrainHeight > point.y) {
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -227,7 +310,22 @@ export class FogOfWarManager {
 
       // Simple 2D line-box intersection test
       if (this.lineIntersectsBox2D(start, end, buildingPos, halfWidth, halfDepth)) {
-        return true;
+        // Now check height: is the ray below the building top?
+        // We'll check the mid-point of the intersection for simplicity
+
+
+        // Find t for intersection with box boundaries
+        // This is a bit complex for a one-off check, so let's sample points along the ray 
+        // that are inside the box's horizontal area
+        const dist = start.distanceTo(end);
+        const steps = Math.ceil(dist / 2);
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const p = new THREE.Vector3().lerpVectors(start, end, t);
+          if (this.pointInBox2D(p, buildingPos.x - halfWidth, buildingPos.x + halfWidth, buildingPos.z - halfDepth, buildingPos.z + halfDepth)) {
+            if (p.y < building.height) return true;
+          }
+        }
       }
     }
 
@@ -263,7 +361,8 @@ export class FogOfWarManager {
       if (gridZ >= 0 && gridZ < rows && gridX >= 0 && gridX < cols) {
         const cell = terrain[gridZ]?.[gridX];
         if (cell?.type === 'forest') {
-          return true; // LOS blocked by forest
+          // Check height: forests only block if the ray is below canopy height (approx 15m)
+          if (point.y < 15) return true;
         }
       }
     }
@@ -289,7 +388,7 @@ export class FogOfWarManager {
 
     // Check if either endpoint is inside the box
     if (this.pointInBox2D(start, minX, maxX, minZ, maxZ) ||
-        this.pointInBox2D(end, minX, maxX, minZ, maxZ)) {
+      this.pointInBox2D(end, minX, maxX, minZ, maxZ)) {
       return true;
     }
 
@@ -339,7 +438,7 @@ export class FogOfWarManager {
     maxZ: number
   ): boolean {
     return point.x >= minX && point.x <= maxX &&
-           point.z >= minZ && point.z <= maxZ;
+      point.z >= minZ && point.z <= maxZ;
   }
 
   /**

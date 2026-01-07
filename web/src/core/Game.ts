@@ -677,16 +677,17 @@ export class Game {
     // Initialize building manager with map buildings
     this.buildingManager.initialize(this.currentMap.buildings);
 
-    // Find player deployment zone
-    const playerZone = this.currentMap.deploymentZones.find(z => z.team === 'player');
-    if (playerZone) {
-      this.deploymentManager.initialize(deck, playerZone);
+    // Find player deployment zones
+    const playerZones = this.currentMap.deploymentZones.filter(z => z.team === 'player');
+    if (playerZones.length > 0) {
+      this.deploymentManager.initialize(deck, playerZones);
     }
 
-    // Position camera at player deployment zone
-    if (playerZone) {
-      const centerX = (playerZone.minX + playerZone.maxX) / 2;
-      const centerZ = (playerZone.minZ + playerZone.maxZ) / 2;
+    // Position camera at first player deployment zone
+    const firstPlayerZone = playerZones[0];
+    if (firstPlayerZone) {
+      const centerX = (firstPlayerZone.minX + firstPlayerZone.maxX) / 2;
+      const centerZ = (firstPlayerZone.minZ + firstPlayerZone.maxZ) / 2;
       this.cameraController.setPosition(centerX, centerZ);
     }
 
@@ -719,8 +720,9 @@ export class Game {
       defaultUnits.forEach((unitType, i) => {
         const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.3 + 0.2 * i);
         const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
+        const y = this.getElevationAt(x, z);
         this.unitManager.spawnUnit({
-          position: new THREE.Vector3(x, 0, z),
+          position: new THREE.Vector3(x, y, z),
           team: 'enemy',
           ownerId: 'enemy',
           unitType,
@@ -927,8 +929,9 @@ export class Game {
     for (const unit of deployed) {
       const clampedX = Math.max(zone.minX + 5, Math.min(zone.maxX - 5, unit.x));
       const clampedZ = Math.max(zone.minZ + 5, Math.min(zone.maxZ - 5, unit.z));
+      const y = this.getElevationAt(clampedX, clampedZ);
       this.unitManager.spawnUnit({
-        position: new THREE.Vector3(clampedX, 0, clampedZ),
+        position: new THREE.Vector3(clampedX, y, clampedZ),
         team,
         ownerId,
         unitType: unit.unitId,
@@ -1171,6 +1174,63 @@ export class Game {
     }
 
     return null;
+  }
+
+  /**
+   * Get elevation at a specific world position
+   */
+  public getElevationAt(x: number, z: number): number {
+    if (!this.currentMap) return 0;
+
+    const map = this.currentMap;
+    const halfWidth = map.width / 2;
+    const halfHeight = map.height / 2;
+
+    // Convert world coords to grid coords
+    const gridX = (x + halfWidth) / map.cellSize;
+    const gridZ = (z + halfHeight) / map.cellSize;
+
+    // Get the four surrounding grid cells
+    const x0 = Math.floor(gridX);
+    const z0 = Math.floor(gridZ);
+    const x1 = x0 + 1;
+    const z1 = z0 + 1;
+
+    // Clamp to terrain bounds
+    if (!map.terrain || map.terrain.length === 0) return 0;
+
+    const cols = map.terrain[0]?.length || 0;
+    const rows = map.terrain.length;
+    const cx0 = Math.max(0, Math.min(cols - 1, x0));
+    const cx1 = Math.max(0, Math.min(cols - 1, x1));
+    const cz0 = Math.max(0, Math.min(rows - 1, z0));
+    const cz1 = Math.max(0, Math.min(rows - 1, z1));
+
+    // Get elevations at corners
+    const row0 = map.terrain[cz0];
+    const row1 = map.terrain[cz1];
+    if (!row0 || !row1) return 0;
+
+    const cell00 = row0[cx0];
+    const cell10 = row0[cx1];
+    const cell01 = row1[cx0];
+    const cell11 = row1[cx1];
+
+    if (!cell00 || !cell10 || !cell01 || !cell11) return 0;
+
+    const e00 = cell00.elevation;
+    const e10 = cell10.elevation;
+    const e01 = cell01.elevation;
+    const e11 = cell11.elevation;
+
+    // Bilinear interpolation
+    const fx = gridX - x0;
+    const fz = gridZ - z0;
+
+    const e0 = e00 * (1 - fx) + e10 * fx;
+    const e1 = e01 * (1 - fx) + e11 * fx;
+
+    return e0 * (1 - fz) + e1 * fz;
   }
 
   /**
