@@ -92,17 +92,20 @@ export class SettlementGenerator {
     position: { x: number; z: number },
     size: SettlementSize,
     layoutType?: LayoutType,
-    mainRoadAngle?: number
+    mainRoadAngle?: number,
+    densityMultiplier: number = 1.0
   ): Settlement {
     const params = SETTLEMENT_PARAMS[size];
     const layout = layoutType ?? this.pickLayoutType(size);
 
-    // Calculate radius
-    const radius = params.radius.min + this.random() * (params.radius.max - params.radius.min);
+    // Calculate radius - keep mostly constant to actually increase density
+    // Only slightly increase radius for very high multipliers to prevent total overcrowding
+    const radiusMultiplier = Math.pow(densityMultiplier, 0.2);
+    const radius = (params.radius.min + this.random() * (params.radius.max - params.radius.min)) * radiusMultiplier;
 
-    // Calculate building count
+    // Calculate building count - scale directly by multiplier
     const buildingCount = Math.floor(
-      params.buildingCount.min + this.random() * (params.buildingCount.max - params.buildingCount.min)
+      (params.buildingCount.min + this.random() * (params.buildingCount.max - params.buildingCount.min)) * densityMultiplier
     );
 
     // Determine main axis (for grid alignment)
@@ -149,7 +152,7 @@ export class SettlementGenerator {
     this.generateEntryPoints(settlement);
 
     // Generate buildings
-    this.generateBuildings(settlement, buildingCount);
+    this.generateBuildings(settlement, buildingCount, densityMultiplier);
 
     return settlement;
   }
@@ -417,7 +420,11 @@ export class SettlementGenerator {
   /**
    * Generate buildings for the settlement
    */
-  private generateBuildings(settlement: Settlement, targetCount: number): void {
+  private generateBuildings(
+    settlement: Settlement,
+    targetCount: number,
+    densityMultiplier: number = 1.0
+  ): void {
     const { size, layoutType } = settlement;
     const composition = SETTLEMENT_COMPOSITION[size];
 
@@ -456,7 +463,7 @@ export class SettlementGenerator {
     for (const category of ['civic', 'commercial', 'residential', 'industrial', 'agricultural', 'infrastructure'] as BuildingCategory[]) {
       const count = categoryTargets[category];
       for (let i = 0; i < count; i++) {
-        const building = this.placeBuilding(settlement, category, placedBuildings, layoutType);
+        const building = this.placeBuilding(settlement, category, placedBuildings, layoutType, densityMultiplier);
         if (building) {
           placedBuildings.push(building);
         }
@@ -498,7 +505,8 @@ export class SettlementGenerator {
     settlement: Settlement,
     category: BuildingCategory,
     existingBuildings: Building[],
-    layoutType: LayoutType
+    layoutType: LayoutType,
+    densityMultiplier: number = 1.0
   ): Building | null {
     const { size, position, radius, mainAxis } = settlement;
 
@@ -517,25 +525,87 @@ export class SettlementGenerator {
     const zoneMultiplier = this.getZoneMultiplier(category, size);
 
     // Try to place building
-    for (let attempt = 0; attempt < 20; attempt++) {
+    // Increase attempts for dense layouts
+    const maxAttempts = densityMultiplier > 1.2 ? 50 : 20;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let x: number, z: number, rotation: number;
 
       if (layoutType === 'grid') {
         // Grid layout: align buildings with grid
+        // Pick a block (i, j) relative to center
         const blockSize = 90;
-        const gridX = Math.floor((this.random() - 0.5) * radius * 2 / blockSize) * blockSize;
-        const gridZ = Math.floor((this.random() - 0.5) * radius * 2 / blockSize) * blockSize;
+        const maxBlocks = Math.ceil(radius / blockSize);
+        // Focus on inner blocks for density
+        const range = maxBlocks * (densityMultiplier > 1.5 ? 0.8 : 1.0);
+        const i = Math.floor((this.random() - 0.5) * 2 * range);
+        const j = Math.floor((this.random() - 0.5) * 2 * range);
 
-        // Offset within block (along street edge)
-        const edgeOffset = (this.random() - 0.5) * (blockSize - spec.footprint.width - 10);
-        const streetSide = this.random() < 0.5 ? -1 : 1;
-        const setback = 3 + this.random() * 3; // 3-6m setback
+        // Local coordinates relative to settlement center, aligned with mainAxis
+        // Center of the chosen block
+        const blockCenterU = (i + 0.5) * blockSize;
+        const blockCenterV = (j + 0.5) * blockSize;
 
-        x = position.x + gridX + edgeOffset;
-        z = position.z + gridZ + streetSide * (blockSize / 2 - setback - spec.footprint.depth / 2);
+        // Position within block (along the edges)
+        const side = Math.floor(this.random() * 4); // 0=Top(+V), 1=Right(+U), 2=Bottom(-V), 3=Left(-U)
+        const setback = 2 + this.random() * 4;
 
-        // Align with grid
-        rotation = mainAxis + (this.random() < 0.5 ? 0 : Math.PI / 2);
+        // Spread along the face, keeping away from corners (avoid intersections)
+        const cornerBuffer = 15;
+        const faceLength = blockSize - (cornerBuffer * 2);
+        const offsetAlongFace = (this.random() - 0.5) * Math.max(1, faceLength - Math.max(spec.footprint.width, spec.footprint.depth));
+
+        let u = blockCenterU;
+        let v = blockCenterV;
+        let rotOffset = 0;
+
+        const halfBlock = blockSize / 2;
+        // Assume streets are at i*blockSize (edges of block are +/- halfBlock from center)
+
+        switch (side) {
+          case 0: // Top edge (+V), facing +V (away from center) or -V (towards center)? 
+            // Streets surround the block. Building should face the street.
+            // If Top edge is near V = center + halfBlock.
+            // Building fronts the street at +V.
+            u += offsetAlongFace;
+            v += halfBlock - setback - spec.footprint.depth / 2;
+            rotOffset = 0; // Face 'Up' relative to grid (+V)
+            break;
+          case 1: // Right edge (+U)
+            u += halfBlock - setback - spec.footprint.depth / 2;
+            v += offsetAlongFace;
+            rotOffset = -Math.PI / 2; // Face 'Right' (+U)
+            break;
+          case 2: // Bottom edge (-V)
+            u += offsetAlongFace;
+            v -= halfBlock - setback - spec.footprint.depth / 2;
+            rotOffset = Math.PI; // Face 'Down' (-V)
+            break;
+          case 3: // Left edge (-U)
+            u -= halfBlock - setback - spec.footprint.depth / 2;
+            v += offsetAlongFace;
+            rotOffset = Math.PI / 2; // Face 'Left' (-U)
+            break;
+        }
+
+        // Transform to world coordinates
+        // v corresponds to North (Z-) in standard math, but here we just need consistency with generateStreets
+        // generateStreets uses: x + cos(perp)*offset
+        // perp = mainAxis + PI/2.
+        // So 'u' is along mainAxis (cos(axis)), 'v' is along perp (cos(axis+PI/2) = -sin(axis))
+        // Wait, generateStreets: 
+        // NS streets (perp to axis): x = pos.x + cos(perp)*offset... -> these are the V lines?
+        // No, 'offset' in generateStreets iterates -numBlocks..numBlocks.
+
+        // Let's stick to standard 2D rotation:
+        // u = along mainAxis
+        // v = perpendicular (mainAxis + 90 deg)
+        const cos = Math.cos(mainAxis);
+        const sin = Math.sin(mainAxis);
+
+        x = position.x + (u * cos - v * sin);
+        z = position.z + (u * sin + v * cos);
+        rotation = mainAxis + rotOffset;
       } else {
         // Organic layout: place along streets or in zones
         const angle = this.random() * Math.PI * 2;
@@ -549,11 +619,15 @@ export class SettlementGenerator {
       }
 
       // Check for overlap
-      if (!this.checkOverlap(x, z, spec.footprint.width, spec.footprint.depth, rotation, existingBuildings)) {
+      if (!this.checkOverlap(x, z, spec.footprint.width, spec.footprint.depth, rotation, existingBuildings, settlement.streets, densityMultiplier)) {
+        if (Math.random() < 0.05) console.log(`[SettlementGenerator] Placed ${category} building at ${x.toFixed(1)}, ${z.toFixed(1)} after ${attempt} attempts`);
         return this.createBuilding(spec, x, z, settlement.id, rotation);
+      } else {
+        if (Math.random() < 0.01) console.log(`[SettlementGenerator] Failed to place ${category} building at ${x.toFixed(1)}, ${z.toFixed(1)} due to overlap (attempt ${attempt})`);
       }
     }
 
+    console.warn(`[SettlementGenerator] Failed to place ${category} building after ${maxAttempts} attempts`);
     return null;
   }
 
@@ -588,9 +662,13 @@ export class SettlementGenerator {
     width: number,
     depth: number,
     _rotation: number,
-    existingBuildings: Building[]
+    existingBuildings: Building[],
+    streets: Road[] | undefined,
+    densityMultiplier: number = 1.0
   ): boolean {
-    const padding = 3; // Minimum gap between buildings
+    // Reduce padding for dense layouts
+    // For extreme density, allow slight overlap (-0.5) to pack tight row houses
+    const padding = densityMultiplier > 1.8 ? -0.5 : (densityMultiplier > 1.2 ? 1 : 3);
 
     for (const building of existingBuildings) {
       const dx = Math.abs(x - building.x);
@@ -600,6 +678,38 @@ export class SettlementGenerator {
 
       if (dx < minDx && dz < minDz) {
         return true;
+      }
+    }
+
+    // Check overlap with streets
+    if (streets) {
+      const buildingRadius = Math.max(width, depth) / 2;
+
+      for (const street of streets) {
+        // Simple check against street points
+        for (let i = 0; i < street.points.length - 1; i++) {
+          const p1 = street.points[i]!;
+          const p2 = street.points[i + 1]!;
+
+          // Distance from point to line segment
+          const l2 = (p1.x - p2.x) ** 2 + (p1.z - p2.z) ** 2;
+          if (l2 === 0) continue;
+
+          let t = ((x - p1.x) * (p2.x - p1.x) + (z - p1.z) * (p2.z - p1.z)) / l2;
+          t = Math.max(0, Math.min(1, t));
+
+          const px = p1.x + t * (p2.x - p1.x);
+          const pz = p1.z + t * (p2.z - p1.z);
+
+          const distSq = (x - px) ** 2 + (z - pz) ** 2;
+          // Very tight tolerance for high density cities
+          const buffer = densityMultiplier > 1.5 ? 0.5 : 2;
+          const minD = buildingRadius + (street.width / 2) + buffer;
+
+          if (distSq < minD * minD) {
+            return true;
+          }
+        }
       }
     }
 

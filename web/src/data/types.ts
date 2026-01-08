@@ -403,13 +403,13 @@ export const SETTLEMENT_PARAMS: Record<SettlementSize, {
     buildingCount: { min: 80, max: 120 },
     radius: { min: 200, max: 350 },
     roadConnections: { min: 2, max: 4 },
-    layoutWeights: { organic: 0.4, grid: 0.3, mixed: 0.3 },
+    layoutWeights: { organic: 0.2, grid: 0.3, mixed: 0.5 },
   },
   city: {
-    buildingCount: { min: 300, max: 500 },
-    radius: { min: 400, max: 750 },
+    buildingCount: { min: 600, max: 1000 },
+    radius: { min: 400, max: 600 },
     roadConnections: { min: 4, max: 8 },
-    layoutWeights: { organic: 0.2, grid: 0.3, mixed: 0.5 },
+    layoutWeights: { organic: 0.1, grid: 0.6, mixed: 0.3 },
   },
 };
 

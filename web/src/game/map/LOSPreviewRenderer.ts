@@ -93,9 +93,65 @@ export class LOSPreviewRenderer {
       (this.previewMesh.material as THREE.Material).dispose();
     }
 
-    // Create circle geometry
-    const geometry = new THREE.CircleGeometry(this.previewRadius, 64);
-    geometry.rotateX(-Math.PI / 2);
+    // Create terrain-conforming circle geometry with high resolution
+    const radialSegments = 128; // High segment count for smooth appearance
+    const ringCount = Math.ceil(this.previewRadius / 5); // One ring every 5 meters
+    const vertices: number[] = [];
+    const indices: number[] = [];
+
+    const map = this.game.currentMap;
+    const heightOffset = 0.5; // Small offset above terrain to prevent z-fighting
+
+    // Build concentric rings from center outward
+    for (let ring = 0; ring <= ringCount; ring++) {
+      const radius = (ring / ringCount) * this.previewRadius;
+
+      if (ring === 0) {
+        // Center vertex
+        const centerElevation = map ? this.getTerrainElevation(worldPos.x, worldPos.z, map) : 0;
+        vertices.push(worldPos.x, centerElevation + heightOffset, worldPos.z);
+      } else {
+        // Ring vertices
+        for (let i = 0; i < radialSegments; i++) {
+          const angle = (i / radialSegments) * Math.PI * 2;
+          const x = worldPos.x + Math.cos(angle) * radius;
+          const z = worldPos.z + Math.sin(angle) * radius;
+          const elevation = map ? this.getTerrainElevation(x, z, map) : 0;
+          vertices.push(x, elevation + heightOffset, z);
+        }
+      }
+    }
+
+    // Create indices connecting rings
+    let vertexIndex = 1; // Start after center vertex
+    for (let ring = 0; ring < ringCount; ring++) {
+      if (ring === 0) {
+        // Connect center to first ring
+        for (let i = 0; i < radialSegments; i++) {
+          const next = (i + 1) % radialSegments;
+          indices.push(0, vertexIndex + i, vertexIndex + next);
+        }
+        vertexIndex += radialSegments;
+      } else {
+        // Connect ring to next ring
+        const currentRingStart = vertexIndex - radialSegments;
+        const nextRingStart = vertexIndex;
+
+        for (let i = 0; i < radialSegments; i++) {
+          const next = (i + 1) % radialSegments;
+
+          // Two triangles per quad
+          indices.push(currentRingStart + i, nextRingStart + i, nextRingStart + next);
+          indices.push(currentRingStart + i, nextRingStart + next, currentRingStart + next);
+        }
+        vertexIndex += radialSegments;
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
 
     const material = new THREE.MeshBasicMaterial({
       color: 0x4a9eff,
@@ -103,18 +159,44 @@ export class LOSPreviewRenderer {
       opacity: 0.2,
       side: THREE.DoubleSide,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true, // Enable depth test so it follows terrain
     });
 
     this.previewMesh = new THREE.Mesh(geometry, material);
-    this.previewMesh.position.copy(worldPos);
-    this.previewMesh.position.y = 1.5; // Above terrain
-    this.previewMesh.renderOrder = 98; // Render above most things
+    this.previewMesh.renderOrder = 98;
     this.scene.add(this.previewMesh);
 
-    // Add border ring
-    const ringGeometry = new THREE.RingGeometry(this.previewRadius - 0.5, this.previewRadius, 64);
-    ringGeometry.rotateX(-Math.PI / 2);
+    // Add border ring with terrain conforming
+    const ringVertices: number[] = [];
+    const ringIndices: number[] = [];
+
+    for (let i = 0; i <= radialSegments; i++) {
+      const angle = (i / radialSegments) * Math.PI * 2;
+
+      // Inner ring
+      const innerX = worldPos.x + Math.cos(angle) * (this.previewRadius - 0.5);
+      const innerZ = worldPos.z + Math.sin(angle) * (this.previewRadius - 0.5);
+      const innerElev = map ? this.getTerrainElevation(innerX, innerZ, map) : 0;
+      ringVertices.push(innerX, innerElev + heightOffset + 0.1, innerZ);
+
+      // Outer ring
+      const outerX = worldPos.x + Math.cos(angle) * this.previewRadius;
+      const outerZ = worldPos.z + Math.sin(angle) * this.previewRadius;
+      const outerElev = map ? this.getTerrainElevation(outerX, outerZ, map) : 0;
+      ringVertices.push(outerX, outerElev + heightOffset + 0.1, outerZ);
+    }
+
+    // Create quad strip indices
+    for (let i = 0; i < radialSegments; i++) {
+      const base = i * 2;
+      ringIndices.push(base, base + 1, base + 3);
+      ringIndices.push(base, base + 3, base + 2);
+    }
+
+    const ringGeometry = new THREE.BufferGeometry();
+    ringGeometry.setAttribute('position', new THREE.Float32BufferAttribute(ringVertices, 3));
+    ringGeometry.setIndex(ringIndices);
+    ringGeometry.computeVertexNormals();
 
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: 0x4a9eff,
@@ -122,12 +204,10 @@ export class LOSPreviewRenderer {
       opacity: 0.6,
       side: THREE.DoubleSide,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
     });
 
     const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-    ringMesh.position.copy(worldPos);
-    ringMesh.position.y = 1.6;
     ringMesh.renderOrder = 99;
     this.scene.add(ringMesh);
 
@@ -147,6 +227,9 @@ export class LOSPreviewRenderer {
       this.blockedMesh.geometry.dispose();
       (this.blockedMesh.material as THREE.Material).dispose();
     }
+
+    const map = this.game.currentMap;
+    const heightOffset = 0.6; // Slightly above the blue circle
 
     // Sample points around the circle to detect blocked areas
     const segments = 64;
@@ -178,11 +261,17 @@ export class LOSPreviewRenderer {
         const innerX2 = worldPos.x + Math.cos(nextAngle) * blockDist2;
         const innerZ2 = worldPos.z + Math.sin(nextAngle) * blockDist2;
 
+        // Sample terrain elevation at each vertex
+        const innerElev1 = map ? this.getTerrainElevation(innerX1, innerZ1, map) : 0;
+        const innerElev2 = map ? this.getTerrainElevation(innerX2, innerZ2, map) : 0;
+        const outerElev1 = map ? this.getTerrainElevation(x1, z1, map) : 0;
+        const outerElev2 = map ? this.getTerrainElevation(x2, z2, map) : 0;
+
         // Add vertices for shadow quad (from blocking point to edge)
-        blockedVertices.push(innerX1, worldPos.y + 1.5, innerZ1); // 0
-        blockedVertices.push(innerX2, worldPos.y + 1.5, innerZ2); // 1
-        blockedVertices.push(x2, worldPos.y + 1.5, z2); // 2
-        blockedVertices.push(x1, worldPos.y + 1.5, z1); // 3
+        blockedVertices.push(innerX1, innerElev1 + heightOffset, innerZ1); // 0
+        blockedVertices.push(innerX2, innerElev2 + heightOffset, innerZ2); // 1
+        blockedVertices.push(x2, outerElev2 + heightOffset, z2); // 2
+        blockedVertices.push(x1, outerElev1 + heightOffset, z1); // 3
 
         // Create two triangles for the quad
         blockedIndices.push(baseIdx, baseIdx + 1, baseIdx + 2);
@@ -203,7 +292,7 @@ export class LOSPreviewRenderer {
         opacity: 0.15,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true, // Enable depth test to follow terrain
       });
 
       this.blockedMesh = new THREE.Mesh(geometry, material);
@@ -435,7 +524,7 @@ export class LOSPreviewRenderer {
 
     // Check if either endpoint is inside the box
     if (this.pointInBox2D(start, minX, maxX, minZ, maxZ) ||
-        this.pointInBox2D(end, minX, maxX, minZ, maxZ)) {
+      this.pointInBox2D(end, minX, maxX, minZ, maxZ)) {
       return true;
     }
 
@@ -483,7 +572,7 @@ export class LOSPreviewRenderer {
     maxZ: number
   ): boolean {
     return point.x >= minX && point.x <= maxX &&
-           point.z >= minZ && point.z <= maxZ;
+      point.z >= minZ && point.z <= maxZ;
   }
 
   /**

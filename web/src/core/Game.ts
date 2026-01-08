@@ -280,12 +280,13 @@ export class Game {
     const mapSize = Math.max(mapWidth, mapHeight);
 
     // Update camera far plane for large maps
-    this.camera.far = Math.max(1000, mapSize * 1.5);
+    // Ensure far plane is large enough to see corners of map from high angle
+    this.camera.far = Math.max(2000, mapSize * 3.0);
     this.camera.updateProjectionMatrix();
 
     // Update fog for large maps
-    const fogNear = Math.max(100, mapSize * 0.1);
-    const fogFar = Math.max(500, mapSize * 1.2);
+    const fogNear = Math.max(500, mapSize * 0.5);
+    const fogFar = Math.max(2000, mapSize * 2.5);
     this.scene.fog = new THREE.Fog(0x1a1a2e, fogNear, fogFar);
 
     // Update shadow settings based on map size (use stored reference)

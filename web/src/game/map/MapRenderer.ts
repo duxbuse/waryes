@@ -300,6 +300,7 @@ export class MapRenderer {
     // Color definitions - use biome ground color for grass
     const grassColor = new THREE.Color(this.biomeGroundColor); // Biome-specific ground color
     const cliffColor = new THREE.Color(0x6b6355); // Gray-brown rock
+    const snowColor = new THREE.Color(0xf0f0f0); // Snow white
     const tempColor = new THREE.Color();
 
     // Field variant colors (Green, Wheat, Pasture, Dirt)
@@ -310,9 +311,15 @@ export class MapRenderer {
       new THREE.Color(0x6b5c45), // Dirt (Plowed)
     ];
 
+    // Calculate snow line - snow appears on upper 30% of elevation range
+    const elevationRange = map.maxElevation - map.baseElevation;
+    const snowLineStart = map.baseElevation + elevationRange * 0.70; // Start snow transition
+    const snowLineFull = map.baseElevation + elevationRange * 0.85; // Full snow coverage
+
     for (let i = 0; i < positionAttr.count; i++) {
       // Get normal Y component (1.0 = flat, 0.0 = vertical)
       const normalY = normalAttr.getY(i);
+      const elevation = positionAttr.getY(i);
 
       // Determine base ground color (grass or field variant)
       let baseColor = grassColor;
@@ -325,10 +332,19 @@ export class MapRenderer {
         baseColor = fieldColors[cell.variant] || grassColor;
       }
 
+      // Apply subtle slope darkening for depth perception
+      // Darken as slope increases (normalY decreases)
+      // Range: 1.0 at flat (normalY=1) down to ~0.7 at steep
+      const slopeDarkening = 0.7 + (0.3 * normalY);
+
+      // Clone base color to avoid mutating shared instances (like grassColor)
+      // and apply the darkening
+      const darkenedBase = baseColor.clone().multiplyScalar(slopeDarkening);
+
       // Calculate slope factor: 0 = vertical cliff, 1 = flat ground
-      // Cliffs start appearing at ~30 degree slopes (normalY < 0.866)
+      // Cliffs start appearing at ~18 degree slopes (normalY < 0.95) to make hills visible
       // Full cliff color at ~50+ degree slopes (normalY < 0.643)
-      const cliffThresholdStart = 0.866; // ~30 degrees
+      const cliffThresholdStart = 0.95; // ~18 degrees (makes gentle slopes visible)
       const cliffThresholdFull = 0.643;  // ~50 degrees
 
       let slopeFactor: number;
@@ -342,7 +358,20 @@ export class MapRenderer {
       }
 
       // Interpolate between cliff and base color
-      tempColor.copy(cliffColor).lerp(baseColor, slopeFactor);
+      tempColor.copy(cliffColor).lerp(darkenedBase, slopeFactor);
+
+      // Apply snow cap for high elevations
+      if (elevation > snowLineStart) {
+        let snowFactor: number;
+        if (elevation >= snowLineFull) {
+          snowFactor = 1.0; // Full snow
+        } else {
+          // Gradual transition from terrain to snow
+          snowFactor = (elevation - snowLineStart) / (snowLineFull - snowLineStart);
+        }
+        // Blend current color with snow
+        tempColor.lerp(snowColor, snowFactor);
+      }
 
       // Set vertex color
       colors[i * 3] = tempColor.r;
@@ -1763,7 +1792,9 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;
     };
 
+    console.log(`[MapRenderer] Rendering ${buildings.length} buildings`);
     for (const building of buildings) {
+      if (buildings.indexOf(building) < 5) console.log(`[MapRenderer] Building at ${building.x}, ${building.z} type ${building.type} W:${building.width} H:${building.height}`);
       const buildingMesh = this.createBuildingMesh(building, getElevationAt);
       buildingGroup.add(buildingMesh);
     }
@@ -2024,6 +2055,8 @@ export class MapRenderer {
       const centerX = (zone.minX + zone.maxX) / 2;
       const centerZ = (zone.minZ + zone.maxZ) / 2;
 
+      const terrainElevation = getElevationAt(centerX, centerZ);
+
       // Use a segmented plane that conforms to the terrain
       const segmentsX = Math.max(2, Math.floor(width / 4)); // Grid every ~4m
       const segmentsZ = Math.max(2, Math.floor(depth / 4));
@@ -2068,20 +2101,54 @@ export class MapRenderer {
 
       zoneGroup.add(mesh);
 
-      // Border using the same conforming geometry (wireframe) or EdgesGeometry?
-      // EdgesGeometry on a bumpy plane looks good
-      const borderGeometry = new THREE.EdgesGeometry(geometry, 15); // Threshold angle
+      // Create a custom perimeter border that follows terrain but has no internal lines
+      const borderPoints: THREE.Vector3[] = [];
+      const steps = 20; // Number of steps per side for terrain conformance
+
+      // Helper to add segments along a line
+      const addEdge = (x1: number, z1: number, x2: number, z2: number) => {
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const px = x1 + (x2 - x1) * t;
+          const pz = z1 + (z2 - z1) * t;
+          const py = getElevationAt(px, pz);
+          borderPoints.push(new THREE.Vector3(px, py + 1.5, pz)); // +1.5m to be slightly above the mesh
+        }
+      };
+
+      // Edges: Top, Right, Bottom, Left
+      addEdge(zone.minX, zone.minZ, zone.maxX, zone.minZ);
+      addEdge(zone.maxX, zone.minZ, zone.maxX, zone.maxZ);
+      addEdge(zone.maxX, zone.maxZ, zone.minX, zone.maxZ);
+      addEdge(zone.minX, zone.maxZ, zone.minX, zone.minZ);
+
+      const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
       const borderMaterial = new THREE.LineBasicMaterial({
         color: zone.team === 'player' ? 0x4a9eff : 0xff4a4a,
         depthWrite: false,
-        depthTest: false, // Always visible border
+        depthTest: false, // Always visible
         linewidth: 2,
       });
-      const border = new THREE.LineSegments(borderGeometry, borderMaterial);
-      border.position.copy(mesh.position);
-      border.position.y += 0.5; // Slightly higher
-      border.renderOrder = 100;
 
+      const border = new THREE.LineLoop(borderGeometry, borderMaterial);
+      // No position offset needed as points are in world space, except we need to reset the group offset implication if any?
+      // Wait, mesh.position is (centerX, terrainElevation, centerZ) but points are world space?
+      // Ah, the mesh geometry was generated relative to center, but we manually offset vertices?
+      // No, `PlaneGeometry` is centered at 0,0.
+      // And we did: `positions.setY(i, y - terrainElevation + 1.0)`
+      // The mesh itself is at `mesh.position.set(centerX, terrainElevation, centerZ)`
+
+      // So if we use world coordinates for the border lines, we should put the border at (0,0,0) or subtract the group offset.
+      // The `zoneGroup` is at (0,0,0) usually? 
+      // `zoneGroup` is added to `mapGroup`. `mapGroup` is usually at (0,0,0).
+      // `zoneGroup` has no position set, so it's at (0,0,0).
+
+      // The mesh was added to `zoneGroup`.
+      // The mesh has position (centerX, terrainElevation, centerZ).
+
+      // If I make the border points in world space, I should add the border to `zoneGroup` directly and NOT set its position (leave at 0,0,0).
+
+      border.renderOrder = 100;
       zoneGroup.add(border);
     }
 

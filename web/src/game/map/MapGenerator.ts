@@ -184,7 +184,7 @@ export class MapGenerator {
     this.filterBuildingsOnRoads(roads);
 
     // Generate capture zones at strategic points (settlements)
-    const captureZones = this.generateCaptureZones();
+    const captureZones = this.generateCaptureZones(deploymentZones);
 
     // Link capture zones to settlements
     this.linkCaptureZonesToSettlements(captureZones);
@@ -310,7 +310,8 @@ export class MapGenerator {
         { x: pos.x, z: pos.z },
         settlementSize,
         layoutType,
-        mainRoadAngle
+        mainRoadAngle,
+        this.biome === 'cities' ? 2.0 : 1.0 // Double density for cities biome
       );
 
       // Check if terrain is suitable for this settlement
@@ -394,6 +395,25 @@ export class MapGenerator {
         break;
       default:
         dist = { cities: 0, towns: 1, villages: 2, hamlets: 3, total: 0 };
+    }
+
+    // Special handling for 'cities' biome to ensure huge urban density (>30% coverage)
+    if (this.biomeConfig.id === 'cities') {
+      switch (this.size) {
+        case 'small':
+          // Small map: 1 town + 1 village (dominates map)
+          dist = { cities: 0, towns: 1, villages: 1, hamlets: 0, total: 2 };
+          break;
+        case 'medium':
+          // Medium map: 1 city + 3 towns (major urban sprawl)
+          dist = { cities: 1, towns: 3, villages: 0, hamlets: 0, total: 4 };
+          break;
+        case 'large':
+          // Large map: 3 cities + 8 towns (megalopolis)
+          dist = { cities: 3, towns: 8, villages: 5, hamlets: 0, total: 16 };
+          break;
+      }
+      return dist;
     }
 
     // Apply biome settlement density multiplier
@@ -702,9 +722,14 @@ export class MapGenerator {
     }
 
     // Determine number of features to place (random within range)
-    const featureCount = Math.floor(
+    let featureCount = Math.floor(
       this.rng.nextFloat(config.featureCount.min, config.featureCount.max + 1)
     );
+
+    // Mountain biome needs MORE features to actually look mountainous
+    if (this.biome === 'mountains') {
+      featureCount = Math.max(featureCount * 2, 6); // At least 6 features, double the normal count
+    }
 
     // Calculate deployment zone buffer (scaled to map size)
     const deploymentBuffer = Math.max(50, Math.max(this.width, this.height) * 0.1);
@@ -1031,8 +1056,8 @@ export class MapGenerator {
 
         // 1.5 Add gentle rolling hills (very large scale, low frequency)
         // This prevents open areas from looking unnaturaly flat
-        const hillScale = 0.008; // Very low frequency (~125m wavelength)
-        const hillAmplitude = 3.5; // Gentle 3.5m height variation
+        const hillScale = 0.025; // Higher frequency for more visible hills
+        const hillAmplitude = 8.0; // Taller hills (8m) to ensure visibility
         // Use a different offset so it doesn't align with base noise
         const hillNoise = this.gradientNoise((worldX + 500) * hillScale, (worldZ - 500) * hillScale);
         noiseValue += hillNoise * hillAmplitude;
@@ -3025,10 +3050,25 @@ export class MapGenerator {
     targetZ: number,
     width: number,
     height: number,
-    maxSearchRadius: number
+    maxSearchRadius: number,
+    deploymentZones?: DeploymentZone[]
   ): { x: number; z: number } | null {
+    // Helper to check deployment zone overlap
+    const checkDeployment = (x: number, z: number, w: number, h: number): boolean => {
+      if (!deploymentZones) return true;
+      const buffer = 50;
+      for (const zone of deploymentZones) {
+        const minX = zone.minX - buffer - w / 2;
+        const maxX = zone.maxX + buffer + w / 2;
+        const minZ = zone.minZ - buffer - h / 2;
+        const maxZ = zone.maxZ + buffer + h / 2;
+        if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) return false;
+      }
+      return true;
+    };
+
     // First check if target position is valid
-    if (this.isTerrainSuitableForCaptureZone(targetX, targetZ, width, height)) {
+    if (this.isTerrainSuitableForCaptureZone(targetX, targetZ, width, height) && checkDeployment(targetX, targetZ, width, height)) {
       return { x: targetX, z: targetZ };
     }
 
@@ -3049,7 +3089,7 @@ export class MapGenerator {
           continue;
         }
 
-        if (this.isTerrainSuitableForCaptureZone(testX, testZ, width, height)) {
+        if (this.isTerrainSuitableForCaptureZone(testX, testZ, width, height) && checkDeployment(testX, testZ, width, height)) {
           return { x: testX, z: testZ };
         }
       }
@@ -3057,6 +3097,7 @@ export class MapGenerator {
 
     return null; // No valid position found
   }
+
 
   /**
    * Get a thematic name for an objective type
@@ -3123,7 +3164,7 @@ export class MapGenerator {
     return options[this.rng.nextInt(0, options.length - 1)]!;
   }
 
-  private generateCaptureZones(): CaptureZone[] {
+  private generateCaptureZones(deploymentZones: DeploymentZone[]): CaptureZone[] {
     const sizeConfig = MAP_SIZES[this.size];
     const numZones = sizeConfig.zones;
     const zones: CaptureZone[] = [];
@@ -3148,10 +3189,12 @@ export class MapGenerator {
       return false;
     };
 
+
+
     // 1. PLACE CENTRAL OBJECTIVE (Large, low value)
     const centerW = this.rng.nextFloat(100, 210);
     const centerH = this.rng.nextFloat(100, 210);
-    const centerPos = this.findHighGroundPosition(0, 0, 100, centerW, centerH);
+    const centerPos = this.findHighGroundPosition(0, 0, 100, centerW, centerH, deploymentZones);
 
     if (centerPos) {
       zones.push({
@@ -3206,7 +3249,7 @@ export class MapGenerator {
       }
 
       // Try to find valid terrain
-      const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100) as { x: number; z: number } | null;
+      const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100, deploymentZones) as { x: number; z: number } | null;
 
       if (pos) {
         // Check for overlap with buffer
@@ -3246,7 +3289,14 @@ export class MapGenerator {
   /**
    * Find a position with high elevation within a search area
    */
-  private findHighGroundPosition(centerX: number, centerZ: number, searchRadius: number, width: number, height: number): { x: number; z: number } | null {
+  private findHighGroundPosition(
+    centerX: number,
+    centerZ: number,
+    searchRadius: number,
+    width: number,
+    height: number,
+    deploymentZones?: DeploymentZone[]
+  ): { x: number; z: number } | null {
     let bestPos = { x: centerX, z: centerZ };
     let maxElevation = -Infinity;
     const samples = 12;
@@ -3258,7 +3308,24 @@ export class MapGenerator {
       const z = centerZ + Math.sin(angle) * dist;
 
       const elev = this.getElevationAt(x, z);
-      if (elev > maxElevation && this.isTerrainSuitableForCaptureZone(x, z, width, height)) {
+
+      // Check deployment zones if provided
+      let validPos = true;
+      if (deploymentZones) {
+        const buffer = 50;
+        for (const zone of deploymentZones) {
+          const minX = zone.minX - buffer - width / 2;
+          const maxX = zone.maxX + buffer + width / 2;
+          const minZ = zone.minZ - buffer - height / 2;
+          const maxZ = zone.maxZ + buffer + height / 2;
+          if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
+            validPos = false;
+            break;
+          }
+        }
+      }
+
+      if (validPos && elev > maxElevation && this.isTerrainSuitableForCaptureZone(x, z, width, height)) {
         maxElevation = elev;
         bestPos = { x, z };
       }
@@ -5045,7 +5112,7 @@ export class MapGenerator {
       const dz = p2.z - p1.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
 
-      // Check if this point is on a bridge
+      // Check if this point is on a bridge belonging to THIS road
       let bridgeElevation: number | undefined = undefined;
       if (roadBridges) {
         for (const bridge of roadBridges) {
@@ -5058,12 +5125,40 @@ export class MapGenerator {
         }
       }
 
+      // Check if this point is near another road's bridge (overpass) - if so, use base terrain
+      let nearOtherBridge = false;
+      if (!bridgeElevation) { // Only check if not on our own bridge
+        for (const [otherRoadId, otherBridges] of this.bridgeElevations.entries()) {
+          if (otherRoadId === road.id) continue; // Skip our own bridges
+
+          for (const otherBridge of otherBridges) {
+            const distToOtherBridge = Math.sqrt((p2.x - otherBridge.x) ** 2 + (p2.z - otherBridge.z) ** 2);
+            // If within the other bridge's footprint, we should pass underneath
+            if (distToOtherBridge < otherBridge.length / 2 + 5) {
+              nearOtherBridge = true;
+              break;
+            }
+          }
+          if (nearOtherBridge) break;
+        }
+      }
+
       // If on a bridge, use bridge elevation (flat section)
       if (bridgeElevation !== undefined) {
         elevations[i] = bridgeElevation;
       } else {
-        // Get natural terrain elevation at this point
-        const naturalElevation = this.getTerrainElevationAt(p2.x, p2.z);
+        // Get base terrain elevation (before any road grading)
+        // If near another bridge, use the original terrain to pass underneath
+        let targetElevation: number;
+        if (nearOtherBridge) {
+          // Use a conservative base elevation to ensure we pass under the bridge
+          targetElevation = Math.min(
+            this.getTerrainElevationAt(p2.x, p2.z),
+            elevations[i - 1]! // Don't climb - stay at or below previous elevation
+          );
+        } else {
+          targetElevation = this.getTerrainElevationAt(p2.x, p2.z);
+        }
 
         // Calculate max elevation change based on max grade
         const maxElevationChange = distance * (maxGradePercent / 100);
@@ -5073,8 +5168,8 @@ export class MapGenerator {
         const minAllowedElevation = prevElevation - maxElevationChange;
         const maxAllowedElevation = prevElevation + maxElevationChange;
 
-        // Clamp natural elevation to allowed range
-        elevations[i] = Math.max(minAllowedElevation, Math.min(maxAllowedElevation, naturalElevation));
+        // Clamp target elevation to allowed range
+        elevations[i] = Math.max(minAllowedElevation, Math.min(maxAllowedElevation, targetElevation));
       }
     }
 
@@ -5170,6 +5265,25 @@ export class MapGenerator {
   }
 
   /**
+   * Check if a point is close to any river
+   * Used to prevent road embankments from overwriting river banks
+   */
+  private isPointNearRiver(x: number, z: number, threshold: number): boolean {
+    const rivers = this.waterBodies.filter(w => w.type === 'river');
+
+    for (const river of rivers) {
+      for (let i = 0; i < river.points.length - 1; i++) {
+        const p1 = river.points[i]!;
+        const p2 = river.points[i + 1]!;
+
+        const dist = this.pointToSegmentDistance(x, z, p1.x, p1.z, p2.x, p2.z);
+        if (dist < threshold) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Apply terrain grading perpendicular to road direction
    * This cuts into hillsides to create a flat road bed
    */
@@ -5206,6 +5320,13 @@ export class MapGenerator {
 
         // Skip water cells
         if (cell.type === 'water' || cell.type === 'river') continue;
+
+        // Skip if too close to river bank (preserve river geometry)
+        // River width is typically ~10-15m, banks are ~12m. 
+        // We want to avoid modifying anything within ~15-18m of the river center to protect the banks.
+        if (this.isPointNearRiver(worldX, worldZ, 18)) {
+          continue;
+        }
 
         if (dist <= halfRoadWidth) {
           // Within road width - set to exact road elevation for flat road bed

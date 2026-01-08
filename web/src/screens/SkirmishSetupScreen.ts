@@ -103,10 +103,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
         <div class="config-row">
           <div class="setup-section">
-            <h3>Your Deck</h3>
-            <select id="deck-select" class="setup-select">
-              <option value="">-- Select a deck --</option>
-            </select>
+            <h3>Deck Info</h3>
             <div id="deck-preview" class="deck-preview">
               <p class="placeholder">Select a deck to see details</p>
             </div>
@@ -269,6 +266,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       background: rgba(0, 0, 0, 0.3);
       border-radius: 4px;
       font-size: 13px;
+      min-height: 50px;
     }
 
     .slot-row.you {
@@ -548,30 +546,34 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   `;
   document.head.appendChild(style);
 
-  function renderDeckSelect(): void {
-    const select = element.querySelector('#deck-select') as HTMLSelectElement;
+  function getDeckOptionsHTML(selectedId?: string): string {
     const savedDecks = loadSavedDecks();
 
     // Group starter decks by faction
     const sdfStarters = STARTER_DECKS.filter(d => d.id.includes('sdf'));
     const vanguardStarters = STARTER_DECKS.filter(d => d.id.includes('vanguard'));
 
-    select.innerHTML = `
+    const isDefault = selectedId === 'default_deck';
+
+    return `
       <option value="">-- Select a deck --</option>
-      <option value="default" selected>Quick Start (Default Deck)</option>
+      <option value="default" ${isDefault ? 'selected' : ''}>Quick Start (Default Deck)</option>
       <optgroup label="SDF Starter Decks">
-        ${sdfStarters.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+        ${sdfStarters.map(d => `<option value="${d.id}" ${selectedId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
       </optgroup>
       <optgroup label="Vanguard Starter Decks">
-        ${vanguardStarters.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+        ${vanguardStarters.map(d => `<option value="${d.id}" ${selectedId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
       </optgroup>
       ${savedDecks.length > 0 ? `
         <optgroup label="My Decks">
-          ${savedDecks.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+          ${savedDecks.map(d => `<option value="${d.id}" ${selectedId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
         </optgroup>
       ` : ''}
     `;
   }
+
+  // Remove the old renderDeckSelect function as it's no longer needed
+  // function renderDeckSelect(): void { ... }
 
   function renderTeamSlots(): void {
     const team1Container = element.querySelector('#team1-slots')!;
@@ -580,30 +582,47 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     function renderSlot(slot: PlayerSlot, index: number, teamNum: 1 | 2): string {
       const isYou = slot.type === 'YOU';
       const isCpu = slot.type === 'CPU';
-      const isClosed = slot.type === 'CLOSED';
+
 
       const slotClass = isYou ? 'you' : isCpu ? 'cpu' : 'closed';
       const typeLabel = isYou ? 'YOU' : isCpu ? `CPU (${slot.difficulty})` : 'CLOSED';
 
       let controls = '';
-      if (!isYou) {
+      if (isYou) {
         controls = `
           <div class="slot-controls">
-            <button class="slot-btn ${isCpu ? 'active' : ''}" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
-            <button class="slot-btn ${isClosed ? 'active' : ''}" data-team="${teamNum}" data-slot="${index}" data-action="close">X</button>
-            ${isCpu ? `
-              <select class="difficulty-select" data-team="${teamNum}" data-slot="${index}">
-                <option value="Easy" ${slot.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
-                <option value="Medium" ${slot.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
-                <option value="Hard" ${slot.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
-              </select>
-              <select class="deck-select" data-team="${teamNum}" data-slot="${index}">
-                <option value="">Random Deck</option>
-                ${STARTER_DECKS.map(d => `<option value="${d.id}" ${slot.deckId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
-              </select>
-            ` : ''}
+            <select id="your-deck-select" class="deck-select" style="max-width: 200px;">
+              ${getDeckOptionsHTML(selectedDeck?.id)}
+            </select>
           </div>
         `;
+      } else {
+        // CPU Slots: CPU Button, Difficulty, Deck, X Button (Right)
+        if (isCpu) {
+          controls = `
+            <div class="slot-controls">
+                <button class="slot-btn active" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
+                <select class="difficulty-select" data-team="${teamNum}" data-slot="${index}">
+                    <option value="Easy" ${slot.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
+                    <option value="Medium" ${slot.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
+                    <option value="Hard" ${slot.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
+                </select>
+                <select class="deck-select" data-team="${teamNum}" data-slot="${index}">
+                    <option value="">Random Deck</option>
+                    ${STARTER_DECKS.map(d => `<option value="${d.id}" ${slot.deckId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+                </select>
+                <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="close">X</button>
+            </div>
+            `;
+        }
+        // Closed Slots: Just CPU Button (to open)
+        else {
+          controls = `
+            <div class="slot-controls">
+                <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
+            </div>
+            `;
+        }
       }
 
       return `
@@ -677,6 +696,37 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       });
     });
   }
+
+  // Your text deck select
+  const yourDeckSelect = element.querySelector('#your-deck-select') as HTMLSelectElement;
+  if (yourDeckSelect) {
+    yourDeckSelect.addEventListener('change', (e) => {
+      const target = e.target as HTMLSelectElement;
+      const value = target.value;
+
+      if (!value) {
+        selectedDeck = null;
+      } else if (value === 'default') {
+        selectedDeck = createDefaultDeck();
+      } else {
+        // Check starter decks
+        const starter = STARTER_DECKS.find(d => d.id === value);
+        if (starter) {
+          selectedDeck = starter;
+        } else {
+          // Check saved decks
+          const savedDecks = loadSavedDecks();
+          const saved = savedDecks.find(d => d.id === value);
+          if (saved) {
+            selectedDeck = saved;
+          }
+        }
+      }
+      renderDeckPreview();
+      // We don't need to re-render slots just for this update as the select state matches
+    });
+  }
+
 
   function renderDeckPreview(): void {
     const preview = element.querySelector('#deck-preview')!;
@@ -822,17 +872,21 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         for (const building of map.buildings) {
           const screenX = (building.x + map.width / 2) * scale;
           const screenZ = (building.z + map.height / 2) * scale;
-          const w = Math.max(building.width * scale, 2); // Ensure minimum size
+
+          // Ensure buildings are visible even on large maps (min 2px)
+          const w = Math.max(building.width * scale, 2);
           const d = Math.max(building.depth * scale, 2);
 
-          // Fill
-          ctx.fillStyle = '#d4c4a8';
+          // Fill (use high contrast color for urban biome or general building color)
+          ctx.fillStyle = map.biome === 'cities' ? '#a0a0a0' : '#d4c4a8';
           ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
 
-          // Outline
-          ctx.strokeStyle = '#8a7a6a';
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
+          // Outline (only draw if large enough to matter, otherwise it just clutters)
+          if (w > 3) {
+            ctx.strokeStyle = '#404040';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
+          }
         }
 
         // Draw capture zones with better contrast
@@ -964,7 +1018,6 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   const onEnter = () => {
     renderTeamSlots();
     setupTeamSlotEvents();
-    renderDeckSelect();
     renderDeckPreview();
     renderMapPreview();
     updateStartButton();
@@ -972,23 +1025,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     // Bind events
     element.querySelector('#skirmish-back-btn')?.addEventListener('click', callbacks.onBack);
 
-    element.querySelector('#deck-select')?.addEventListener('change', (e) => {
-      const deckId = (e.target as HTMLSelectElement).value;
-      if (deckId === 'default') {
-        selectedDeck = createDefaultDeck();
-      } else {
-        // First check starter decks, then saved decks
-        const starterDeck = STARTER_DECKS.find(d => d.id === deckId);
-        if (starterDeck) {
-          selectedDeck = starterDeck;
-        } else {
-          const savedDecks = loadSavedDecks();
-          selectedDeck = savedDecks.find(d => d.id === deckId) ?? null;
-        }
-      }
-      renderDeckPreview();
-      updateStartButton();
-    });
+
 
     element.querySelectorAll('.size-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {

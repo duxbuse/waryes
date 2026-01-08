@@ -29,7 +29,7 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
         <button class="menu-btn" id="btn-quit">QUIT</button>
       </div>
       <div class="menu-footer">
-        <p>v0.1.0 - Three.js RTS</p>
+        <p>v0.1.0 - A-move Studios</p>
       </div>
     </div>
   `;
