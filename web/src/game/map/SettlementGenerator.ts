@@ -548,7 +548,7 @@ export class SettlementGenerator {
 
         // Position within block (along the edges)
         const side = Math.floor(this.random() * 4); // 0=Top(+V), 1=Right(+U), 2=Bottom(-V), 3=Left(-U)
-        const setback = 2 + this.random() * 4;
+        const setback = 5 + this.random() * 3; // 5-8m setback to clear wide roads
 
         // Spread along the face, keeping away from corners (avoid intersections)
         const cornerBuffer = 15;
@@ -683,7 +683,8 @@ export class SettlementGenerator {
 
     // Check overlap with streets
     if (streets) {
-      const buildingRadius = Math.max(width, depth) / 2;
+      // Use inner radius (min dimension) to allow buildings to sit closer to roads
+      const buildingRadius = Math.min(width, depth) / 2;
 
       for (const street of streets) {
         // Simple check against street points

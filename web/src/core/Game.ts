@@ -34,7 +34,7 @@ import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
-import type { GameMap, DeckData, MapSize } from '../data/types';
+import type { GameMap, DeckData, MapSize, BiomeType } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
@@ -629,7 +629,7 @@ export class Game {
   /**
    * Start a skirmish battle with the given configuration
    */
-  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[]): void {
+  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[], biome?: BiomeType): void {
     // Save configuration for rematch
     this.lastDeck = deck;
     this.lastMapSize = mapSize;
@@ -641,7 +641,7 @@ export class Game {
     this.resetStats();
 
     // Generate map
-    const generator = new MapGenerator(mapSeed, mapSize);
+    const generator = new MapGenerator(mapSeed, mapSize, biome);
     this.currentMap = generator.generate();
 
     // Recreate MapRenderer with biome colors

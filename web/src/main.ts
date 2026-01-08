@@ -76,7 +76,7 @@ async function main(): Promise<void> {
       },
       onStartBattle: (config: SkirmishConfig) => {
         if (config.deck) {
-          game.startSkirmish(config.deck, config.mapSize, config.mapSeed, config.team1, config.team2);
+          game.startSkirmish(config.deck, config.mapSize, config.mapSeed, config.team1, config.team2, config.biome);
         }
       },
       onHostOnline: async (config: SkirmishConfig) => {
