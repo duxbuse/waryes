@@ -153,12 +153,16 @@ export class MapGenerator {
     // Smooth elevation transitions for natural look
     this.smoothElevationTransitions();
 
-    // Generate settlements with varied sizes and layouts
-    this.generateSettlements();
-
-    // Generate water bodies (lakes, rivers) BEFORE roads
-    // So roads can avoid lakes and create bridges over rivers
+    // Generate water bodies (lakes, rivers) BEFORE settlements
+    // So cities can grow around them
     this.generateWaterBodies(deploymentZones);
+
+    // Remove any settlement buildings that ended up on water (safety check)
+    // this.filterBuildingsOnWater(); // Keeping for safety, but new logic should prevent placement
+
+    // Generate settlements with varied sizes and layouts
+    // Now receiving terrain context for geography-aware generation
+    this.generateSettlements();
 
     // Remove any settlement buildings that ended up on water
     this.filterBuildingsOnWater();
@@ -294,12 +298,20 @@ export class MapGenerator {
       const normalizedDist = distFromCenter / maxDist;
 
       let layoutType: LayoutType | undefined;
-      if (normalizedDist < 0.3) {
-        // Central - prefer organic
-        layoutType = this.rng.next() < 0.7 ? 'organic' : undefined;
-      } else if (normalizedDist > 0.7) {
-        // Edge - prefer grid
-        layoutType = this.rng.next() < 0.5 ? 'grid' : undefined;
+
+      // City specific logic: Choose explicit flavor
+      if (settlementSize === 'city') {
+        // 50/50 split for city flavor: Planned Grid vs Old World Organic
+        layoutType = this.rng.next() < 0.5 ? 'grid' : 'organic';
+      } else {
+        // Standard logic for towns/villages
+        if (normalizedDist < 0.3) {
+          // Central - prefer organic
+          layoutType = this.rng.next() < 0.7 ? 'organic' : undefined;
+        } else if (normalizedDist > 0.7) {
+          // Edge - prefer grid
+          layoutType = this.rng.next() < 0.5 ? 'grid' : undefined;
+        }
       }
       // Middle positions use default weighted random
 
@@ -317,7 +329,9 @@ export class MapGenerator {
           maxX: this.width / 2 - 10,
           minZ: -this.height / 2 + 10,
           maxZ: this.height / 2 - 10
-        }
+        },
+        this.terrain,
+        this.waterBodies
       );
 
       // Check if terrain is suitable for this settlement
@@ -553,7 +567,7 @@ export class MapGenerator {
         let tooClose = false;
         for (const existing of positions) {
           const d = Math.sqrt((x - existing.x) ** 2 + (z - existing.z) ** 2);
-          if (d < 100) { // Minimum 100m between settlements
+          if (d < 400) { // Minimum 400m between settlements to preventing merging/overlaps
             tooClose = true;
             break;
           }

@@ -94,7 +94,9 @@ export class SettlementGenerator {
     layoutType?: LayoutType,
     mainRoadAngle?: number,
     densityMultiplier: number = 1.0,
-    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
+    terrain?: TerrainCell[][],
+    waterBodies?: WaterBody[]
   ): Settlement {
     const params = SETTLEMENT_PARAMS[size];
     const layout = layoutType ?? this.pickLayoutType(size);
@@ -138,10 +140,10 @@ export class SettlementGenerator {
     if (size !== 'hamlet') {
       switch (layout) {
         case 'organic':
-          this.generateOrganicStreets(settlement);
+          this.generateOrganicStreets(settlement, terrain);
           break;
         case 'grid':
-          this.generateGridStreets(settlement);
+          this.generateGridStreets(settlement, terrain);
           break;
         case 'mixed':
           this.generateMixedStreets(settlement);
@@ -160,52 +162,71 @@ export class SettlementGenerator {
 
   /**
    * Generate organic (European-style) street layout
-   * Streets radiate from a central focal point with curved cross-streets
+   * Streets radiate from a central focal point with irregular cross-connections (web style)
    */
-  private generateOrganicStreets(settlement: Settlement): void {
+  /**
+   * Generate organic (European-style) street layout
+   * Streets radiate from a central focal point with irregular cross-connections (web style)
+   * Adapts to geography (water, steep terrain)
+   */
+  private generateOrganicStreets(settlement: Settlement, terrain?: TerrainCell[][]): void {
     const { position, radius } = settlement;
     const streetWidth = ROAD_WIDTHS.town;
 
-    // Number of radial streets (3-6 based on size)
-    const numRadials = 3 + Math.floor(this.random() * 4);
+    // Number of radial streets (5-8 for cities/large towns)
+    const numRadials = 5 + Math.floor(this.random() * 4);
+    const radials: { x: number, z: number }[][] = [];
 
-    // Generate radial streets from center
+    // 1. Generate Radial Streets (Spokes)
     for (let i = 0; i < numRadials; i++) {
-      // Irregular angles with some randomness
+      // Irregular angles: distributes roughly evenly but with noise
       const baseAngle = (i / numRadials) * Math.PI * 2;
-      const angle = baseAngle + (this.random() - 0.5) * 0.4;
+      const angle = baseAngle + (this.random() - 0.5) * 0.5; // +/- ~15 degrees variation
 
       const points: { x: number; z: number }[] = [];
-      const numPoints = 5 + Math.floor(this.random() * 3);
+      const numPoints = 8; // More segments for smoother curving
 
-      for (let j = 0; j < numPoints; j++) {
-        const t = j / (numPoints - 1);
-        const r = t * radius * 0.9;
-        // Add some curve/wobble to the street
-        const wobble = Math.sin(t * Math.PI * 2) * (this.random() - 0.5) * 20;
-        const currentAngle = angle + wobble / (r + 10);
+      // Start from center (or near it)
+      points.push({ x: position.x, z: position.z });
 
-        points.push({
-          x: position.x + Math.cos(currentAngle) * r,
-          z: position.z + Math.sin(currentAngle) * r,
-        });
-      }
+      let currentX = position.x;
+      let currentZ = position.z;
+      let currentAngle = angle;
 
-      // Ensure the radial reaches the edge (entry point)
-      // Extend the last point to the full radius
-      if (points.length > 0) {
-        const lastPoint = points[points.length - 1]!;
-        const dx = lastPoint.x - position.x;
-        const dz = lastPoint.z - position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
+      // Walk outwards
+      for (let j = 1; j <= numPoints; j++) {
+        const t = j / numPoints;
+        const distStep = (radius / numPoints);
 
-        if (dist < radius) {
-          points.push({
-            x: position.x + Math.cos(angle) * radius,
-            z: position.z + Math.sin(angle) * radius,
-          });
+        // Add meander/wobble to the angle
+        const wobble = (this.random() - 0.5) * 0.4; // Wobble angle
+        currentAngle += wobble;
+
+        const nextX = currentX + Math.cos(currentAngle) * distStep;
+        const nextZ = currentZ + Math.sin(currentAngle) * distStep;
+
+        // GEOGRAPHY CHECK: Stop if water or steep slope
+        if (terrain) {
+          const gridX = Math.floor((nextX + (terrain[0]!.length * 10) / 2) / 10);
+          const gridZ = Math.floor((nextZ + (terrain.length * 10) / 2) / 10);
+
+          if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
+            const cell = terrain[gridZ]![gridX]!;
+            if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+              // Hit geography barrier - stop this road early
+              break;
+            }
+          }
         }
+
+        currentX = nextX;
+        currentZ = nextZ;
+
+        points.push({ x: currentX, z: currentZ });
       }
+
+      // Store for cross-connecting
+      radials.push(points);
 
       settlement.streets.push({
         id: `${settlement.id}_radial_${i}`,
@@ -215,29 +236,52 @@ export class SettlementGenerator {
       });
     }
 
-    // Generate curved cross-streets (rings)
-    const numRings = Math.max(1, Math.floor(radius / 60));
-    for (let ring = 0; ring < numRings; ring++) {
-      const ringRadius = (ring + 1) * radius / (numRings + 1);
-      const points: { x: number; z: number }[] = [];
-      const segments = 12 + Math.floor(this.random() * 8);
+    // 2. Generate Cross Streets (The Web)
+    // Instead of continuous rings, we connect adjacent radials at random intervals
+    const numLayers = Math.floor(radius / 50); // One layer every ~50m
 
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        // Add irregularity
-        const rVariation = ringRadius * (1 + (this.random() - 0.5) * 0.2);
-        points.push({
-          x: position.x + Math.cos(angle) * rVariation,
-          z: position.z + Math.sin(angle) * rVariation,
+    for (let layer = 1; layer < numLayers; layer++) {
+      // For each sector between radials
+      for (let i = 0; i < numRadials; i++) {
+        const nextI = (i + 1) % numRadials;
+        const radialA = radials[i]!;
+        const radialB = radials[nextI]!;
+
+        // Pick a point roughly at this layer's distance on both radials
+        // Add randomness so it's not a perfect circle
+        const indexA = Math.min(Math.floor((layer / numLayers) * radialA.length) + Math.floor((this.random() - 0.5) * 2), radialA.length - 1);
+        const indexB = Math.min(Math.floor((layer / numLayers) * radialB.length) + Math.floor((this.random() - 0.5) * 2), radialB.length - 1);
+
+        const safeIndexA = Math.max(1, indexA); // Don't connect at absolute center
+        const safeIndexB = Math.max(1, indexB);
+
+        const pA = radialA[safeIndexA]!;
+        const pB = radialB[safeIndexB]!;
+
+        // Chance to skip connection (makes it less uniform)
+        if (this.random() > 0.85) continue;
+
+        // Create connection
+        // Add a midpoint for a slight curve
+        const midX = (pA.x + pB.x) / 2;
+        const midZ = (pA.z + pB.z) / 2;
+        // Push midpoint slightly outward or inward
+        const distToCenter = Math.sqrt((midX - position.x) ** 2 + (midZ - position.z) ** 2);
+        const slightOffset = (this.random() - 0.5) * 15;
+        const factor = 1 + slightOffset / distToCenter;
+
+        const curvePoint = {
+          x: position.x + (midX - position.x) * factor,
+          z: position.z + (midZ - position.z) * factor
+        };
+
+        settlement.streets.push({
+          id: `${settlement.id}_web_${layer}_${i}`,
+          points: [pA, curvePoint, pB],
+          width: streetWidth * 0.8, // Slightly narrower side streets
+          type: 'town',
         });
       }
-
-      settlement.streets.push({
-        id: `${settlement.id}_ring_${ring}`,
-        points,
-        width: streetWidth * 0.8,
-        type: 'town',
-      });
     }
   }
 
@@ -245,9 +289,9 @@ export class SettlementGenerator {
    * Generate grid (American-style) street layout
    * Rectangular blocks with consistent spacing
    */
-  private generateGridStreets(settlement: Settlement): void {
+  private generateGridStreets(settlement: Settlement, terrain?: TerrainCell[][]): void {
     const { position, radius, mainAxis } = settlement;
-    const blockSize = 80 + this.random() * 40; // 80-120m blocks
+    const blockSize = 120 + this.random() * 60; // Larger blocks: 120-180m (was 80-120)
     const streetWidth = ROAD_WIDTHS.town;
 
     // Calculate grid dimensions
@@ -274,6 +318,28 @@ export class SettlementGenerator {
         width: i === 0 ? streetWidth * 1.3 : streetWidth, // Main street wider
         type: i === 0 ? 'highway' : 'town',
       });
+
+      // GEOGRAPHY CLIP FOR GRID (Simple endpoint check for now, can be improved)
+      if (terrain && settlement.streets.length > 0) {
+        const lastStreet = settlement.streets[settlement.streets.length - 1]!;
+        const p1 = lastStreet.points[0]!;
+        const p2 = lastStreet.points[1]!;
+
+        // Check midpoint
+        const midX = (p1.x + p2.x) / 2;
+        const midZ = (p1.z + p2.z) / 2;
+
+        const gridX = Math.floor((midX + (terrain[0]!.length * 10) / 2) / 10);
+        const gridZ = Math.floor((midZ + (terrain.length * 10) / 2) / 10);
+
+        if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
+          const cell = terrain[gridZ]![gridX]!;
+          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+            // Remove this street entirely if its center is invalid
+            settlement.streets.pop();
+          }
+        }
+      }
 
       // For the main street (index 0), extend to the edge to meet entry points
       if (i === 0) {
@@ -326,6 +392,26 @@ export class SettlementGenerator {
         type: 'town',
       });
 
+      // GEOGRAPHY CLIP FOR GRID (EW)
+      if (terrain && settlement.streets.length > 0) {
+        const lastStreet = settlement.streets[settlement.streets.length - 1]!;
+        const p1 = lastStreet.points[0]!;
+        const p2 = lastStreet.points[1]!;
+
+        const midX = (p1.x + p2.x) / 2;
+        const midZ = (p1.z + p2.z) / 2;
+
+        const gridX = Math.floor((midX + (terrain[0]!.length * 10) / 2) / 10);
+        const gridZ = Math.floor((midZ + (terrain.length * 10) / 2) / 10);
+
+        if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
+          const cell = terrain[gridZ]![gridX]!;
+          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+            settlement.streets.pop();
+          }
+        }
+      }
+
       // For the main cross street (index 0), extend to the edge
       if (i === 0) {
         // East extension
@@ -362,11 +448,12 @@ export class SettlementGenerator {
   /**
    * Generate mixed layout - organic core with grid expansion
    */
-  private generateMixedStreets(settlement: Settlement): void {
-    const { position, radius } = settlement;
+  private generateMixedStreets(settlement: Settlement, terrain?: TerrainCell[][]): void {
+    const { position, radius, mainAxis } = settlement;
+    const streetWidth = ROAD_WIDTHS.town;
 
-    // Organic core takes inner 40% of radius
-    const coreRadius = radius * 0.4;
+    // Organic core takes inner 35% of radius
+    const coreRadius = radius * 0.35;
     const coreSettlement: Settlement = {
       ...settlement,
       radius: coreRadius,
@@ -379,79 +466,137 @@ export class SettlementGenerator {
     };
 
     // Generate organic core
-    this.generateOrganicStreets(coreSettlement);
+    this.generateOrganicStreets(coreSettlement, terrain);
     settlement.streets.push(...coreSettlement.streets);
+
+    // Add a clear Ring Road separating core from grid
+    const ringPoints: { x: number; z: number }[] = [];
+    const ringSegments = 24;
+    for (let i = 0; i <= ringSegments; i++) {
+      const theta = (i / ringSegments) * Math.PI * 2;
+      ringPoints.push({
+        x: position.x + Math.cos(theta) * coreRadius,
+        z: position.z + Math.sin(theta) * coreRadius
+      });
+    }
+    settlement.streets.push({
+      id: `${settlement.id}_core_ring`,
+      points: ringPoints,
+      width: streetWidth * 1.2, // Slightly wider collector road
+      type: 'town'
+    });
 
     // Generate grid expansion in outer area
     const gridStreets: Road[] = [];
-    const blockSize = 80 + this.random() * 40;
-    const streetWidth = ROAD_WIDTHS.town;
-    const { mainAxis } = settlement;
+    const blockSize = 120 + this.random() * 60; // Larger blocks: 120-180m
 
-    // Only generate grid outside the core
-    const gridExtent = radius * 0.85;
+    // Grid covers the rest of the radius
+    const gridExtent = radius * 0.9;
     const numBlocks = Math.floor(gridExtent * 2 / blockSize);
 
+    // Helper to check if a point is outside the core ring (with buffer)
+    const isOutsideCore = (x: number, z: number) => {
+      const dx = x - position.x;
+      const dz = z - position.z;
+      return (dx * dx + dz * dz) > (coreRadius * coreRadius) + 400; // coreRadius^2 + buffer
+    };
+
+    // Generate Grid Lines
     for (let i = -numBlocks / 2; i <= numBlocks / 2; i++) {
       const offset = i * blockSize;
+
+      // NS Streets
       const perpAngle = mainAxis + Math.PI / 2;
+      const startX = position.x + Math.cos(perpAngle) * offset - Math.cos(mainAxis) * gridExtent;
+      const startZ = position.z + Math.sin(perpAngle) * offset - Math.sin(mainAxis) * gridExtent;
+      const endX = position.x + Math.cos(perpAngle) * offset + Math.cos(mainAxis) * gridExtent;
+      const endZ = position.z + Math.sin(perpAngle) * offset + Math.sin(mainAxis) * gridExtent;
 
-      // Calculate street endpoints
-      const startOffset = -gridExtent;
-      const endOffset = gridExtent;
+      // Split segment if it crosses the core
+      // For simplicity in this "mixed" mode, we'll just generate segments that are strictly outside
 
-      // Create points, skipping the core area
-      const points: { x: number; z: number }[] = [];
+      const nsPoints: { x: number, z: number }[] = [];
+      const steps = 20;
+      let drawing = false;
+      let currentSegment: { x: number, z: number }[] = [];
 
-      for (let t = 0; t <= 1; t += 0.1) {
-        const dist = startOffset + t * (endOffset - startOffset);
-        const x = position.x + Math.cos(perpAngle) * offset + Math.cos(mainAxis) * dist;
-        const z = position.z + Math.sin(perpAngle) * offset + Math.sin(mainAxis) * dist;
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const px = startX + (endX - startX) * t;
+        const pz = startZ + (endZ - startZ) * t;
 
-        // Check if point is outside core
-        const dx = x - position.x;
-        const dz = z - position.z;
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+        // MAP BOUNDS CHECK
+        if (settlement.bounds && (Math.abs(px) > 2000 || Math.abs(pz) > 2000)) continue;
 
-        if (distFromCenter > coreRadius * 1.1) {
-          points.push({ x, z });
+        if (isOutsideCore(px, pz)) {
+          currentSegment.push({ x: px, z: pz });
+          drawing = true;
+        } else {
+          if (drawing && currentSegment.length > 1) {
+            // Finish this segment
+            settlement.streets.push({
+              id: `${settlement.id}_grid_ns_${i}_${s}`,
+              points: [...currentSegment],
+              width: streetWidth,
+              type: 'town'
+            });
+            currentSegment = [];
+          }
+          drawing = false;
         }
       }
-
-      if (points.length > 1) {
-        gridStreets.push({
-          id: `${settlement.id}_grid_ns_${i}`,
-          points,
+      // Push last segment
+      if (currentSegment.length > 1) {
+        settlement.streets.push({
+          id: `${settlement.id}_grid_ns_${i}_end`,
+          points: currentSegment,
           width: streetWidth,
-          type: 'town',
+          type: 'town'
+        });
+      }
+
+      // EW Streets (Logic repeated)
+      const ewStartX = position.x + Math.cos(mainAxis) * offset - Math.cos(perpAngle) * gridExtent;
+      const ewStartZ = position.z + Math.sin(mainAxis) * offset - Math.sin(perpAngle) * gridExtent;
+      const ewEndX = position.x + Math.cos(mainAxis) * offset + Math.cos(perpAngle) * gridExtent;
+      const ewEndZ = position.z + Math.sin(mainAxis) * offset + Math.sin(perpAngle) * gridExtent;
+
+      currentSegment = [];
+      drawing = false;
+
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const px = ewStartX + (ewEndX - ewStartX) * t;
+        const pz = ewStartZ + (ewEndZ - ewStartZ) * t;
+
+        // MAP BOUNDS CHECK
+        if (settlement.bounds && (Math.abs(px) > 2000 || Math.abs(pz) > 2000)) continue;
+
+        if (isOutsideCore(px, pz)) {
+          currentSegment.push({ x: px, z: pz });
+          drawing = true;
+        } else {
+          if (drawing && currentSegment.length > 1) {
+            settlement.streets.push({
+              id: `${settlement.id}_grid_ew_${i}_${s}`,
+              points: [...currentSegment],
+              width: streetWidth,
+              type: 'town'
+            });
+            currentSegment = [];
+          }
+          drawing = false;
+        }
+      }
+      if (currentSegment.length > 1) {
+        settlement.streets.push({
+          id: `${settlement.id}_grid_ew_${i}_end`,
+          points: currentSegment,
+          width: streetWidth,
+          type: 'town'
         });
       }
     }
-
-    // Add transition streets connecting core to grid
-    const transitionAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
-    for (const angle of transitionAngles) {
-      const adjustedAngle = mainAxis + angle;
-      const points = [
-        {
-          x: position.x + Math.cos(adjustedAngle) * coreRadius,
-          z: position.z + Math.sin(adjustedAngle) * coreRadius,
-        },
-        {
-          x: position.x + Math.cos(adjustedAngle) * radius * 0.9,
-          z: position.z + Math.sin(adjustedAngle) * radius * 0.9,
-        },
-      ];
-
-      settlement.streets.push({
-        id: `${settlement.id}_transition_${Math.floor(angle * 100)}`,
-        points,
-        width: streetWidth,
-        type: 'town',
-      });
-    }
-
-    settlement.streets.push(...gridStreets);
   }
 
   /**
@@ -543,15 +688,56 @@ export class SettlementGenerator {
       categoryTargets.civic = Math.max(0, categoryTargets.civic - 1);
     }
 
-    // Place buildings by zone (center -> edge)
+    // Generate placement queue
+    const placementQueue: { spec: BuildingSpec; category: BuildingCategory }[] = [];
+
     for (const category of ['civic', 'commercial', 'residential', 'industrial', 'agricultural', 'infrastructure'] as BuildingCategory[]) {
       const count = categoryTargets[category];
-      for (let i = 0; i < count; i++) {
-        const building = this.placeBuilding(settlement, category, placedBuildings, layoutType, densityMultiplier, mapBounds);
-        if (building) {
-          placedBuildings.push(building);
+
+      // Get available specs for this category
+      const availableSpecs = BUILDING_SPECS.filter(
+        s => s.category === category && s.allowedIn.includes(size)
+      );
+
+      if (availableSpecs.length > 0) {
+        for (let i = 0; i < count; i++) {
+          const spec = availableSpecs[Math.floor(this.random() * availableSpecs.length)];
+          if (spec) {
+            placementQueue.push({ spec, category });
+          }
         }
       }
+    }
+
+    // Sort queue by priority then footprint size (descending) to place important/large buildings first
+    placementQueue.sort((a, b) => {
+      const priorityA = this.getBuildingPriority(a.spec);
+      const priorityB = this.getBuildingPriority(b.spec);
+
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA;
+      }
+
+      const areaA = a.spec.footprint.width * a.spec.footprint.depth;
+      const areaB = b.spec.footprint.width * b.spec.footprint.depth;
+      return areaB - areaA;
+    });
+
+    // Track total failures for summary
+    let failureCount = 0;
+
+    // Execute placement
+    for (const item of placementQueue) {
+      const building = this.placeBuilding(settlement, item.spec, item.category, placedBuildings, layoutType, densityMultiplier, mapBounds);
+      if (building) {
+        placedBuildings.push(building);
+      } else {
+        failureCount++;
+      }
+    }
+
+    if (failureCount > 0) {
+      console.warn(`[SettlementGenerator] Failed to place ${failureCount}/${placementQueue.length} buildings in settlement ${settlement.name} (${settlement.size})`);
     }
 
     settlement.buildings = placedBuildings;
@@ -587,6 +773,7 @@ export class SettlementGenerator {
    */
   private placeBuilding(
     settlement: Settlement,
+    spec: BuildingSpec,
     category: BuildingCategory,
     existingBuildings: Building[],
     layoutType: LayoutType,
@@ -595,25 +782,15 @@ export class SettlementGenerator {
   ): Building | null {
     const { size, position, radius, mainAxis } = settlement;
 
-    // Get available building specs for this category and settlement size
-    const availableSpecs = BUILDING_SPECS.filter(
-      s => s.category === category && s.allowedIn.includes(size)
-    );
-
-    if (availableSpecs.length === 0) return null;
-
-    // Pick a random spec
-    const spec = availableSpecs[Math.floor(this.random() * availableSpecs.length)];
-    if (!spec) return null;
-
     // Determine placement zone based on category
     const zoneMultiplier = this.getZoneMultiplier(category, size);
 
     // Try to place building
-    // Increase attempts for dense layouts
-    const maxAttempts = densityMultiplier > 1.2 ? 50 : 20;
+    // Reduce random attempts (down to 15), then fall back to street search
+    // This provides organic scatter first, but guarantees placement if space exists
+    const randomAttempts = 15;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < randomAttempts; attempt++) {
       let x: number, z: number, rotation: number;
 
       if (layoutType === 'grid') {
@@ -723,8 +900,176 @@ export class SettlementGenerator {
       }
     }
 
-    console.warn(`[SettlementGenerator] Failed to place ${category} building after ${maxAttempts} attempts`);
+    // Fallback: Smart street-walking search
+    // If random placement failed, try to systematically find a spot along existing streets (Tier 1)
+    let fallbackBuilding = this.findSpotAlongStreets(settlement, spec, existingBuildings, densityMultiplier, 1, mapBounds);
+
+    // Tier 2: If Tier 1 failed and this is a small residential/commercial building, try placing it in the "back row"
+    if (!fallbackBuilding && (spec.category === 'residential' || (spec.category === 'commercial' && spec.size === 'small'))) {
+      fallbackBuilding = this.findSpotAlongStreets(settlement, spec, existingBuildings, densityMultiplier, 2, mapBounds);
+    }
+
+    if (fallbackBuilding) {
+      // console.log(`[SettlementGenerator] Fallback placement success for ${category}`);
+      return fallbackBuilding;
+    }
+
+    // "Desperation Phase": Infill Placement
+    // If street search failed, try to find ANY valid open spot in the settlement
+    // This fills the centers of large blocks
+    if (spec.category === 'residential' || (spec.category === 'commercial' && spec.size === 'small')) {
+      const desperationAttempts = 30;
+      const { position, radius } = settlement;
+
+      for (let i = 0; i < desperationAttempts; i++) {
+        // Random spot within radius
+        const r = Math.sqrt(this.random()) * radius * 0.9;
+        const theta = this.random() * Math.PI * 2;
+        const x = position.x + Math.cos(theta) * r;
+        const z = position.z + Math.sin(theta) * r;
+
+        // Bounds check
+        if (mapBounds) {
+          const maxDim = Math.max(spec.footprint.width, spec.footprint.depth) / 2;
+          if (x - maxDim < mapBounds.minX || x + maxDim > mapBounds.maxX ||
+            z - maxDim < mapBounds.minZ || z + maxDim > mapBounds.maxZ) {
+            continue;
+          }
+        }
+
+        // Align with nearest street
+        let rotation = this.random() * Math.PI * 2;
+        let minDescDistSq = Infinity;
+
+        // Simple nearest searching
+        for (const street of settlement.streets) {
+          for (let j = 0; j < street.points.length - 1; j++) {
+            const p1 = street.points[j]!;
+            const p2 = street.points[j + 1]!;
+            // Check distance to segment center for speed
+            const mx = (p1.x + p2.x) / 2;
+            const mz = (p1.z + p2.z) / 2;
+            const dSq = (x - mx) ** 2 + (z - mz) ** 2;
+
+            if (dSq < minDescDistSq) {
+              minDescDistSq = dSq;
+              // Align parallel to road
+              rotation = Math.atan2(p2.z - p1.z, p2.x - p1.x);
+            }
+          }
+        }
+
+        // If really far from any road (>150m), revert to main axis or random
+        if (minDescDistSq > 150 * 150) {
+          rotation = this.random() * Math.PI * 2;
+        }
+
+        if (!this.checkOverlap(x, z, spec.footprint.width, spec.footprint.depth, rotation, existingBuildings, settlement.streets, densityMultiplier)) {
+          return this.createBuilding(spec, x, z, settlement.id, rotation);
+        }
+      }
+    }
+
+    // console.warn(`[SettlementGenerator] Failed to place ${category} building after ${randomAttempts} attempts + fallback`);
     return null;
+  }
+
+  /**
+   * Deterministic fallback: Walk along random streets and try to place buildings on empty lots
+   */
+  private findSpotAlongStreets(
+    settlement: Settlement,
+    spec: BuildingSpec,
+    existingBuildings: Building[],
+    densityMultiplier: number,
+    tier: number = 1,
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
+  ): Building | null {
+    // Shuffle streets to avoid bias
+    const streets = [...settlement.streets];
+    // Fisher-Yates shuffle
+    for (let i = streets.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      [streets[i], streets[j]] = [streets[j]!, streets[i]!];
+    }
+
+    // Parameters for probing
+    // Step size matching building width to avoid checking overlapping spots too much
+    const stepSize = Math.max(10, spec.footprint.width);
+
+    for (const street of streets) {
+      // Calculate specific setback for this street and building
+      // Distance from road center to building center
+      // Road half-width + Building half-depth + small margin (2m)
+      // Tier 2 adds an extra offset tightly behind the first row
+      const tierOffset = (tier - 1) * (spec.footprint.depth + 2);
+      const setback = (street.width / 2) + (spec.footprint.depth / 2) + 2 + tierOffset;
+
+      // Iterate segments
+      for (let i = 0; i < street.points.length - 1; i++) {
+        const p1 = street.points[i]!;
+        const p2 = street.points[i + 1]!;
+
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const len = Math.sqrt(dx * dx + dz * dz);
+        if (len < stepSize) continue;
+
+        const dirX = dx / len;
+        const dirZ = dz / len;
+
+        // Perpendicular normals (Left and Right)
+        const normX = -dirZ;
+        const normZ = dirX;
+
+        // Walk along segment
+        for (let d = stepSize / 2; d < len; d += stepSize) {
+          // Try Left (-Normal) and Right (+Normal)
+          // Randomize order for variety
+          const sides = this.random() > 0.5 ? [1, -1] : [-1, 1];
+
+          for (const side of sides) {
+            const px = p1.x + dirX * d + normX * setback * side;
+            const pz = p1.z + dirZ * d + normZ * setback * side;
+
+            // Rotation: face the street
+            const rotation = Math.atan2(-normZ * side, -normX * side);
+
+            // Bounds check
+            const maxDim = Math.max(spec.footprint.width, spec.footprint.depth) / 2;
+            if (mapBounds) {
+              if (px - maxDim < mapBounds.minX || px + maxDim > mapBounds.maxX ||
+                pz - maxDim < mapBounds.minZ || pz + maxDim > mapBounds.maxZ) {
+                continue;
+              }
+            }
+
+            if (!this.checkOverlap(px, pz, spec.footprint.width, spec.footprint.depth, rotation, existingBuildings, settlement.streets, densityMultiplier)) {
+              return this.createBuilding(spec, px, pz, settlement.id, rotation);
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get placement priority for a building spec
+   * Higher number = higher priority (placed earlier)
+   */
+  private getBuildingPriority(spec: BuildingSpec): number {
+    // High priority: Vital civic, large factories, government
+    if (['town_hall', 'cathedral', 'government_office', 'hospital', 'large_factory', 'power_plant'].includes(spec.subtype)) {
+      return 3;
+    }
+    // Medium priority: Infrastructure, large commercial, special civic
+    if (['train_station', 'department_store', 'skyscraper', 'school', 'library', 'police_station', 'fire_station', 'market_hall', 'warehouse_complex'].includes(spec.subtype)) {
+      return 2;
+    }
+    // Low priority: Generic residential, small shops, etc.
+    return 1;
   }
 
   /**
@@ -764,7 +1109,8 @@ export class SettlementGenerator {
   ): boolean {
     // Reduce padding for dense layouts
     // For extreme density, allow slight overlap (-0.5) to pack tight row houses
-    const padding = densityMultiplier > 1.8 ? -0.5 : (densityMultiplier > 1.2 ? 1 : 3);
+    // Modified to 0.5 to prevent z-fighting flicker
+    const padding = densityMultiplier > 1.8 ? 0.5 : (densityMultiplier > 1.2 ? 1 : 3);
 
     for (const building of existingBuildings) {
       const dx = Math.abs(x - building.x);
