@@ -2200,10 +2200,15 @@ export class MapRenderer {
       const group = new THREE.Group();
       group.name = `capture-zone-${zone.id}`;
 
-      // Get terrain elevation at zone position
-      const terrainElevation = getElevationAt(zone.x, zone.z);
+      // Determine objective position (default to center if not specified)
+      const objX = zone.objectiveX ?? zone.x;
+      const objZ = zone.objectiveZ ?? zone.z;
 
-      // Zone border (rectangular outline)
+      // Get terrain elevation at objective position
+      const objElevation = getElevationAt(objX, objZ);
+      const centerElevation = getElevationAt(zone.x, zone.z);
+
+      // Zone border (rectangular outline) - stays at zone center
       const borderGeometry = new THREE.EdgesGeometry(
         new THREE.PlaneGeometry(zone.width, zone.height)
       );
@@ -2216,18 +2221,19 @@ export class MapRenderer {
       });
       const borderMesh = new THREE.LineSegments(borderGeometry, borderMaterial);
       borderMesh.rotation.x = -Math.PI / 2;
-      borderMesh.position.set(zone.x, terrainElevation + 1.5, zone.z);
+      borderMesh.position.set(zone.x, centerElevation + 1.5, zone.z);
       borderMesh.userData.isBorderRing = true;
       borderMesh.renderOrder = 92;
       group.add(borderMesh);
 
       // FLAG POLE (always present but small if objective is large)
+      // Place flag near the objective model
       const poleGeometry = new THREE.CylinderGeometry(0.15, 0.15, 10, 8);
       const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
       const poleMesh = new THREE.Mesh(poleGeometry, poleMaterial);
-      // Offset slightly to NOT be dead center if there's an objective model
+      // Offset slightly to NOT be dead center of the building
       const poleOffsetX = zone.objectiveType ? 4 : 0;
-      poleMesh.position.set(zone.x + poleOffsetX, terrainElevation + 5, zone.z);
+      poleMesh.position.set(objX + poleOffsetX, objElevation + 5, objZ);
       poleMesh.castShadow = true;
       group.add(poleMesh);
 
@@ -2238,7 +2244,7 @@ export class MapRenderer {
         side: THREE.DoubleSide,
       });
       const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
-      flagMesh.position.set(zone.x + poleOffsetX + 2, terrainElevation + 9, zone.z);
+      flagMesh.position.set(objX + poleOffsetX + 2, objElevation + 9, objZ);
       flagMesh.userData.isFlag = true;
       group.add(flagMesh);
 
@@ -2248,11 +2254,11 @@ export class MapRenderer {
         const objectiveModel = this.createObjectiveModel(
           zone.objectiveType,
           zone.visualVariant || 0,
-          zone.x,
-          zone.z,
+          objX,
+          objZ,
           map
         );
-        objectiveModel.position.set(zone.x, terrainElevation, zone.z);
+        objectiveModel.position.set(objX, objElevation, objZ);
         group.add(objectiveModel);
       }
 

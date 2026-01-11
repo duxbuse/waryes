@@ -12,7 +12,7 @@
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import * as THREE from 'three';
-import { MapGenerator } from '../map/MapGenerator';
+
 import { opticsToNumber } from '../../data/types';
 
 export enum VisibilityState {
@@ -25,14 +25,19 @@ export class FogOfWarManager {
   private readonly game: Game;
   private enabled = true;
 
-  // Vision map (grid-based for performance)
-  private readonly cellSize = 10; // 10m cells
+  // Blocking grid for fast LOS checks (Terrain + Buildings + Forests)
+  private blockingGrid: Float32Array | null = null;
+  private blockingGridWidth = 0;
+  private blockingGridHeight = 0;
+  private blockingGridCellSize = 4; // High resolution for accurate LOS
+  private mapRevision = -1; // To track if map changed
 
-  // Current visibility per team: Map<teamId, Map<cellKey, isVisible>>
-  private currentVision: Map<string, Map<string, boolean>> = new Map();
-
-  // Explored state only for player team
-  private exploredGrid: Map<string, boolean> = new Map();
+  // Vision state
+  private currentVision = new Map<string, Map<string, boolean>>(); // team -> set of visible cell keys
+  private exploredGrid = new Map<string, boolean>(); // set of explored cell keys (player only)
+  private cellSize = 2; // Resolution of vision grid
+  private timeSinceLastUpdate = 0;
+  private updateInterval = 0.1; // 10Hz updates
 
   constructor(game: Game) {
     this.game = game;
@@ -44,13 +49,27 @@ export class FogOfWarManager {
   initialize(): void {
     this.currentVision.clear();
     this.exploredGrid.clear();
+    this.blockingGrid = null;
+    this.mapRevision = -1;
   }
 
   /**
    * Update fog of war based on unit positions
    */
-  update(_dt: number): void {
+  update(dt: number): void {
     if (!this.enabled) return;
+
+    // Initialize or update blocking grid if needed
+    if (!this.blockingGrid && this.game.currentMap) {
+      this.initializeBlockingGrid();
+    }
+
+    // Throttle updates for performance
+    this.timeSinceLastUpdate += dt;
+    if (this.timeSinceLastUpdate < this.updateInterval) {
+      return;
+    }
+    this.timeSinceLastUpdate = 0;
 
     // Clear current vision
     this.currentVision.clear();
@@ -66,6 +85,191 @@ export class FogOfWarManager {
 
     // Hide enemy units outside vision
     this.updateEnemyVisibility();
+  }
+
+  /**
+   * Initialize the blocking grid with terrain, buildings, and forests
+   * This allows O(1) height lookups instead of iterating all buildings per ray
+   */
+  private initializeBlockingGrid(): void {
+    const map = this.game.currentMap;
+    if (!map) return;
+
+    // Use map's cell size or a fixed high resolution one?
+    // Using a finer grid (e.g. 2m or 4m) is better for buildings
+    // Map cell size is adaptive (can be large), so let's stick to 2m or 4m for FOW accuracy
+    // However, aligning with terrain cells makes terrain lookup cheaper.
+    // Let's use 2m resolution for good building fidelity
+    this.blockingGridCellSize = 2;
+
+    this.blockingGridWidth = Math.ceil(map.width / this.blockingGridCellSize);
+    this.blockingGridHeight = Math.ceil(map.height / this.blockingGridCellSize);
+
+    // Create grid initialized with 0
+    this.blockingGrid = new Float32Array(this.blockingGridWidth * this.blockingGridHeight);
+
+    // 1. Fill with terrain height and forests
+    const mapCols = map.terrain[0]?.length || 0;
+    const mapRows = map.terrain.length;
+
+    for (let z = 0; z < this.blockingGridHeight; z++) {
+      for (let x = 0; x < this.blockingGridWidth; x++) {
+        // Convert grid coord to world coord
+        const worldX = (x * this.blockingGridCellSize) - (map.width / 2);
+        const worldZ = (z * this.blockingGridCellSize) - (map.height / 2);
+
+        // Get terrain height (interpolated)
+        const terrainHeight = this.getTerrainHeight(worldX, worldZ);
+
+        let blockingHeight = terrainHeight;
+
+        // Check for forest - match terrain grid cell
+        const terrainGridX = Math.floor((worldX + map.width / 2) / map.cellSize);
+        const terrainGridZ = Math.floor((worldZ + map.height / 2) / map.cellSize);
+
+        if (terrainGridX >= 0 && terrainGridX < mapCols && terrainGridZ >= 0 && terrainGridZ < mapRows) {
+          const cell = map.terrain[terrainGridZ]?.[terrainGridX];
+          if (cell?.type === 'forest') {
+            // Forest canopy height ~15m above terrain
+            blockingHeight = terrainHeight + 15;
+          }
+        }
+
+        this.blockingGrid[z * this.blockingGridWidth + x] = blockingHeight;
+      }
+    }
+
+    // 2. Rasterize buildings onto the grid
+    // Iterating buildings once during init is much better than per-frame
+    for (const building of map.buildings) {
+      // Calculate building bounds in grid coordinates
+      const minX = Math.floor(((building.x - building.width / 2) + map.width / 2) / this.blockingGridCellSize);
+      const maxX = Math.ceil(((building.x + building.width / 2) + map.width / 2) / this.blockingGridCellSize);
+      const minZ = Math.floor(((building.z - building.depth / 2) + map.height / 2) / this.blockingGridCellSize);
+      const maxZ = Math.ceil(((building.z + building.depth / 2) + map.height / 2) / this.blockingGridCellSize);
+
+      // Clamp to grid
+      const cMinX = Math.max(0, minX);
+      const cMaxX = Math.min(this.blockingGridWidth - 1, maxX);
+      const cMinZ = Math.max(0, minZ);
+      const cMaxZ = Math.min(this.blockingGridHeight - 1, maxZ);
+
+      // Apply building height
+      // Note: building.y is usually terrain height. If not explicitly set, we fetch it.
+      // But buildings in data structure don't always have 'y'. MapGenerator usually places them on terrain.
+      // We'll estimate base height from center (approximate, but faster)
+      // Actually, let's use the local terrain height at the cell for maximum accuracy.
+
+      const buildingTopRelative = building.height;
+
+      for (let z = cMinZ; z <= cMaxZ; z++) {
+        for (let x = cMinX; x <= cMaxX; x++) {
+          const idx = z * this.blockingGridWidth + x;
+          const currentHeight = this.blockingGrid[idx];
+          // We assume building sits on the terrain at that specific cell
+          // Since we already populated grid with terrain height, we can just add building height to terrain height?
+          // No, building usually has a flat base.
+          // Ideally: blockingHeight = Math.max(currentHeight, baseHeight + buildingHeight)
+          // If we assume the previously stored height IS the terrain height (mostly true, except forests)
+
+          // If it's a forest cell, currentHeight includes tree height.
+          // A building in a forest? Building usually clears forest or overrides it.
+          // Let's just say: max(currentHeight, terrainAtCell + buildingHeight)
+
+          // To be safe, re-fetch terrain height implicitly or assume building overrides trees
+          // Let's assume building max height overrides whatever is there if it's taller
+
+          // Approximate building base height as the terrain height at that cell
+          // (Since we prefilled with terrain height, we can recover terrain height approx if we knew it wasn't a tree)
+          // Simplified: If it was a tree (base+15), and building is (base+8), tree is taller. 
+          // But usually buildings remove trees.
+
+          // For simplicity and performance: just apply absolute max height check
+          // We need to know the terrain height at valid building pixels.
+          // Let's re-calculate terrain height to be precise? No, that's heavy.
+          // We can assume the value in the grid IS at least terrain height.
+          // If we just add building height to terrain height? 
+          // Problem: 'currentHeight' might be 'terrain + 15' (forest).
+          // If we place a house (height 5), result should probably be house height if house replaces tree, 
+          // OR tree height if tree remains.
+          // In MapGenerator, buildings don't modify terrain cells to remove forest type usually, 
+          // but visually they might.
+
+          // Let's assume buildings replace trees.
+          // But we don't know if `currentHeight` is tree or flat terrain without checking terrain grid again.
+          // Let's check terrain grid again here, it's init time so O(B * Area) is fine.
+
+          const worldX = (x * this.blockingGridCellSize) - (map.width / 2);
+          const worldZ = (z * this.blockingGridCellSize) - (map.height / 2);
+          const terrainHeight = this.getTerrainHeight(worldX, worldZ);
+
+          // Building top absolute elevation
+          // Note: buildings are placed on the ground.
+          const buildingTop = terrainHeight + building.height;
+
+          this.blockingGrid[idx] = Math.max(this.blockingGrid[idx], buildingTop);
+        }
+      }
+    }
+
+    console.log(`FOW: Initialized blocking grid ${this.blockingGridWidth}x${this.blockingGridHeight}`);
+  }
+
+  /**
+   * Check if line of sight is blocked between two positions
+   * Uses optimized 2.5D raymarching on cached height grid
+   */
+  private isLOSBlocked(start: THREE.Vector3, end: THREE.Vector3): boolean {
+    // Check smoke blocking (dynamic)
+    if (this.game.smokeManager.blocksLOS(start, end)) {
+      return true;
+    }
+
+    if (!this.blockingGrid || !this.game.currentMap) return false;
+
+    const mapWidth = this.game.currentMap.width;
+    const mapHeight = this.game.currentMap.height;
+
+    // Ray properties
+    const dist = start.distanceTo(end);
+    const dirX = (end.x - start.x) / dist;
+    const dirY = (end.y - start.y) / dist;
+    const dirZ = (end.z - start.z) / dist;
+
+    // Step size for ray marching
+    // We can step by blockingGridCellSize / 2 to assume we don't miss any cells
+    // Or we can use a basic DDA algorithm for grid traversal, but manual stepping is easier to implement for 2.5D
+    const stepSize = this.blockingGridCellSize;
+    const numSteps = Math.ceil(dist / stepSize);
+
+    // Check points along the ray
+    let currentX = start.x;
+    let currentY = start.y;
+    let currentZ = start.z;
+
+    for (let i = 1; i < numSteps; i++) { // Start at 1 to skip checking self roughly
+      currentX += dirX * stepSize;
+      currentY += dirY * stepSize;
+      currentZ += dirZ * stepSize;
+
+      // Convert to grid coords
+      const gridX = Math.floor((currentX + mapWidth / 2) / this.blockingGridCellSize);
+      const gridZ = Math.floor((currentZ + mapHeight / 2) / this.blockingGridCellSize);
+
+      // Bounds check
+      if (gridX >= 0 && gridX < this.blockingGridWidth && gridZ >= 0 && gridZ < this.blockingGridHeight) {
+        // Get blocking height at this cell
+        const blockingHeight = this.blockingGrid[gridZ * this.blockingGridWidth + gridX];
+
+        // If the blocking height is above our current ray height, LOS is blocked
+        // We use a small epsilon or margin? Maybe not needed if exact.
+        if (blockingHeight > currentY) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -262,184 +466,43 @@ export class FogOfWarManager {
   private getTerrainHeight(x: number, z: number): number {
     if (!this.game.currentMap) return 0;
     const map = this.game.currentMap;
-    const mapGenerator = new MapGenerator(map.seed, map.size);
-    return mapGenerator.getElevationAt(x, z);
+
+    // Use logic from MapGenerator.getElevationAt but using the existing map data
+    // Convert world coords to grid coords
+    const gridX = (x + map.width / 2) / map.cellSize;
+    const gridZ = (z + map.height / 2) / map.cellSize;
+
+    // Get the four surrounding grid cells
+    const x0 = Math.floor(gridX);
+    const z0 = Math.floor(gridZ);
+    const x1 = x0 + 1;
+    const z1 = z0 + 1;
+
+    // Clamp to terrain bounds
+    const cols = map.terrain[0]!.length;
+    const rows = map.terrain.length;
+    const cx0 = Math.max(0, Math.min(cols - 1, x0));
+    const cx1 = Math.max(0, Math.min(cols - 1, x1));
+    const cz0 = Math.max(0, Math.min(rows - 1, z0));
+    const cz1 = Math.max(0, Math.min(rows - 1, z1));
+
+    // Get elevations at corners
+    const e00 = map.terrain[cz0]![cx0]!.elevation;
+    const e10 = map.terrain[cz0]![cx1]!.elevation;
+    const e01 = map.terrain[cz1]![cx0]!.elevation;
+    const e11 = map.terrain[cz1]![cx1]!.elevation;
+
+    // Bilinear interpolation
+    const fx = gridX - x0;
+    const fz = gridZ - z0;
+
+    const e0 = e00 * (1 - fx) + e10 * fx;
+    const e1 = e01 * (1 - fx) + e11 * fx;
+
+    return e0 * (1 - fz) + e1 * fz;
   }
 
-  /**
-   * Check if terrain elevation blocks line of sight
-   */
-  private isTerrainBlocking(start: THREE.Vector3, end: THREE.Vector3): boolean {
-    const map = this.game.currentMap;
-    if (!map) return false;
 
-    const mapGenerator = new MapGenerator(map.seed, map.size);
-    const direction = new THREE.Vector3().subVectors(end, start);
-    const distance = direction.length();
-
-    // Sample every 5 meters along the line
-    const stepSize = 5;
-    const steps = Math.ceil(distance / stepSize);
-
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      const point = new THREE.Vector3().lerpVectors(start, end, t);
-
-      const terrainHeight = mapGenerator.getElevationAt(point.x, point.z);
-
-      // If terrain is higher than the line of sight at this point, it's blocked
-      if (terrainHeight > point.y) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if buildings block line of sight
-   */
-  private isBuildingBlocking(start: THREE.Vector3, end: THREE.Vector3): boolean {
-    const buildings = this.game.currentMap?.buildings ?? [];
-
-    for (const building of buildings) {
-      // Check if line segment intersects building AABB
-      const buildingPos = new THREE.Vector3(building.x, 0, building.z);
-      const halfWidth = building.width / 2;
-      const halfDepth = building.depth / 2;
-
-      // Simple 2D line-box intersection test
-      if (this.lineIntersectsBox2D(start, end, buildingPos, halfWidth, halfDepth)) {
-        // Now check height: is the ray below the building top?
-        // We'll check the mid-point of the intersection for simplicity
-
-
-        // Find t for intersection with box boundaries
-        // This is a bit complex for a one-off check, so let's sample points along the ray 
-        // that are inside the box's horizontal area
-        const dist = start.distanceTo(end);
-        const steps = Math.ceil(dist / 2);
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const p = new THREE.Vector3().lerpVectors(start, end, t);
-          if (this.pointInBox2D(p, buildingPos.x - halfWidth, buildingPos.x + halfWidth, buildingPos.z - halfDepth, buildingPos.z + halfDepth)) {
-            if (p.y < building.height) return true;
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if forests block line of sight
-   */
-  private isForestBlocking(start: THREE.Vector3, end: THREE.Vector3): boolean {
-    const map = this.game.currentMap;
-    if (!map) return false;
-
-    const terrain = map.terrain;
-    const cellSize = 4; // Match MapRenderer cell size
-    const cols = terrain[0]?.length ?? 0;
-    const rows = terrain.length;
-
-    // Sample points along the line
-    const direction = new THREE.Vector3().subVectors(end, start);
-    const distance = direction.length();
-    const steps = Math.ceil(distance / cellSize);
-
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const point = new THREE.Vector3().lerpVectors(start, end, t);
-
-      // Convert world position to grid coordinates
-      const gridX = Math.floor((point.x + map.width / 2) / cellSize);
-      const gridZ = Math.floor((point.z + map.height / 2) / cellSize);
-
-      // Check if in bounds
-      if (gridZ >= 0 && gridZ < rows && gridX >= 0 && gridX < cols) {
-        const cell = terrain[gridZ]?.[gridX];
-        if (cell?.type === 'forest') {
-          // Check height: forests only block if the ray is below canopy height (approx 15m)
-          if (point.y < 15) return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * 2D line-box intersection test
-   */
-  private lineIntersectsBox2D(
-    start: THREE.Vector3,
-    end: THREE.Vector3,
-    boxCenter: THREE.Vector3,
-    halfWidth: number,
-    halfDepth: number
-  ): boolean {
-    // AABB boundaries
-    const minX = boxCenter.x - halfWidth;
-    const maxX = boxCenter.x + halfWidth;
-    const minZ = boxCenter.z - halfDepth;
-    const maxZ = boxCenter.z + halfDepth;
-
-    // Check if either endpoint is inside the box
-    if (this.pointInBox2D(start, minX, maxX, minZ, maxZ) ||
-      this.pointInBox2D(end, minX, maxX, minZ, maxZ)) {
-      return true;
-    }
-
-    // Check line segment intersection with box edges
-    // This is a simplified test - check if line crosses any edge
-    const dx = end.x - start.x;
-    const dz = end.z - start.z;
-
-    // Parametric line equation: P = start + t * direction
-    // Check intersection with vertical edges (x = minX, x = maxX)
-    for (const x of [minX, maxX]) {
-      if (dx !== 0) {
-        const t = (x - start.x) / dx;
-        if (t >= 0 && t <= 1) {
-          const z = start.z + t * dz;
-          if (z >= minZ && z <= maxZ) {
-            return true;
-          }
-        }
-      }
-    }
-
-    // Check intersection with horizontal edges (z = minZ, z = maxZ)
-    for (const z of [minZ, maxZ]) {
-      if (dz !== 0) {
-        const t = (z - start.z) / dz;
-        if (t >= 0 && t <= 1) {
-          const x = start.x + t * dx;
-          if (x >= minX && x <= maxX) {
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if a point is inside a 2D box
-   */
-  private pointInBox2D(
-    point: THREE.Vector3,
-    minX: number,
-    maxX: number,
-    minZ: number,
-    maxZ: number
-  ): boolean {
-    return point.x >= minX && point.x <= maxX &&
-      point.z >= minZ && point.z <= maxZ;
-  }
 
   /**
    * Check if fog of war is enabled

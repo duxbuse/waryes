@@ -108,6 +108,10 @@ export class Unit {
   private _digTimer = 0;
   private readonly DIG_DURATION = 30.0;
 
+  // Combat caching
+  public combatTarget: Unit | null = null;
+  public targetScanTimer: number = 0;
+
   // UI elements (health bars, morale bars)
   private unitUI: UnitUI | null = null;
 
@@ -204,6 +208,9 @@ export class Unit {
 
     // Create UI (health bars, morale bars)
     this.unitUI = new UnitUI(this, game);
+
+    // Initialize scan timer with random offset to stagger updates across units
+    this.targetScanTimer = Math.random() * 1.0;
   }
 
   private createGeometry(): { geometry: THREE.BufferGeometry; height: number } {

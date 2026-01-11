@@ -93,7 +93,8 @@ export class SettlementGenerator {
     size: SettlementSize,
     layoutType?: LayoutType,
     mainRoadAngle?: number,
-    densityMultiplier: number = 1.0
+    densityMultiplier: number = 1.0,
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
   ): Settlement {
     const params = SETTLEMENT_PARAMS[size];
     const layout = layoutType ?? this.pickLayoutType(size);
@@ -152,7 +153,7 @@ export class SettlementGenerator {
     this.generateEntryPoints(settlement);
 
     // Generate buildings
-    this.generateBuildings(settlement, buildingCount, densityMultiplier);
+    this.generateBuildings(settlement, buildingCount, densityMultiplier, mapBounds);
 
     return settlement;
   }
@@ -188,6 +189,22 @@ export class SettlementGenerator {
           x: position.x + Math.cos(currentAngle) * r,
           z: position.z + Math.sin(currentAngle) * r,
         });
+      }
+
+      // Ensure the radial reaches the edge (entry point)
+      // Extend the last point to the full radius
+      if (points.length > 0) {
+        const lastPoint = points[points.length - 1]!;
+        const dx = lastPoint.x - position.x;
+        const dz = lastPoint.z - position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist < radius) {
+          points.push({
+            x: position.x + Math.cos(angle) * radius,
+            z: position.z + Math.sin(angle) * radius,
+          });
+        }
       }
 
       settlement.streets.push({
@@ -257,6 +274,37 @@ export class SettlementGenerator {
         width: i === 0 ? streetWidth * 1.3 : streetWidth, // Main street wider
         type: i === 0 ? 'highway' : 'town',
       });
+
+      // For the main street (index 0), extend to the edge to meet entry points
+      if (i === 0) {
+        // North extension
+        settlement.streets.push({
+          id: `${settlement.id}_ns_ext_N`,
+          points: [
+            { x: endX, z: endZ },
+            {
+              x: position.x + Math.cos(perpAngle) * offset + Math.cos(mainAxis) * radius,
+              z: position.z + Math.sin(perpAngle) * offset + Math.sin(mainAxis) * radius
+            }
+          ],
+          width: streetWidth * 1.3,
+          type: 'highway'
+        });
+
+        // South extension
+        settlement.streets.push({
+          id: `${settlement.id}_ns_ext_S`,
+          points: [
+            { x: startX, z: startZ },
+            {
+              x: position.x + Math.cos(perpAngle) * offset - Math.cos(mainAxis) * radius,
+              z: position.z + Math.sin(perpAngle) * offset - Math.sin(mainAxis) * radius
+            }
+          ],
+          width: streetWidth * 1.3,
+          type: 'highway'
+        });
+      }
     }
 
     // Generate streets perpendicular to main axis
@@ -277,6 +325,37 @@ export class SettlementGenerator {
         width: streetWidth,
         type: 'town',
       });
+
+      // For the main cross street (index 0), extend to the edge
+      if (i === 0) {
+        // East extension
+        settlement.streets.push({
+          id: `${settlement.id}_ew_ext_E`,
+          points: [
+            { x: endX, z: endZ },
+            {
+              x: position.x + Math.cos(mainAxis) * offset + Math.cos(mainAxis + Math.PI / 2) * radius,
+              z: position.z + Math.sin(mainAxis) * offset + Math.sin(mainAxis + Math.PI / 2) * radius
+            }
+          ],
+          width: streetWidth * 1.1,
+          type: 'town'
+        });
+
+        // West extension
+        settlement.streets.push({
+          id: `${settlement.id}_ew_ext_W`,
+          points: [
+            { x: startX, z: startZ },
+            {
+              x: position.x + Math.cos(mainAxis) * offset - Math.cos(mainAxis + Math.PI / 2) * radius,
+              z: position.z + Math.sin(mainAxis) * offset - Math.sin(mainAxis + Math.PI / 2) * radius
+            }
+          ],
+          width: streetWidth * 1.1,
+          type: 'town'
+        });
+      }
     }
   }
 
@@ -423,7 +502,8 @@ export class SettlementGenerator {
   private generateBuildings(
     settlement: Settlement,
     targetCount: number,
-    densityMultiplier: number = 1.0
+    densityMultiplier: number = 1.0,
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
   ): void {
     const { size, layoutType } = settlement;
     const composition = SETTLEMENT_COMPOSITION[size];
@@ -437,6 +517,10 @@ export class SettlementGenerator {
       agricultural: 0,
       infrastructure: 0,
     };
+
+    // Calculate maximum buildings that fit in the map bounds if constrained
+    // This prevents infinite loops if the settlement is clipped by map edge
+    const maxRetries = mapBounds ? 100 : 50; // More retries if we are filtering by bounds, but stick to a limit
 
     let remaining = targetCount;
     for (const category of Object.keys(composition) as BuildingCategory[]) {
@@ -463,7 +547,7 @@ export class SettlementGenerator {
     for (const category of ['civic', 'commercial', 'residential', 'industrial', 'agricultural', 'infrastructure'] as BuildingCategory[]) {
       const count = categoryTargets[category];
       for (let i = 0; i < count; i++) {
-        const building = this.placeBuilding(settlement, category, placedBuildings, layoutType, densityMultiplier);
+        const building = this.placeBuilding(settlement, category, placedBuildings, layoutType, densityMultiplier, mapBounds);
         if (building) {
           placedBuildings.push(building);
         }
@@ -506,7 +590,8 @@ export class SettlementGenerator {
     category: BuildingCategory,
     existingBuildings: Building[],
     layoutType: LayoutType,
-    densityMultiplier: number = 1.0
+    densityMultiplier: number = 1.0,
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
   ): Building | null {
     const { size, position, radius, mainAxis } = settlement;
 
@@ -616,6 +701,17 @@ export class SettlementGenerator {
 
         // Face toward center (with some variation)
         rotation = Math.atan2(position.z - z, position.x - x) + (this.random() - 0.5) * 0.3;
+      }
+
+      // Check map bounds
+      if (mapBounds) {
+        // Simple bounding box check for the building
+        // A loose check is enough: checking center +/- max dim
+        const maxDim = Math.max(spec.footprint.width, spec.footprint.depth) / 2;
+        if (x - maxDim < mapBounds.minX || x + maxDim > mapBounds.maxX ||
+          z - maxDim < mapBounds.minZ || z + maxDim > mapBounds.maxZ) {
+          continue; // Out of bounds
+        }
       }
 
       // Check for overlap

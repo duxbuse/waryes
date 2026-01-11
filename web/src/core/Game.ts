@@ -29,7 +29,7 @@ import { DamageNumberManager } from '../game/effects/DamageNumbers';
 import { VisualEffectsManager } from '../game/effects/VisualEffects';
 import { AudioManager } from '../game/audio/AudioManager';
 import { ScreenManager, ScreenType } from './ScreenManager';
-import { MapGenerator } from '../game/map/MapGenerator';
+import { MapGenerator, type TerrainCell } from '../game/map/MapGenerator';
 import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
@@ -38,6 +38,7 @@ import type { GameMap, DeckData, MapSize, BiomeType } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
+import { BenchmarkManager } from '../game/debug/BenchmarkManager';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -79,6 +80,7 @@ export class Game {
   public minimapRenderer: MinimapRenderer | null = null;
   public pathRenderer: PathRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
+  public benchmarkManager: BenchmarkManager;
 
   // Game state
   private _phase: GamePhase = GamePhase.Loading;
@@ -195,6 +197,7 @@ export class Game {
     this.minimapRenderer = new MinimapRenderer(this);
     this.pathRenderer = new PathRenderer(this.scene);
     this.losPreviewRenderer = new LOSPreviewRenderer(this);
+    this.benchmarkManager = new BenchmarkManager(this);
 
     // Setup lighting
     this.setupLighting();
@@ -448,6 +451,9 @@ export class Game {
 
     // Screen manager always updates
     this.screenManager.update(dt);
+
+    // Update benchmark
+    this.benchmarkManager.update(dt);
   }
 
   private render(): void {
@@ -964,8 +970,10 @@ export class Game {
     this.pathRenderer?.clearAllPreOrderPaths();
 
     // Start battle
+    console.log('[Game] Starting battle...');
     this.setPhase(GamePhase.Battle);
     this.unitManager.unfreezeAll();
+    console.log('[Game] Battle started, units unfrozen');
   }
 
   /**
@@ -1235,6 +1243,32 @@ export class Game {
   }
 
   /**
+   * Get terrain cell at a specific world position
+   */
+  public getTerrainAt(x: number, z: number): TerrainCell | null {
+    if (!this.currentMap) return null;
+
+    const map = this.currentMap;
+    const halfWidth = map.width / 2;
+    const halfHeight = map.height / 2;
+
+    // Convert world coords to grid coords
+    const gridX = Math.floor((x + halfWidth) / map.cellSize);
+    const gridZ = Math.floor((z + halfHeight) / map.cellSize);
+
+    // Bounds check
+    if (!map.terrain || map.terrain.length === 0) return null;
+    const rows = map.terrain.length;
+    const cols = map.terrain[0]?.length || 0;
+
+    if (gridZ < 0 || gridZ >= rows || gridX < 0 || gridX >= cols) {
+      return null;
+    }
+
+    return map.terrain[gridZ]?.[gridX] || null;
+  }
+
+  /**
    * Raycast to find units at screen position
    */
   getUnitsAtScreen(screenX: number, screenY: number): THREE.Object3D[] {
@@ -1402,9 +1436,13 @@ export class Game {
   private setupStartBattleButton(): void {
     const startBtn = document.getElementById('start-battle-btn');
     if (startBtn) {
+      console.log('[Game] Start battle button found, attaching listener');
       startBtn.addEventListener('click', () => {
+        console.log('[Game] Start battle button clicked');
         this.startBattle();
       });
+    } else {
+      console.warn('[Game] Start battle button NOT found');
     }
   }
 

@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
+import { GamePhase } from '../../core/Game';
 import { Unit, type UnitConfig } from '../units/Unit';
 
 export interface SpawnConfig {
@@ -56,6 +57,11 @@ export class UnitManager {
 
     const unit = new Unit(unitConfig, this.game);
     this.units.set(id, unit);
+
+    // If game is already in battle phase, unfreeze immediately
+    if (this.game.phase === GamePhase.Battle) {
+      unit.setFrozen(false);
+    }
 
     // Add to scene
     this.game.scene.add(unit.mesh);

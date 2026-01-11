@@ -311,7 +311,13 @@ export class MapGenerator {
         settlementSize,
         layoutType,
         mainRoadAngle,
-        this.biome === 'cities' ? 2.0 : 1.0 // Double density for cities biome
+        this.biome === 'cities' ? 2.0 : 1.0, // Double density for cities biome
+        {
+          minX: -this.width / 2 + 10,
+          maxX: this.width / 2 - 10,
+          minZ: -this.height / 2 + 10,
+          maxZ: this.height / 2 - 10
+        }
       );
 
       // Check if terrain is suitable for this settlement
@@ -629,6 +635,11 @@ export class MapGenerator {
         const t = (j + 0.5) / numBuildings;
         const x = p1.x + dx * t;
         const z = p1.z + dz * t;
+
+        // Check map bounds
+        if (Math.abs(x) > this.width / 2 - 15 || Math.abs(z) > this.height / 2 - 15) {
+          continue;
+        }
 
         // Check if inside any settlement
         let insideSettlement = false;
@@ -1796,13 +1807,15 @@ export class MapGenerator {
    * Get town positions from settlements for road generation
    * Uses the already-generated settlements for consistency
    */
-  private getTownPositions(): Array<{ x: number; z: number; radius: number; size: SettlementSize }> {
+  private getTownPositions(): Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }> {
     // Return positions from settlements (already generated)
     return this.settlements.map(s => ({
       x: s.position.x,
       z: s.position.z,
       radius: s.radius,
       size: s.size,
+      layoutType: s.layoutType,
+      entryPoints: s.entryPoints,
     }));
   }
 
@@ -1811,7 +1824,7 @@ export class MapGenerator {
    * Interstate on large maps (bypasses towns), Highway on smaller maps
    */
   private generateMainCorridor(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
     isLargeMap: boolean,
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road {
@@ -1852,7 +1865,7 @@ export class MapGenerator {
    * Find an x-corridor that bypasses all towns by at least the given distance
    */
   private findBypassCorridor(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
     minDistance: number
   ): number {
     // Try different x positions and find one that's far enough from all towns
@@ -1895,7 +1908,7 @@ export class MapGenerator {
    * Generate highway network connecting towns (not hamlets - they get dirt roads)
    */
   private generateHighwayNetwork(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
     mainRoad: Road,
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
@@ -2039,16 +2052,72 @@ export class MapGenerator {
    * Hamlets get dirt roads, larger settlements get town roads
    */
   private generateTownStreets(
-    town: { x: number; z: number; radius: number; size: SettlementSize },
+    town: { x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] },
     existingRoads: Road[],
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
     const streets: Road[] = [];
-
-    // Determine road type based on settlement size
-    // Hamlets get dirt roads, villages get town roads, larger get highways
     const roadType: RoadType = town.size === 'hamlet' ? 'dirt' : 'town';
 
+    // If we have entry points (which we should for all recent settlements), use them!
+    if (town.entryPoints && town.entryPoints.length > 0) {
+      for (const entryPoint of town.entryPoints) {
+        // Skip entry points that are outside the map bounds
+        if (Math.abs(entryPoint.x) > this.width / 2 - 10 || Math.abs(entryPoint.z) > this.height / 2 - 10) {
+          continue;
+        }
+
+        // Find closest point on existing roads to this entry point
+        let bestConnection: { point: { x: number; z: number }; dist: number } | null = null;
+        let bestValues = { dist: Infinity };
+
+        for (const road of existingRoads) {
+          const connection = this.findClosestPointOnRoad(entryPoint, road, bridgeAvoidanceZones);
+          // Calculate distance from entry point to the road point
+          const distToRoad = Math.sqrt((entryPoint.x - connection.point.x) ** 2 + (entryPoint.z - connection.point.z) ** 2);
+
+          // Ensure we don't just connect back to the town itself (check distance > something small)
+          // and ensure we don't cross the entire map
+          if (distToRoad < this.width / 3) {
+            if (distToRoad < bestValues.dist) {
+              bestValues.dist = distToRoad;
+              bestConnection = { point: connection.point, dist: distToRoad };
+            }
+          }
+        }
+
+        if (bestConnection && bestConnection.dist > 10) {
+          // Create road from existing road TO the entry point
+          if (town.layoutType === 'grid') {
+            // Straight line for grid look
+            const numPoints = Math.max(5, Math.ceil(bestConnection.dist / 10));
+            const points: { x: number; z: number }[] = [];
+            for (let i = 0; i <= numPoints; i++) {
+              const t = i / numPoints;
+              points.push({
+                x: bestConnection.point.x + (entryPoint.x - bestConnection.point.x) * t,
+                z: bestConnection.point.z + (entryPoint.z - bestConnection.point.z) * t,
+              });
+            }
+
+            streets.push({
+              id: `road_${this.roadIdCounter++}`,
+              points,
+              width: ROAD_WIDTHS[roadType],
+              type: roadType,
+            });
+          } else {
+            // Organic curve
+            streets.push(
+              this.createOrganicStreet(bestConnection.point, { x: entryPoint.x, z: entryPoint.z }, roadType, bridgeAvoidanceZones)
+            );
+          }
+        }
+      }
+      return streets;
+    }
+
+    // Fallback logic for legacy/undefined entry points
     // Find the closest point on existing roads that's outside the settlement
     let connectionPoint: { x: number; z: number } | null = null;
     let closestRoadDist = Infinity;
@@ -2056,8 +2125,11 @@ export class MapGenerator {
     for (const road of existingRoads) {
       for (const point of road.points) {
         // Only consider points OUTSIDE the settlement radius
+        // For large cities, we want to connect a bit further out to give space for the approach
+        const minDistance = town.size === 'city' ? town.radius * 1.1 : town.radius;
         const distToTown = Math.sqrt((point.x - town.x) ** 2 + (point.z - town.z) ** 2);
-        if (distToTown > town.radius && distToTown < town.radius * 3) {
+
+        if (distToTown > minDistance && distToTown < town.radius * 3) {
           if (distToTown < closestRoadDist) {
             closestRoadDist = distToTown;
             connectionPoint = { x: point.x, z: point.z };
@@ -2069,18 +2141,46 @@ export class MapGenerator {
     // If we found a connection point, create a single road from that point
     // to the settlement (hamlets connect to center, larger settlements to edge)
     if (connectionPoint) {
-      // For hamlets, connect directly to center (no internal streets)
-      // For larger settlements, connect to edge (they have internal streets)
-      const targetPoint = town.size === 'hamlet'
-        ? { x: town.x, z: town.z }
-        : {
-          x: town.x + Math.cos(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
-          z: town.z + Math.sin(Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x)) * town.radius * 0.9,
-        };
+      // For hamlets, connect directly to center
+      // For larger settlements, connect to edge
+      let targetPoint: { x: number; z: number };
 
-      // Create a single connecting road
-      const connectionRoad = this.createOrganicStreet(connectionPoint, targetPoint, roadType, bridgeAvoidanceZones);
-      streets.push(connectionRoad);
+      if (town.size === 'hamlet') {
+        targetPoint = { x: town.x, z: town.z };
+      } else {
+        const angle = Math.atan2(connectionPoint.z - town.z, connectionPoint.x - town.x);
+        // Connect to slightly inside the radius to overlap with internal streets
+        targetPoint = {
+          x: town.x + Math.cos(angle) * town.radius * 0.9,
+          z: town.z + Math.sin(angle) * town.radius * 0.9,
+        };
+      }
+
+      // Create a connecting road
+      // If it's a grid city/town, force a straight road for a clean look
+      if (town.layoutType === 'grid') {
+        // Generate straight path points
+        const numPoints = Math.max(5, Math.ceil(closestRoadDist / 10));
+        const points: { x: number; z: number }[] = [];
+        for (let i = 0; i <= numPoints; i++) {
+          const t = i / numPoints;
+          points.push({
+            x: connectionPoint.x + (targetPoint.x - connectionPoint.x) * t,
+            z: connectionPoint.z + (targetPoint.z - connectionPoint.z) * t,
+          });
+        }
+
+        streets.push({
+          id: `road_${this.roadIdCounter++}`,
+          points,
+          width: ROAD_WIDTHS[roadType],
+          type: roadType,
+        });
+      } else {
+        // Organic/Mixed: use organic curve
+        const connectionRoad = this.createOrganicStreet(connectionPoint, targetPoint, roadType, bridgeAvoidanceZones);
+        streets.push(connectionRoad);
+      }
     }
 
     // No internal streets - settlements have their own from SettlementGenerator
@@ -2552,7 +2652,7 @@ export class MapGenerator {
    */
   private ensureMapConnectivity(
     roads: Road[],
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize }>
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType }>
   ): void {
     const edgeMargin = 50; // Distance from map edge to consider "crossing"
     const minRoutes = 5;
@@ -2813,8 +2913,8 @@ export class MapGenerator {
     // Generate control points with smooth deviations
     const controlPoints: { x: number; z: number }[] = [];
     // Maximum perpendicular deviation from straight line - allows detours around lakes
-    // Increased to 40% and 200m to allow roads to route around large lakes
-    const maxPerpendicularDeviation = Math.min(pathLength * 0.4, 200); // Max 40% of path length or 200m
+    // Increased to 40% and 1000m to allow roads to route around large cities
+    const maxPerpendicularDeviation = Math.min(pathLength * 0.4, 1000); // Increased from 200m
 
     for (let i = 0; i <= numControlPoints; i++) {
       const t = i / numControlPoints;
@@ -2989,7 +3089,9 @@ export class MapGenerator {
 
   /**
    * Check if terrain at position is suitable for a capture zone
-   * Requirements: no water/river cells, reasonable slope (not mountain peak)
+   * Relaxed requirements: we no longer strictly forbid water/river in the entire zone,
+   * because we will search for a valid spot for the objective building.
+   * Just avoid completely invalid areas (deep ocean, mountains).
    */
   private isTerrainSuitableForCaptureZone(
     worldX: number,
@@ -3005,38 +3107,122 @@ export class MapGenerator {
       { x: worldX + width / 2, z: worldZ - height / 2 }, // Top-right
       { x: worldX - width / 2, z: worldZ + height / 2 }, // Bottom-left
       { x: worldX + width / 2, z: worldZ + height / 2 }, // Bottom-right
-      { x: worldX, z: worldZ - height / 2 }, // Top-mid
-      { x: worldX, z: worldZ + height / 2 }, // Bottom-mid
-      { x: worldX - width / 2, z: worldZ }, // Left-mid
-      { x: worldX + width / 2, z: worldZ }, // Right-mid
     ];
 
     const elevations: number[] = [];
+    let waterCount = 0;
 
     for (const pos of positions) {
       const terrain = this.getTerrainAt(pos.x, pos.z);
       if (!terrain) continue;
 
-      // Reject if any point is water or river
+      // Count water cells
       if (terrain.type === 'water' || terrain.type === 'river') {
-        return false;
+        waterCount++;
+      } else {
+        elevations.push(terrain.elevation);
       }
-      elevations.push(terrain.elevation);
     }
 
+    // If more than 60% is water, reject the zone
+    if (waterCount > positions.length * 0.6) return false;
+
+    // If we have no dry land samples, reject
     if (elevations.length === 0) return false;
 
-    // Check elevation variance - reject mountain peaks with steep slopes
+    // Check elevation variance - reject absolute mountain peaks
     const minElevation = Math.min(...elevations);
     const maxElevation = Math.max(...elevations);
     const elevationVariance = maxElevation - minElevation;
 
-    // Allow more variance for larger zones, but cap at 15m
-    const maxDim = Math.max(width, height);
-    const maxAllowedVariance = Math.min(15, maxDim * 0.5);
-    if (elevationVariance > maxAllowedVariance) {
-      return false; // Too steep (likely mountain peak)
+    // Allow more variance for larger zones
+    // Relaxed check: allow up to 25m variance across the whole zone
+    if (elevationVariance > 25) {
+      return false; // Too steep/rugged
     }
+
+    return true;
+  }
+
+  /**
+   * Find a valid location for an objective building within the zone area
+   * Scans for a flat, dry spot of size 20x20m
+   */
+  private findValidObjectiveLocation(
+    zoneX: number,
+    zoneZ: number,
+    zoneWidth: number,
+    zoneHeight: number
+  ): { x: number; z: number } | null {
+    // Try center first
+    if (this.isLocationValidForBuilding(zoneX, zoneZ, 20)) {
+      return { x: zoneX, z: zoneZ };
+    }
+
+    // Search in a grid pattern
+    const step = 20; // 20m grid
+    const halfW = zoneWidth / 2 - 10; // Keep 10m margin
+    const halfH = zoneHeight / 2 - 10;
+
+    // Spiral search or grid search
+    // Simple grid search for now
+    for (let x = -halfW; x <= halfW; x += step) {
+      for (let z = -halfH; z <= halfH; z += step) {
+        // Skip center (already checked)
+        if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+
+        const worldX = zoneX + x;
+        const worldZ = zoneZ + z;
+
+        if (this.isLocationValidForBuilding(worldX, worldZ, 20)) {
+          return { x: worldX, z: worldZ };
+        }
+      }
+    }
+
+    // Attempt random samples as fallback
+    for (let i = 0; i < 20; i++) {
+      const x = this.rng.nextFloat(-halfW, halfW);
+      const z = this.rng.nextFloat(-halfH, halfH);
+      const worldX = zoneX + x;
+      const worldZ = zoneZ + z;
+      if (this.isLocationValidForBuilding(worldX, worldZ, 20)) {
+        return { x: worldX, z: worldZ };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Helper to check if a specific spot is valid for a building
+   */
+  private isLocationValidForBuilding(x: number, z: number, size: number): boolean {
+    const halfSize = size / 2;
+    // Check corners and center
+    const checks = [
+      { x: x, z: z },
+      { x: x - halfSize, z: z - halfSize },
+      { x: x + halfSize, z: z - halfSize },
+      { x: x - halfSize, z: z + halfSize },
+      { x: x + halfSize, z: z + halfSize },
+    ];
+
+    const elevs: number[] = [];
+
+    for (const p of checks) {
+      const t = this.getTerrainAt(p.x, p.z);
+      if (!t) return false;
+      if (t.type === 'water' || t.type === 'river') return false;
+      // Avoid roads? Maybe, but objectives near roads are fine.
+      // Avoid overlapping existing buildings? Logic needs that context, but this is map gen.
+      elevs.push(t.elevation);
+    }
+
+    // Check flatness
+    const min = Math.min(...elevs);
+    const max = Math.max(...elevs);
+    if (max - min > 5) return false; // Max 5m slope for the building itself
 
     return true;
   }
@@ -3249,27 +3435,27 @@ export class MapGenerator {
       }
 
       // Try to find valid terrain
-      const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100, deploymentZones) as { x: number; z: number } | null;
+      const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100, deploymentZones);
 
       if (pos) {
         // Check for overlap with buffer
         if (!checkOverlap(pos.x, pos.z, width, height)) {
-          const objType = biomeObjectives[biomeObjIndex % biomeObjectives.length]!;
-          biomeObjIndex++;
-
           zones.push({
-            id: `zone_${zones.length}`,
-            name: this.getObjectiveName(objType),
+            id: `zone_${String.fromCharCode(65 + zones.length)}`, // AZ
+            name: `Zone ${String.fromCharCode(65 + zones.length)}`,
             x: pos.x,
             z: pos.z,
-            width: width,
-            height: height,
-            pointsPerTick: points,
+            objectiveX: pos.objectiveX,
+            objectiveZ: pos.objectiveZ,
+            width,
+            height,
+            pointsPerTick: 1,
             owner: 'neutral',
             captureProgress: 0,
-            objectiveType: objType,
-            visualVariant: this.rng.nextInt(0, 2),
+            objectiveType: 'supply_cache', // Default, will be updated
+            visualVariant: Math.floor(this.rng.next() * 3)
           });
+
           failures = 0; // Reset failures on success
         } else {
           failures++;
@@ -3332,6 +3518,65 @@ export class MapGenerator {
     }
 
     return maxElevation > -Infinity ? bestPos : null;
+  }
+
+  /**
+   * Find a position with high elevation within a search area
+   */
+  private findValidCaptureZonePosition(
+    targetX: number,
+    targetZ: number,
+    width: number,
+    height: number,
+    searchRadius: number,
+    deploymentZones?: DeploymentZone[]
+  ): { x: number; z: number; objectiveX?: number; objectiveZ?: number } | null {
+    const centerX = targetX;
+    const centerZ = targetZ;
+
+    let bestPos: { x: number; z: number; objectiveX?: number; objectiveZ?: number } | null = null;
+    let maxElevation = -Infinity;
+    const samples = 12;
+
+    for (let i = 0; i < samples; i++) {
+      const angle = (i / samples) * Math.PI * 2;
+      const dist = this.rng.nextFloat(0, searchRadius);
+      const x = centerX + Math.cos(angle) * dist;
+      const z = centerZ + Math.sin(angle) * dist;
+
+      const elev = this.getElevationAt(x, z);
+
+      // Check deployment zones if provided
+      let validPos = true;
+      if (deploymentZones) {
+        const buffer = 50;
+        for (const zone of deploymentZones) {
+          const minX = zone.minX - buffer - width / 2;
+          const maxX = zone.maxX + buffer + width / 2;
+          const minZ = zone.minZ - buffer - height / 2;
+          const maxZ = zone.maxZ + buffer + height / 2;
+          if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
+            validPos = false;
+            break;
+          }
+        }
+      }
+
+      if (validPos && this.isTerrainSuitableForCaptureZone(x, z, width, height)) {
+        // New logic: search for a valid objective placement spot within this valid zone
+        const objectiveLoc = this.findValidObjectiveLocation(x, z, width, height);
+
+        if (objectiveLoc) {
+          // Prefer higher elevation if multiple valid found
+          if (elev > maxElevation) {
+            maxElevation = elev;
+            bestPos = { x, z, objectiveX: objectiveLoc.x, objectiveZ: objectiveLoc.z };
+          }
+        }
+      }
+    }
+
+    return bestPos;
   }
 
 

@@ -322,18 +322,16 @@ export class CombatManager {
     }
 
     // Get terrain at target position
-    const terrain = this.game.currentMap
-      ? new MapGenerator(this.game.currentMap.seed, this.game.currentMap.size).getTerrainAt(
-        target.position.x,
-        target.position.z
-      )
-      : null;
+    const terrain = this.game.getTerrainAt(target.position.x, target.position.z);
 
     if (!terrain) return 0;
 
     return MapGenerator.getCoverValue(terrain.cover);
   }
 
+  /**
+   * Process combat for all units
+   */
   /**
    * Process combat for all units
    */
@@ -346,21 +344,54 @@ export class CombatManager {
       // Recover morale when not under fire
       unit.recoverMorale(GAME_CONSTANTS.MORALE_RECOVERY_RATE * dt);
 
-      // Find targets and fire
-      const target = this.findTarget(unit);
-      if (target) {
+      // Decrement scan timer
+      unit.targetScanTimer -= dt;
+
+      // Validate current target
+      if (unit.combatTarget) {
+        // Check if target is dead or invalid
+        if (unit.combatTarget.health <= 0 || !this.isValidTarget(unit, unit.combatTarget)) {
+          unit.combatTarget = null;
+        }
+      }
+
+      // Try to find new target if needed and timer ready
+      // This staggers expensive scan operations across multiple frames/seconds
+      if (!unit.combatTarget && unit.targetScanTimer <= 0) {
+        unit.combatTarget = this.findTarget(unit);
+        // Reset timer (1.0s average + random jitter to keep staggered)
+        unit.targetScanTimer = 0.8 + Math.random() * 0.4;
+      }
+
+      // Engage target if we have one
+      if (unit.combatTarget) {
         // Check if can fire (rate of fire cooldown)
         if (unit.canFire()) {
           // Fire all weapons
           for (const weaponSlot of unit.getWeapons()) {
             for (let i = 0; i < weaponSlot.count; i++) {
-              this.fireWeapon(unit, target, weaponSlot.weaponId);
+              this.fireWeapon(unit, unit.combatTarget, weaponSlot.weaponId);
             }
           }
           unit.resetFireCooldown();
         }
       }
     }
+  }
+
+  /**
+   * Check if a target is valid (in range, visible, LOS)
+   * Faster than full findTarget scan
+   */
+  private isValidTarget(attacker: Unit, target: Unit): boolean {
+    const dist = attacker.position.distanceTo(target.position);
+    if (dist > attacker.getMaxWeaponRange()) return false;
+
+    // Check team visibility
+    if (!this.game.fogOfWarManager.isUnitVisibleToTeam(target, attacker.team)) return false;
+
+    // Check direct line of sight
+    return this.hasLineOfSight(attacker, target);
   }
 
   private findTarget(unit: Unit): Unit | null {
@@ -421,24 +452,23 @@ export class CombatManager {
     const map = this.game.currentMap;
     if (!map) return true;
 
-    const mapGenerator = new MapGenerator(map.seed, map.size);
     const direction = new THREE.Vector3().subVectors(endPos, startPos);
     const distance = direction.length();
 
-    // Sample points along the line (every 5m)
-    const steps = Math.ceil(distance / 5);
+    // Sample points along the line (every 10m - optimization)
+    const steps = Math.ceil(distance / 10);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       const point = new THREE.Vector3().lerpVectors(startPos, endPos, t);
 
       // 1. Check terrain elevation blocking
-      const terrainHeight = mapGenerator.getElevationAt(point.x, point.z);
+      const terrainHeight = this.game.getElevationAt(point.x, point.z);
       if (terrainHeight > point.y) {
         return false;
       }
 
       // 2. Check for buildings blocking
-      const terrain = mapGenerator.getTerrainAt(point.x, point.z);
+      const terrain = this.game.getTerrainAt(point.x, point.z);
       if (terrain?.type === 'building') {
         const building = this.game.buildingManager.getBuildingAt(point);
         if (building) {

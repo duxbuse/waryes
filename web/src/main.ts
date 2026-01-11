@@ -163,6 +163,13 @@ async function main(): Promise<void> {
 
     console.log('Stellar Siege initialized successfully');
 
+    // Check for benchmark mode
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('benchmark') === 'true') {
+      game.benchmarkManager.startBenchmark();
+    }
+
+
   } catch (error) {
     console.error('Failed to initialize game:', error);
     loadingText.textContent = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;

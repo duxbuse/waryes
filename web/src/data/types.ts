@@ -513,6 +513,8 @@ export interface CaptureZone {
   captureProgress: number;
   objectiveType?: ObjectiveType;  // Strategic objective type for this zone
   visualVariant?: number;  // 0-2 for visual variety within objective type
+  objectiveX?: number; // Specific location for the objective model
+  objectiveZ?: number;
 }
 
 export interface DeploymentZone {

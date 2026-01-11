@@ -276,6 +276,11 @@ export class UnitUI {
     });
 
     this.aimRing = new THREE.Line(geometry, material);
+
+    // Set usage to dynamic
+    const posAttr = geometry.attributes.position!;
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+
     this.aimRing.renderOrder = 999;
     this.aimRing.visible = false;
     this.groundRingsGroup?.add(this.aimRing);
@@ -304,8 +309,15 @@ export class UnitUI {
     this.weaponReloadBgRings.push(bgRing);
 
     // Foreground ring (green, fills based on reload progress)
-    const fgPoints = this.createArcPoints(radius, 0, 0); // Start with no arc
-    const fgGeometry = new THREE.BufferGeometry().setFromPoints(fgPoints);
+    // Pre-allocate buffer for full circle
+    const fullPoints = this.createArcPoints(radius, Math.PI * 2, 0); // Max size
+    const fgGeometry = new THREE.BufferGeometry().setFromPoints(fullPoints);
+    fgGeometry.setDrawRange(0, 0); // Start hidden
+
+    // Set usage to dynamic
+    const posAttr = fgGeometry.attributes.position!;
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+
     const fgMaterial = new THREE.LineBasicMaterial({
       color: 0x44ff44, // Green
       linewidth: 2,
@@ -344,6 +356,9 @@ export class UnitUI {
   /**
    * Update aim ring geometry to point toward target
    */
+  /**
+   * Update aim ring geometry to point toward target
+   */
   private updateAimRing(targetAngle: number): void {
     if (!this.aimRing) return;
 
@@ -356,8 +371,18 @@ export class UnitUI {
 
     // Update geometry
     const geometry = this.aimRing.geometry as THREE.BufferGeometry;
-    geometry.setFromPoints(points);
-    geometry.attributes['position']!.needsUpdate = true;
+    const positions = geometry.attributes.position!;
+
+    // Aim ring size is constant (constant arc angle), so direct update is safe
+    // But safety check just in case
+    const count = Math.min(points.length, positions.count);
+
+    for (let i = 0; i < count; i++) {
+      positions.setXYZ(i, points[i]!.x, points[i]!.y, points[i]!.z);
+    }
+
+    positions.needsUpdate = true;
+    geometry.setDrawRange(0, count);
   }
 
   /**
@@ -376,10 +401,19 @@ export class UnitUI {
     // Create arc starting from top, going clockwise
     const points = this.createArcPoints(radius, arcAngle, 0);
 
-    // Update geometry
+    // Update geometry using pre-allocated buffer
     const geometry = ring.geometry as THREE.BufferGeometry;
-    geometry.setFromPoints(points);
-    geometry.attributes['position']!.needsUpdate = true;
+    const positions = geometry.attributes.position!;
+
+    // Ensure we don't overflow the buffer
+    const count = Math.min(points.length, positions.count);
+
+    for (let i = 0; i < count; i++) {
+      positions.setXYZ(i, points[i]!.x, points[i]!.y, points[i]!.z);
+    }
+
+    positions.needsUpdate = true;
+    geometry.setDrawRange(0, count);
   }
 
   /**
