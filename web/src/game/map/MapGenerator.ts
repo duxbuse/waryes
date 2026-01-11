@@ -2669,7 +2669,8 @@ export class MapGenerator {
     towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType }>
   ): void {
     const edgeMargin = 50; // Distance from map edge to consider "crossing"
-    const minRoutes = 5;
+    const minNSRoutes = 3;
+    const minTotalRoutes = 5;
 
     // Analyze existing cross-map routes
     interface CrossingRoute {
@@ -2714,32 +2715,23 @@ export class MapGenerator {
       }
     }
 
-    console.log(`Found ${crossingRoutes.length} cross-map routes`);
-
-    // If we have enough routes, we're done
-    if (crossingRoutes.length >= minRoutes) {
-      return;
-    }
-
-    // Add additional routes to reach minimum
-    const routesToAdd = minRoutes - crossingRoutes.length;
     const nsRoutes = crossingRoutes.filter(r => r.direction === 'north-south');
     const ewRoutes = crossingRoutes.filter(r => r.direction === 'east-west');
 
-    console.log(`Adding ${routesToAdd} routes for connectivity`);
+    console.log(`Found ${nsRoutes.length} N-S routes and ${ewRoutes.length} E-W routes`);
 
-    // Prefer to balance N-S and E-W routes
-    let nsToAdd = Math.ceil(routesToAdd / 2);
-    let ewToAdd = Math.floor(routesToAdd / 2);
+    // Calculate needed routes
+    const nsNeeded = Math.max(0, minNSRoutes - nsRoutes.length);
 
-    // Adjust based on existing routes
-    if (nsRoutes.length < ewRoutes.length) {
-      nsToAdd++;
-      ewToAdd--;
-    }
+    // We want at least 5 total, so calculate how many E-W we need
+    // considering we will add nsNeeded routes
+    const currentProjectedTotal = nsRoutes.length + ewRoutes.length + nsNeeded;
+    const ewNeeded = Math.max(0, minTotalRoutes - currentProjectedTotal);
+
+    console.log(`Adding ${nsNeeded} N-S routes and ${ewNeeded} E-W routes`);
 
     // Add north-south routes
-    for (let i = 0; i < nsToAdd; i++) {
+    for (let i = 0; i < nsNeeded; i++) {
       const existingXPositions = nsRoutes.map(r => r.position);
       const newX = this.findDiversePosition(existingXPositions, this.width);
 
@@ -2763,12 +2755,14 @@ export class MapGenerator {
       };
 
       roads.push(newRoad);
+      // Track the new position so subsequent roads don't bunch up
+      nsRoutes.push({ direction: 'north-south', position: newX, road: newRoad });
 
       console.log(`Added N-S connectivity road at x=${Math.round(newX)}`);
     }
 
-    // Add east-west routes
-    for (let i = 0; i < ewToAdd; i++) {
+    // Add east-west routes (can be angled)
+    for (let i = 0; i < ewNeeded; i++) {
       const existingZPositions = ewRoutes.map(r => r.position);
       const newZ = this.findDiversePosition(existingZPositions, this.height);
 
@@ -2777,9 +2771,19 @@ export class MapGenerator {
       const startX = -this.width / 2 + margin;
       const endX = this.width / 2 - margin;
 
+      // Allow significant Z variance for angled roads
+      // But keep start/end roughly on opposite sides
+      const angleVariance = this.height * 0.4; // Valid start/end points can vary by 40% of map height
+
+      const startZ = Math.max(-this.height / 2 + margin, Math.min(this.height / 2 - margin,
+        newZ + this.rng.nextFloat(-angleVariance, angleVariance)));
+
+      const endZ = Math.max(-this.height / 2 + margin, Math.min(this.height / 2 - margin,
+        newZ + this.rng.nextFloat(-angleVariance, angleVariance)));
+
       const points = this.generateSmoothBezierPath(
-        { x: startX, z: newZ + this.rng.nextFloat(-15, 15) },
-        { x: endX, z: newZ + this.rng.nextFloat(-15, 15) },
+        { x: startX, z: startZ },
+        { x: endX, z: endZ },
         'town',
         towns
       );
@@ -2792,8 +2796,9 @@ export class MapGenerator {
       };
 
       roads.push(newRoad);
+      ewRoutes.push({ direction: 'east-west', position: (startZ + endZ) / 2, road: newRoad });
 
-      console.log(`Added E-W connectivity road at z=${Math.round(newZ)}`);
+      console.log(`Added E-W connectivity road near z=${Math.round(newZ)} from z=${Math.round(startZ)} to z=${Math.round(endZ)}`);
     }
   }
 

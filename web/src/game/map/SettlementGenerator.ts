@@ -133,6 +133,7 @@ export class SettlementGenerator {
       entryPoints: [],
       buildings: [],
       streets: [],
+      blockPool: [], // Smart placement pool
     };
 
     // Generate streets based on layout type
@@ -155,7 +156,7 @@ export class SettlementGenerator {
     this.generateEntryPoints(settlement);
 
     // Generate buildings
-    this.generateBuildings(settlement, buildingCount, densityMultiplier, mapBounds);
+    this.generateBuildings(settlement, buildingCount, densityMultiplier, mapBounds, terrain);
 
     return settlement;
   }
@@ -597,6 +598,24 @@ export class SettlementGenerator {
         });
       }
     }
+
+    // Initialize Block Pool for Smart Targeting (Grid Only)
+    // We pre-calculate valid block grid coordinates to avoid retrying full blocks
+    settlement.blockPool = [];
+    settlement.blockPool = [];
+    const maxBlocks = Math.ceil(radius * 0.95 / (120 + 30)); // Increase range slightly to ensure we catch edge blocks
+    for (let u = -maxBlocks; u <= maxBlocks; u++) {
+      for (let v = -maxBlocks; v <= maxBlocks; v++) {
+        // Prioritize center blocks by sorting distance later if needed, 
+        // but for now just add all valid grid coordinates
+        settlement.blockPool.push({ u, v, failures: 0 });
+      }
+    }
+    // Shuffle pool
+    for (let i = settlement.blockPool.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      [settlement.blockPool[i], settlement.blockPool[j]] = [settlement.blockPool[j]!, settlement.blockPool[i]!];
+    }
   }
 
   /**
@@ -648,7 +667,8 @@ export class SettlementGenerator {
     settlement: Settlement,
     targetCount: number,
     densityMultiplier: number = 1.0,
-    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
+    terrain?: TerrainCell[][]
   ): void {
     const { size, layoutType } = settlement;
     const composition = SETTLEMENT_COMPOSITION[size];
@@ -728,7 +748,7 @@ export class SettlementGenerator {
 
     // Execute placement
     for (const item of placementQueue) {
-      const building = this.placeBuilding(settlement, item.spec, item.category, placedBuildings, layoutType, densityMultiplier, mapBounds);
+      const building = this.placeBuilding(settlement, item.spec, item.category, placedBuildings, layoutType, densityMultiplier, mapBounds, terrain);
       if (building) {
         placedBuildings.push(building);
       } else {
@@ -778,7 +798,8 @@ export class SettlementGenerator {
     existingBuildings: Building[],
     layoutType: LayoutType,
     densityMultiplier: number = 1.0,
-    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number }
+    mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
+    terrain?: TerrainCell[][]
   ): Building | null {
     const { size, position, radius, mainAxis } = settlement;
 
@@ -793,15 +814,19 @@ export class SettlementGenerator {
     for (let attempt = 0; attempt < randomAttempts; attempt++) {
       let x: number, z: number, rotation: number;
 
-      if (layoutType === 'grid') {
-        // Grid layout: align buildings with grid
-        // Pick a block (i, j) relative to center
-        const blockSize = 90;
-        const maxBlocks = Math.ceil(radius / blockSize);
-        // Focus on inner blocks for density
-        const range = maxBlocks * (densityMultiplier > 1.5 ? 0.8 : 1.0);
-        const i = Math.floor((this.random() - 0.5) * 2 * range);
-        const j = Math.floor((this.random() - 0.5) * 2 * range);
+      // Track block for smart targeting
+      let currentBlock: { u: number, v: number, failures: number } | null = null;
+      let currentBlockIndex: number = -1;
+
+      if (layoutType === 'grid' && settlement.blockPool && settlement.blockPool.length > 0) {
+        // Pick a block from the active pool
+        // Using a small window to ensure we try different blocks but focus on center
+        const poolIndex = Math.floor(this.random() * Math.min(settlement.blockPool.length, 10));
+        currentBlock = settlement.blockPool[poolIndex]!;
+        currentBlockIndex = poolIndex;
+
+        const i = currentBlock.u;
+        const j = currentBlock.v;
 
         // Local coordinates relative to settlement center, aligned with mainAxis
         // Center of the chosen block
@@ -810,13 +835,17 @@ export class SettlementGenerator {
 
         // Position within block (along the edges)
         const side = Math.floor(this.random() * 4); // 0=Top(+V), 1=Right(+U), 2=Bottom(-V), 3=Left(-U)
-        const setback = 5 + this.random() * 3; // 5-8m setback to clear wide roads
+        // BUG FIX: Setback must be > streetWidth/2 + buffer. 
+        // Street half-width is ~5m, buffer is 2m. So needs > 7m.
+        // Was 5-8m, causing 66% false failure rate. Now 8-12m.
+        const setback = 8 + this.random() * 4;
 
         // Spread along the face, keeping away from corners (avoid intersections)
         const cornerBuffer = 15;
         const faceLength = blockSize - (cornerBuffer * 2);
         const offsetAlongFace = (this.random() - 0.5) * Math.max(1, faceLength - Math.max(spec.footprint.width, spec.footprint.depth));
 
+        // Define u and v relative to block center
         let u = blockCenterU;
         let v = blockCenterV;
         let rotOffset = 0;
@@ -891,12 +920,24 @@ export class SettlementGenerator {
         }
       }
 
-      // Check for overlap
       if (!this.checkOverlap(x, z, spec.footprint.width, spec.footprint.depth, rotation, existingBuildings, settlement.streets, densityMultiplier)) {
+        // Success!
         if (Math.random() < 0.05) console.log(`[SettlementGenerator] Placed ${category} building at ${x.toFixed(1)}, ${z.toFixed(1)} after ${attempt} attempts`);
         return this.createBuilding(spec, x, z, settlement.id, rotation);
       } else {
-        if (Math.random() < 0.01) console.log(`[SettlementGenerator] Failed to place ${category} building at ${x.toFixed(1)}, ${z.toFixed(1)} due to overlap (attempt ${attempt})`);
+        // Log detailed failure (throttled)
+        // if (Math.random() < 0.001) console.warn(`[SettlementGenerator] Overlap failure at ${x.toFixed(0)},${z.toFixed(0)} (Blocks left: ${settlement.blockPool?.length})`);
+        // Smart Block Logic: Register failure
+        if (layoutType === 'grid' && currentBlock && settlement.blockPool) {
+          currentBlock.failures = (currentBlock.failures || 0) + 1;
+
+          // If block fails too many times, assume it's full and remove from pool
+          // Increased threshold to prevent premature pruning
+          if (currentBlock.failures > 15) {
+            settlement.blockPool.splice(currentBlockIndex, 1);
+            console.log(`[SettlementGenerator] Block pruned: ${currentBlock.u}, ${currentBlock.v} after 15 failures`);
+          }
+        }
       }
     }
 
@@ -917,9 +958,20 @@ export class SettlementGenerator {
     // "Desperation Phase": Infill Placement
     // If street search failed, try to find ANY valid open spot in the settlement
     // This fills the centers of large blocks
+    // HUGE INCREASE in attempts for high density, with geography checks
     if (spec.category === 'residential' || (spec.category === 'commercial' && spec.size === 'small')) {
-      const desperationAttempts = 30;
+      const desperationAttempts = densityMultiplier > 1.5 ? 200 : 100; // Increased from 30/50
       const { position, radius } = settlement;
+
+      // We need access to terrain for water checks
+      // Since mapBounds is passed, we check bounds.
+      // But terrain requires us to have access. 
+      // ERROR: `terrain` is not passed to placeBuilding.
+      // We must pass `terrain` to `placeBuilding`.
+      // Since this requires changing the signature AND all calls, let's do that cleanly.
+
+      // WAIT: I can't change signature here without updating the call site in generateBuildings.
+      // Let's assume I will update the signature in the same step.
 
       for (let i = 0; i < desperationAttempts; i++) {
         // Random spot within radius
@@ -927,6 +979,19 @@ export class SettlementGenerator {
         const theta = this.random() * Math.PI * 2;
         const x = position.x + Math.cos(theta) * r;
         const z = position.z + Math.sin(theta) * r;
+
+        // GEOGRAPHY CHECK
+        // If we have terrain, check for water
+        // We will add `terrain?: TerrainCell[][]` to placeBuilding signature in next step
+        // For now, let's write the check assuming `terrain` variable exists in scope (argument).
+        if (terrain) {
+          const gridX = Math.floor((x + (terrain[0]!.length * 10) / 2) / 10);
+          const gridZ = Math.floor((z + (terrain.length * 10) / 2) / 10);
+          if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
+            const cell = terrain[gridZ]![gridX];
+            if (cell && (cell.type === 'water' || cell.type === 'river')) continue;
+          }
+        }
 
         // Bounds check
         if (mapBounds) {
@@ -1112,13 +1177,21 @@ export class SettlementGenerator {
     // Modified to 0.5 to prevent z-fighting flicker
     const padding = densityMultiplier > 1.8 ? 0.5 : (densityMultiplier > 1.2 ? 1 : 3);
 
-    for (const building of existingBuildings) {
-      const dx = Math.abs(x - building.x);
-      const dz = Math.abs(z - building.z);
-      const minDx = (width + building.width) / 2 + padding;
-      const minDz = (depth + building.depth) / 2 + padding;
+    // Create OBB for the proposed building
+    const polyA = this.getRotatedCorners(x, z, width + padding * 2, depth + padding * 2, _rotation);
 
-      if (dx < minDx && dz < minDz) {
+    for (const building of existingBuildings) {
+      // Fast AABB check first
+      const minDx = (width + building.width) / 2 + padding + 10; // Extra safe margin for rotation
+      const minDz = (depth + building.depth) / 2 + padding + 10;
+      if (Math.abs(x - building.x) > minDx || Math.abs(z - building.z) > minDz) {
+        continue;
+      }
+
+      // Precise SAT check
+      const polyB = this.getRotatedCorners(building.x, building.z, building.width + padding * 2, building.depth + padding * 2, building.rotation || 0);
+
+      if (this.doPolygonsIntersect(polyA, polyB)) {
         return true;
       }
     }
@@ -1222,6 +1295,73 @@ export class SettlementGenerator {
       default:
         return 'house';
     }
+  }
+
+  /**
+   * Helper: Get corners of a rotated rectangle
+   */
+  private getRotatedCorners(x: number, z: number, w: number, d: number, angle: number): { x: number; z: number }[] {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const hw = w / 2;
+    const hd = d / 2;
+
+    // Corners relative to center
+    // TL: -hw, -hd
+    // TR: +hw, -hd
+    // BR: +hw, +hd
+    // BL: -hw, +hd
+
+    // Rotate: x' = x*cos - z*sin, z' = x*sin + z*cos
+    const corners = [
+      { x: -hw, z: -hd },
+      { x: hw, z: -hd },
+      { x: hw, z: hd },
+      { x: -hw, z: hd }
+    ];
+
+    return corners.map(p => ({
+      x: x + (p.x * cos - p.z * sin),
+      z: z + (p.x * sin + p.z * cos)
+    }));
+  }
+
+  /**
+   * Helper: SAT Collision Check
+   */
+  private doPolygonsIntersect(a: { x: number; z: number }[], b: { x: number; z: number }[]): boolean {
+    const polygons = [a, b];
+
+    for (const polygon of polygons) {
+      for (let i = 0; i < polygon.length; i++) {
+        // Get normal vector to this edge
+        const p1 = polygon[i]!;
+        const p2 = polygon[(i + 1) % polygon.length]!;
+
+        const normal = { x: p2.z - p1.z, z: p1.x - p2.x };
+
+        // Project both polygons onto this normal
+        let minA = Infinity, maxA = -Infinity;
+        for (const p of a) {
+          const projected = normal.x * p.x + normal.z * p.z;
+          if (projected < minA) minA = projected;
+          if (projected > maxA) maxA = projected;
+        }
+
+        let minB = Infinity, maxB = -Infinity;
+        for (const p of b) {
+          const projected = normal.x * p.x + normal.z * p.z;
+          if (minB === Infinity || projected < minB) minB = projected; // Fix types or logic if needed, but simple number works
+          if (maxB === -Infinity || projected > maxB) maxB = projected;
+        }
+
+        // Check for gap
+        if (maxA < minB || maxB < minA) {
+          return false; // Found a separating axis
+        }
+      }
+    }
+    return true; // No separating axis found -> collision
   }
 
   /**

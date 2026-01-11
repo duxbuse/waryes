@@ -378,6 +378,7 @@ export interface Settlement {
   buildings: Building[];
   streets: Road[];
   captureZoneId?: string; // Associated capture zone if any
+  blockPool?: Array<{ u: number; v: number; failures: number }>; // Smart placement pool
 }
 
 // Settlement generation parameters
