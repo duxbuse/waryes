@@ -278,7 +278,7 @@ export class UnitUI {
     this.aimRing = new THREE.Line(geometry, material);
 
     // Set usage to dynamic
-    const posAttr = geometry.attributes.position!;
+    const posAttr = geometry.attributes.position as THREE.BufferAttribute;
     posAttr.setUsage(THREE.DynamicDrawUsage);
 
     this.aimRing.renderOrder = 999;
@@ -315,7 +315,7 @@ export class UnitUI {
     fgGeometry.setDrawRange(0, 0); // Start hidden
 
     // Set usage to dynamic
-    const posAttr = fgGeometry.attributes.position!;
+    const posAttr = fgGeometry.attributes.position as THREE.BufferAttribute;
     posAttr.setUsage(THREE.DynamicDrawUsage);
 
     const fgMaterial = new THREE.LineBasicMaterial({

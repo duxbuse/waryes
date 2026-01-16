@@ -13,7 +13,6 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { GameMap } from '../../data/types';
-import { VisibilityState } from '../managers/FogOfWarManager';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 
 export class MinimapRenderer {
@@ -244,24 +243,6 @@ export class MinimapRenderer {
         ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
       }
     }
-  }
-
-  /**
-   * Darken a hex color by a factor (0-1)
-   */
-  private darkenColor(hex: string, factor: number): string {
-    // Parse hex color
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-
-    // Darken
-    const nr = Math.floor(r * factor);
-    const ng = Math.floor(g * factor);
-    const nb = Math.floor(b * factor);
-
-    // Convert back to hex
-    return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
   }
 
   private renderBuildings(): void {

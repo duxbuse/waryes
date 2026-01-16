@@ -23,10 +23,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Buffer: ~0.67ms
 
 **Before implementing ANY new feature:**
-1. Profile the performance impact with realistic load (100+ units)
-2. Verify FPS remains at 60 with the in-game FPS overlay
-3. Use `BenchmarkManager` to measure specific system costs
-4. If a feature drops FPS below 60, it must be optimized or redesigned before merging
+1. Run existing tests to ensure nothing breaks (`bun test`)
+2. Profile the performance impact with realistic load (100+ units)
+3. Run `BenchmarkManager` to verify 60 FPS is maintained
+4. Verify FPS remains at 60 with the in-game FPS overlay
+5. If a feature drops FPS below 60, it must be optimized or redesigned before merging
+
+**After implementing a feature:**
+1. Run all tests (`bun test`) - all must pass
+2. Run `BenchmarkManager` - must meet acceptance criteria (min >55 FPS, avg ≈60 FPS)
+3. Add unit tests for new functionality
+4. Add performance tests for performance-critical code
+5. Verify no performance regressions with manual testing (100+ units)
 
 ## Development Commands
 
@@ -303,7 +311,12 @@ These systems are critical for maintaining 60 FPS:
 
 Before committing new features:
 
-- [ ] Tested with 100+ units on screen
+- [ ] **All unit tests pass** (`bun test`)
+- [ ] **Run BenchmarkManager** and verify results meet acceptance criteria
+  - Min FPS > 55
+  - Avg FPS ≈ 60
+  - Max variance < 10 FPS
+- [ ] Tested with 100+ units on screen (manual testing)
 - [ ] FPS stays at 60 during heavy combat
 - [ ] No memory leaks (check DevTools Memory tab)
 - [ ] No new allocations in update loops
@@ -312,6 +325,7 @@ Before committing new features:
 - [ ] Verified no O(n²) operations in hot paths
 - [ ] Checked that existing optimizations still work
 - [ ] Measured specific feature cost (<1ms preferred)
+- [ ] Added performance tests for critical paths (if applicable)
 
 ### File Organization
 
@@ -462,6 +476,28 @@ web/src/
 
 ## Testing Guidelines
 
+### Test Suite Overview
+
+**Current Tests:**
+- `web/tests/unit/Unit.test.ts` - Unit class behavior (19+ tests)
+- `web/tests/unit/jsonData.test.ts` - Game data validation
+- `web/tests/jsonSchema.test.ts` - JSON schema validation
+
+**CRITICAL: All tests must pass before merging any changes.**
+
+```bash
+# Run all tests
+bun test
+
+# Run tests with UI
+bun test:ui
+
+# Run E2E tests
+bun test:e2e
+```
+
+### Unit Testing
+
 **Unit Tests (`web/tests/unit/`):**
 - Use Vitest `describe`/`it`/`expect` syntax
 - Mock `Game` class for isolation
@@ -485,6 +521,61 @@ describe('Unit', () => {
     const unit = new Unit(game, unitData, team, position);
     unit.takeDamage(30);
     expect(unit.health).toBe(70);
+  });
+});
+```
+
+### Performance/Benchmark Testing
+
+**⚠️ MANDATORY: Run benchmark tests before merging performance-sensitive changes.**
+
+The game includes a `BenchmarkManager` (`web/src/game/debug/BenchmarkManager.ts`) that runs automated performance tests:
+
+**What the Benchmark Does:**
+- Spawns 100 units (50 per team)
+- Simulates 30 seconds of combat
+- Measures FPS every 0.5 seconds
+- Reports min/avg/max FPS
+
+**How to Run Benchmark:**
+1. Start the game in development mode
+2. Access the BenchmarkManager through the Game instance
+3. Call `game.benchmarkManager.startBenchmark()`
+4. Wait 30 seconds for results
+
+**Benchmark Acceptance Criteria:**
+- **Minimum FPS:** Must stay above 55 FPS
+- **Average FPS:** Must be at or near 60 FPS
+- **No frame spikes:** Max FPS variance should be <10 FPS
+
+**When to Run Benchmarks:**
+- ✅ After adding new managers or systems
+- ✅ After modifying update loops
+- ✅ After changing rendering code
+- ✅ After optimizing existing features
+- ✅ Before marking a feature as complete
+
+**Creating Performance Tests:**
+
+When adding performance-critical features, consider adding automated benchmark tests:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { performance } from 'perf_hooks';
+
+describe('Performance: MyNewFeature', () => {
+  it('should complete operation in <1ms with 100 units', () => {
+    const start = performance.now();
+
+    // Run operation 100 times
+    for (let i = 0; i < 100; i++) {
+      myNewFeature.update(0.016); // One frame
+    }
+
+    const elapsed = performance.now() - start;
+    const avgTime = elapsed / 100;
+
+    expect(avgTime).toBeLessThan(1); // <1ms per call
   });
 });
 ```
@@ -590,22 +681,48 @@ See README.md for full status.
 - **MUST stay at 60 FPS - if it drops, find and fix the bottleneck immediately**
 
 **Performance Profiling:**
-1. **Chrome DevTools Performance Tab:**
+
+1. **BenchmarkManager (PRIMARY TOOL FOR PERFORMANCE VALIDATION):**
+   - Located at `web/src/game/debug/BenchmarkManager.ts`
+   - Spawns 100 units in combat scenario
+   - Runs for 30 seconds measuring FPS
+   - **How to run:**
+     ```javascript
+     // In browser console during game:
+     game.benchmarkManager.startBenchmark()
+     ```
+   - **Acceptance criteria:**
+     - Min FPS: >55
+     - Avg FPS: ≈60
+     - Max variance: <10 FPS
+   - **Use this after ANY performance-sensitive changes**
+
+2. **Chrome DevTools Performance Tab:**
    - Record gameplay session
    - Analyze flame graph for expensive functions
    - Look for long frames (>16.67ms)
    - Identify allocation hot spots
-
-2. **BenchmarkManager:**
-   - Tracks performance metrics per system
-   - Use for profiling optimization changes
-   - Measure before/after comparisons
 
 3. **Memory Profiling:**
    - Chrome DevTools Memory tab
    - Take heap snapshots
    - Check for memory leaks (growing heap over time)
    - Verify object pooling is working
+
+**Running the Benchmark:**
+```bash
+# 1. Start dev server
+bun run dev
+
+# 2. Open browser console (F12)
+
+# 3. Wait for game to load to main menu
+
+# 4. In console, type:
+game.benchmarkManager.startBenchmark()
+
+# 5. Wait 30 seconds for results to appear on screen
+```
 
 **Performance Red Flags:**
 - FPS drops below 60
@@ -654,20 +771,54 @@ Focus areas for future development:
 4. Transport/garrison system
 5. Battle reinforcements
 
-## Final Reminder: Performance is Non-Negotiable
+## Final Reminder: Performance and Testing are Non-Negotiable
 
-**Every feature, no matter how small, must maintain 60 FPS.**
+**Every feature, no matter how small, must:**
+1. **Pass all tests** - Run `bun test` before committing
+2. **Pass benchmark tests** - Run `game.benchmarkManager.startBenchmark()` and meet acceptance criteria
+3. **Maintain 60 FPS** - Verify with FPS overlay during manual testing
 
-This is not a suggestion or a nice-to-have. The game's core experience depends on smooth, responsive performance. If a feature cannot be implemented while maintaining 60 FPS, it must be:
+This is not a suggestion or a nice-to-have. The game's core experience depends on smooth, responsive performance and reliable functionality.
+
+**If a feature cannot be implemented while maintaining 60 FPS, it must be:**
 1. Redesigned with performance in mind
 2. Implemented with optimizations (pooling, caching, batching)
 3. Deferred until a performant approach is found
 
-**Test every change with 100+ units on screen. Profile every new system. Measure every optimization.**
+**If a feature breaks existing tests or benchmarks:**
+1. Fix the regression immediately
+2. Do not commit broken code
+3. Ensure all existing functionality still works
 
-The game loop runs at 60 Hz. Each frame has 16.67ms. Budget accordingly:
+**Development Workflow:**
+```bash
+# Before starting work
+bun test                                      # Ensure baseline passes
+
+# During development
+# ... make changes ...
+
+# After implementation
+bun test                                      # Must pass
+bun run dev                                   # Start game
+# In browser console:
+game.benchmarkManager.startBenchmark()        # Must meet criteria (min >55 FPS, avg ≈60)
+
+# If tests fail or FPS drops:
+# Fix the issue before committing
+```
+
+**Frame Budget:**
+- 16.67ms total per frame at 60 Hz
 - 10ms for game logic (movement, combat, AI)
 - 6ms for rendering (Three.js, draw calls)
 - 0.67ms buffer for browser overhead
 
-Use the tools provided: FPS overlay, BenchmarkManager, Chrome DevTools. Performance degradation is a bug and must be fixed before merging.
+**Tools:**
+- ✅ Unit tests (`bun test`)
+- ✅ BenchmarkManager (automated 30-second FPS test)
+- ✅ FPS overlay (in-game top-right)
+- ✅ Chrome DevTools Performance tab
+- ✅ Memory profiling
+
+**Performance degradation and test failures are bugs and must be fixed before merging.**

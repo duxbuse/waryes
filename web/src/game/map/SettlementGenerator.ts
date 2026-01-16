@@ -18,6 +18,8 @@ import {
   BuildingSpec,
   LegacyBuildingType,
   ROAD_WIDTHS,
+  TerrainCell,
+  WaterBody,
 } from '../../data/types';
 
 // Seeded random number generator type
@@ -96,7 +98,7 @@ export class SettlementGenerator {
     densityMultiplier: number = 1.0,
     mapBounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
     terrain?: TerrainCell[][],
-    waterBodies?: WaterBody[]
+    _waterBodies?: WaterBody[]
   ): Settlement {
     const params = SETTLEMENT_PARAMS[size];
     const layout = layoutType ?? this.pickLayoutType(size);
@@ -196,7 +198,6 @@ export class SettlementGenerator {
 
       // Walk outwards
       for (let j = 1; j <= numPoints; j++) {
-        const t = j / numPoints;
         const distStep = (radius / numPoints);
 
         // Add meander/wobble to the angle
@@ -213,7 +214,7 @@ export class SettlementGenerator {
 
           if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
             const cell = terrain[gridZ]![gridX]!;
-            if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+            if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'hill' && cell.elevation > 50)) {
               // Hit geography barrier - stop this road early
               break;
             }
@@ -256,8 +257,11 @@ export class SettlementGenerator {
         const safeIndexA = Math.max(1, indexA); // Don't connect at absolute center
         const safeIndexB = Math.max(1, indexB);
 
-        const pA = radialA[safeIndexA]!;
-        const pB = radialB[safeIndexB]!;
+        const pA = radialA[safeIndexA];
+        const pB = radialB[safeIndexB];
+
+        // Skip if either point is undefined
+        if (!pA || !pB) continue;
 
         // Chance to skip connection (makes it less uniform)
         if (this.random() > 0.85) continue;
@@ -335,7 +339,7 @@ export class SettlementGenerator {
 
         if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
           const cell = terrain[gridZ]![gridX]!;
-          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'hill' && cell.elevation > 50)) {
             // Remove this street entirely if its center is invalid
             settlement.streets.pop();
           }
@@ -407,7 +411,7 @@ export class SettlementGenerator {
 
         if (gridZ >= 0 && gridZ < terrain.length && gridX >= 0 && gridX < terrain[0]!.length) {
           const cell = terrain[gridZ]![gridX]!;
-          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'mountain' && cell.elevation > 50)) {
+          if (cell.type === 'water' || cell.type === 'river' || (cell.type === 'hill' && cell.elevation > 50)) {
             settlement.streets.pop();
           }
         }
@@ -488,7 +492,6 @@ export class SettlementGenerator {
     });
 
     // Generate grid expansion in outer area
-    const gridStreets: Road[] = [];
     const blockSize = 120 + this.random() * 60; // Larger blocks: 120-180m
 
     // Grid covers the rest of the radius
@@ -516,7 +519,6 @@ export class SettlementGenerator {
       // Split segment if it crosses the core
       // For simplicity in this "mixed" mode, we'll just generate segments that are strictly outside
 
-      const nsPoints: { x: number, z: number }[] = [];
       const steps = 20;
       let drawing = false;
       let currentSegment: { x: number, z: number }[] = [];
@@ -683,10 +685,6 @@ export class SettlementGenerator {
       infrastructure: 0,
     };
 
-    // Calculate maximum buildings that fit in the map bounds if constrained
-    // This prevents infinite loops if the settlement is clipped by map edge
-    const maxRetries = mapBounds ? 100 : 50; // More retries if we are filtering by bounds, but stick to a limit
-
     let remaining = targetCount;
     for (const category of Object.keys(composition) as BuildingCategory[]) {
       const { min, max } = composition[category];
@@ -810,6 +808,9 @@ export class SettlementGenerator {
     // Reduce random attempts (down to 15), then fall back to street search
     // This provides organic scatter first, but guarantees placement if space exists
     const randomAttempts = 15;
+
+    // Calculate block size for grid layouts (must match generateGridStreets and generateMixedStreets)
+    const blockSize = 120 + this.random() * 60; // Larger blocks: 120-180m
 
     for (let attempt = 0; attempt < randomAttempts; attempt++) {
       let x: number, z: number, rotation: number;

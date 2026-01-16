@@ -155,7 +155,7 @@ export class InstancedUnitRenderer {
     const tempScale = new THREE.Vector3(1, 1, 1);
 
     // Update each group
-    for (const [groupKey, group] of this.groups) {
+    for (const [_groupKey, group] of this.groups) {
       let instanceIndex = 0;
 
       // Update matrices for all units in this group

@@ -33,11 +33,18 @@ export function getUnitGeometry(category: string): THREE.BufferGeometry {
   const key = category || 'INF';
   if (!geometryCache.has(key)) {
     const factory = CATEGORY_GEOMETRIES[key] || CATEGORY_GEOMETRIES['INF'];
+    if (!factory) {
+      throw new Error(`No geometry factory found for category: ${key}`);
+    }
     const geometry = factory();
     geometry.computeBoundingSphere();
     geometryCache.set(key, geometry);
   }
-  return geometryCache.get(key)!;
+  const cachedGeometry = geometryCache.get(key);
+  if (!cachedGeometry) {
+    throw new Error(`Failed to get geometry for category: ${key}`);
+  }
+  return cachedGeometry;
 }
 
 export function disposeAllGeometries(): void {

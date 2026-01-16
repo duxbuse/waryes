@@ -726,8 +726,6 @@ export class MapRenderer {
       const rightX = p.x - perpX * effectiveHalfWidth;
       const rightZ = p.z - perpZ * effectiveHalfWidth;
 
-      const leftElev = getElevationAt(leftX, leftZ);
-      const rightElev = getElevationAt(rightX, rightZ);
       const centerElev = getElevationAt(p.x, p.z);
 
       // Check lake connection
@@ -887,14 +885,14 @@ export class MapRenderer {
 
         // If within bridge footprint, return bridge elevation
         if (Math.abs(localX) < bridge.length / 2 + 0.1 && Math.abs(localZ) < bridge.width / 2 + 0.1) {
-          return bridge.elevation;
+          return bridge.elevation ?? getTerrainElevationAt(worldX, worldZ);
         }
       }
       return getTerrainElevationAt(worldX, worldZ);
     };
 
     // Helper to check if a point is over water (river) or a bridge segment
-    const isOverBridgeOrWater = (worldX: number, worldZ: number, roadId?: string): boolean => {
+    const isOverBridgeOrWater = (worldX: number, worldZ: number, _roadId?: string): boolean => {
       const roadElevation = getTerrainElevationAt(worldX, worldZ);
 
       // Check for bridge presence (overpass or bridge object)
@@ -910,7 +908,7 @@ export class MapRenderer {
         // Only skip if the road is actually ON the bridge (vertically close)
         // This allows underpasses to render correctly beneath overpasses
         if (Math.abs(localX) < bridge.length / 2 + 0.5 && Math.abs(localZ) < bridge.width / 2 + 0.5) {
-          if (Math.abs(roadElevation - bridge.elevation) < 1.0) {
+          if (bridge.elevation !== undefined && Math.abs(roadElevation - bridge.elevation) < 1.0) {
             return true;
           }
         }
@@ -1400,7 +1398,7 @@ export class MapRenderer {
     roads: Road[],
     intersections: Intersection[],
     getElevationAt: (x: number, z: number) => number,
-    isOverBridgeOrWater: (x: number, z: number, roadId?: string) => boolean,
+    _isOverBridgeOrWater: (x: number, z: number, roadId?: string) => boolean,
     isOverWaterOnly: (x: number, z: number) => boolean
   ): void {
     const markingsGroup = new THREE.Group();
@@ -1785,7 +1783,6 @@ export class MapRenderer {
     bridgeGroup.name = 'bridges';
 
     const bridgeMaterial = this.roadMaterials.bridge;
-    const bridgeHeight = 0.5; // Height above water level (lower, closer to road height)
 
     const cols = map.terrain[0]?.length ?? 0;
     const rows = map.terrain.length;
@@ -1816,9 +1813,6 @@ export class MapRenderer {
       // Get elevation at bridge ends (where it meets the road)
       const startElevation = getElevationAt(startX, startZ) + 0.2;
       const endElevation = getElevationAt(endX, endZ) + 0.2;
-
-      // Use explicit elevation if available (for overpasses)
-      const centerElevation = bridge.elevation !== undefined ? bridge.elevation : bridgeHeight;
 
       // Create bridge deck as a series of segments for smooth elevation transition
       const numSegments = 8;

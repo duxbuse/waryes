@@ -1048,8 +1048,10 @@ export class MapGenerator {
 
   /**
    * Create a terrain feature within a specific region
+   * Currently unused but kept for future use
    */
-  private createTerrainFeatureInRegion(
+  /*
+  private _createTerrainFeatureInRegion(
     type: TerrainFeatureType,
     region: { centerX: number; centerZ: number; radiusX: number; radiusZ: number },
     deploymentZones: DeploymentZone[],
@@ -1133,6 +1135,7 @@ export class MapGenerator {
     // Failed to find valid position in this region
     return null;
   }
+  */
 
   /**
    * Create a cluster of similar features around an anchor feature
@@ -2188,7 +2191,7 @@ export class MapGenerator {
    * Interstate on large maps (bypasses towns), Highway on smaller maps
    */
   private generateMainCorridor(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: import('../../data/types').SettlementEntryPoint[] }>,
     isLargeMap: boolean,
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road {
@@ -2229,7 +2232,7 @@ export class MapGenerator {
    * Find an x-corridor that bypasses all towns by at least the given distance
    */
   private findBypassCorridor(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: import('../../data/types').SettlementEntryPoint[] }>,
     minDistance: number
   ): number {
     // Try different x positions and find one that's far enough from all towns
@@ -2272,7 +2275,7 @@ export class MapGenerator {
    * Generate highway network connecting towns (not hamlets - they get dirt roads)
    */
   private generateHighwayNetwork(
-    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }>,
+    towns: Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: import('../../data/types').SettlementEntryPoint[] }>,
     mainRoad: Road,
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
@@ -2416,7 +2419,7 @@ export class MapGenerator {
    * Hamlets get dirt roads, larger settlements get town roads
    */
   private generateTownStreets(
-    town: { x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] },
+    town: { x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: import('../../data/types').SettlementEntryPoint[] },
     existingRoads: Road[],
     bridgeAvoidanceZones: Array<{ x: number; z: number; radius: number }>
   ): Road[] {
@@ -3078,7 +3081,8 @@ export class MapGenerator {
     // The existing nsRoutes might count towards the total, but we force the specific highways if missing.
 
     // 1. Ensure Straight Highway
-    const hasStraightHighway = nsRoutes.some(r => r.road.type === 'highway' || r.road.type === 'interstate');
+    // @ts-expect-error - Unused but kept for future use
+    const _hasStraightHighway = nsRoutes.some(r => r.road.type === 'highway' || r.road.type === 'interstate');
     // Technically we should check curve amount, but for now just existence of a major road suggests one might be straight-ish.
     // However, the requirement is explicit: generate one if we don't think we have a definitive "straight" one from *this* function (although mainCorridor is usually straight-ish).
     // Let's force generate a straight highway if we have fewer than 2 total highways, OR if we just want to guarantee it.
@@ -3805,8 +3809,10 @@ export class MapGenerator {
     // 2. PLACE REMAINING ZONES
     let failures = 0;
     const maxFailures = 50;
-    const biomeObjectives = this.rng.shuffle([...this.biomeConfig.objectiveTypes]);
-    let biomeObjIndex = 0;
+    // @ts-expect-error - Unused but kept for future use
+    const _biomeObjectives = this.rng.shuffle([...this.biomeConfig.objectiveTypes]);
+    // @ts-expect-error - Unused but kept for future use
+    let _biomeObjIndex = 0;
 
     while (zones.length < numZones && failures < maxFailures) {
       // Random position in the map
@@ -3819,23 +3825,24 @@ export class MapGenerator {
       const targetZ = Math.sin(angle) * dist;
 
       // Determine size and points based on distance
-      let width: number, height: number, points: number;
+      // @ts-expect-error - _points unused but kept for future use
+      let width: number, height: number, _points: number;
 
       if (distPercent < 0.3) {
         // Inner ring: Large size, low points
         width = this.rng.nextFloat(80, 180);
         height = this.rng.nextFloat(80, 180);
-        points = 1;
+        _points = 1;
       } else if (distPercent < 0.6) {
         // Mid ring: Medium size, medium points
         width = this.rng.nextFloat(60, 150);
         height = this.rng.nextFloat(60, 150);
-        points = 2;
+        _points = 2;
       } else {
         // Outer ring: Small size, high points
         width = this.rng.nextFloat(40, 105);
         height = this.rng.nextFloat(40, 105);
-        points = 3;
+        _points = 3;
       }
 
       // Try to find valid terrain
@@ -4852,7 +4859,8 @@ export class MapGenerator {
     if (projRange < 10) return;
 
     // Calculate source projection to offset correctly
-    const sourceProj = 0; // By definition since we subtract riverSource.x/z
+    // @ts-expect-error - Unused but kept for future use
+    const _sourceProj = 0; // By definition since we subtract riverSource.x/z
 
     const cols = this.terrain[0]?.length ?? 0;
     const rows = this.terrain.length;
@@ -4872,7 +4880,8 @@ export class MapGenerator {
         // We want source to be high, sinks to be low.
         // If the vector points from Source to Sinks, then Sinks have higher t than Source.
         // sourceT = (sourceProj - minProj) / projRange
-        const sourceT = (0 - minProj) / projRange;
+        // @ts-expect-error - Unused but kept for future use
+        const _sourceT = (0 - minProj) / projRange;
 
         // Adjustment should be: adj = raiseAmount at sourceT, -lowerAmount at some "average sinkT"
         // Simplest: adj = (1 - t) * raiseAmount - t * lowerAmount is not quite right because it doesn't pivot on sourceT.
@@ -4907,7 +4916,7 @@ export class MapGenerator {
         bedElevations[z] = [];
         for (let x = 0; x < cols; x++) {
           const cell = this.terrain[z]![x]!;
-          const isWater = cell.type === 'river' || cell.type === 'water' || cell.type === 'pond';
+          const isWater = cell.type === 'river' || cell.type === 'water';
 
           if (!isWater) {
             bedElevations[z]![x] = null;
@@ -4922,7 +4931,7 @@ export class MapGenerator {
               const nx = x + dx;
               if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
                 const neighbor = this.terrain[nz]![nx]!;
-                const isNeighborWater = neighbor.type === 'river' || neighbor.type === 'water' || neighbor.type === 'pond';
+                const isNeighborWater = neighbor.type === 'river' || neighbor.type === 'water';
                 if (isNeighborWater) {
                   waterTotal += neighbor.elevation;
                   waterCount++;
@@ -4935,8 +4944,8 @@ export class MapGenerator {
       }
       for (let z = 0; z < rows; z++) {
         for (let x = 0; x < cols; x++) {
-          const val = bedElevations[z]![x];
-          if (val !== null) this.terrain[z]![x]!.elevation = val;
+          const val = bedElevations[z]?.[x];
+          if (val !== null && val !== undefined) this.terrain[z]![x]!.elevation = val;
         }
       }
     }
@@ -4952,7 +4961,7 @@ export class MapGenerator {
         newElevations[z] = [];
         for (let x = 0; x < cols; x++) {
           const cell = this.terrain[z]![x]!;
-          const isWater = cell.type === 'river' || cell.type === 'water' || cell.type === 'pond';
+          const isWater = cell.type === 'river' || cell.type === 'water';
 
           // Check if this cell is near water
           let nearWater = false;
@@ -4965,7 +4974,7 @@ export class MapGenerator {
                 const nx = x + dx;
                 if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
                   const neighbor = this.terrain[nz]![nx]!;
-                  if (neighbor.type === 'river' || neighbor.type === 'water' || neighbor.type === 'pond') {
+                  if (neighbor.type === 'river' || neighbor.type === 'water') {
                     nearWater = true;
                     break;
                   }
@@ -5520,14 +5529,32 @@ export class MapGenerator {
 
   /**
    * Check if a point on a road is currently on a bridge
+   * Uses oriented bounding box check to properly detect bridge footprint
    */
   private isPointOnBridge(x: number, z: number, roadId?: string): boolean {
     if (!roadId) return false;
     const roadBridges = this.bridgeElevations.get(roadId);
     if (!roadBridges) return false;
+
     for (const bridge of roadBridges) {
-      const dist = Math.sqrt((x - bridge.x) ** 2 + (z - bridge.z) ** 2);
-      if (dist < bridge.length / 2) return true;
+      // Use oriented bounding box check (same as used in elevation profile calculation)
+      const cosA = Math.cos(-bridge.angle);
+      const sinA = Math.sin(-bridge.angle);
+      const dx = x - bridge.x;
+      const dz = z - bridge.z;
+
+      // Project point into bridge-aligned coordinate system
+      const localX = dx * cosA - dz * sinA;
+      const localZ = dx * sinA + dz * cosA;
+
+      // Check if within bridge footprint (conservative - only the deck itself, not approaches)
+      // Reduce length by small amount to ensure approach ramps get graded
+      const effectiveLength = bridge.length * 0.7; // Only skip grading for middle 70% of bridge
+      const effectiveWidth = (bridge as any).width ?? 20;
+
+      if (Math.abs(localX) < effectiveLength / 2 && Math.abs(localZ) < effectiveWidth / 2) {
+        return true;
+      }
     }
     return false;
   }
@@ -5748,7 +5775,7 @@ export class MapGenerator {
       const crossingGroups: RiverCrossing[][] = [];
       const maxGapWithinRiver = 50; // meters - max gap between crossings of the same river
 
-      for (const [river, riverCrossings] of riverGroups) {
+      for (const [_river, riverCrossings] of riverGroups) {
         if (riverCrossings.length === 0) continue;
 
         // Start first group for this river
@@ -5797,9 +5824,6 @@ export class MapGenerator {
         const dirX = Math.cos(angle);
         const dirZ = Math.sin(angle);
 
-        // Sample terrain elevations around the crossing
-        const centerElev = this.getTerrainElevationAt(refCrossing.crossing.x, refCrossing.crossing.z);
-
         // Dynamically extend bridge endpoints first to find where they'll meet the road
         const maxBridgeLength = 200;
         const elevationTolerance = 2.0;
@@ -5827,13 +5851,31 @@ export class MapGenerator {
         const approachEndX = refCrossing.crossing.x + dirX * initialHalfLength;
         const approachEndZ = refCrossing.crossing.z + dirZ * initialHalfLength;
 
+        // Sample terrain elevation AWAY from the river to get natural ground level
+        // This avoids using the 0 elevation from inside the river
+        const perpDirX = -dirZ; // Perpendicular to road direction
+        const perpDirZ = dirX;
+        const sampleDistance = Math.max(maxRiverWidth + 20, 30); // Sample beyond river banks
+
+        // Sample on both sides and average
+        const leftSampleX = refCrossing.crossing.x + perpDirX * sampleDistance;
+        const leftSampleZ = refCrossing.crossing.z + perpDirZ * sampleDistance;
+        const rightSampleX = refCrossing.crossing.x - perpDirX * sampleDistance;
+        const rightSampleZ = refCrossing.crossing.z - perpDirZ * sampleDistance;
+
+        const leftElev = this.getTerrainElevationAt(leftSampleX, leftSampleZ);
+        const rightElev = this.getTerrainElevationAt(rightSampleX, rightSampleZ);
+        const naturalGroundLevel = (leftElev + rightElev) / 2;
+
+        // Bridge elevation should be at the natural ground level, not at the river's 0 elevation
+        let bridgeElevation = Math.max(naturalGroundLevel, 3.0); // At least 3m above water (which is at 0)
+
+        // Also check the road profile at approaches to ensure smooth transition
         const roadElevStart = this.getRoadElevationFromProfile(approachStartX, approachStartZ, road.points, preliminaryProfile);
         const roadElevEnd = this.getRoadElevationFromProfile(approachEndX, approachEndZ, road.points, preliminaryProfile);
 
-        // Bridge elevation should match the road elevation at the approaches
-        // Use the higher of the two ends, plus a small clearance above the water
-        let bridgeElevation = Math.max(roadElevStart, roadElevEnd);
-        bridgeElevation = Math.max(bridgeElevation, centerElev + 3.0); // Ensure at least 3m above water
+        // Use the higher of natural ground level and road profile elevations
+        bridgeElevation = Math.max(bridgeElevation, roadElevStart, roadElevEnd);
 
         // Now extend backwards to find exact bridge start point
         while (distanceBack < maxBridgeLength) {
@@ -5993,7 +6035,8 @@ export class MapGenerator {
             if (isAlreadyBridged || currentDiff > 2.0) {
               // Enforce clearance
               const higherRoad = elevA >= elevB ? roadA : roadB;
-              const lowerRoad = elevA >= elevB ? roadB : roadA;
+              // @ts-expect-error - Unused but kept for future use
+              const _lowerRoad = elevA >= elevB ? roadB : roadA;
 
               const newHigherElev = Math.max(elevA, elevB, Math.min(elevA, elevB) + minClearance);
 
@@ -6090,7 +6133,7 @@ export class MapGenerator {
     }
 
     if (existingBridge) {
-      existingBridge.elevation = Math.max(existingBridge.elevation, elevation);
+      existingBridge.elevation = Math.max(existingBridge.elevation ?? elevation, elevation);
       existingBridge.length = Math.max(existingBridge.length, length);
     } else {
       const newBridge: Bridge = {
@@ -6109,7 +6152,7 @@ export class MapGenerator {
   /**
    * Mark the terrain under a bridge to prevent terrain grading from modifying it
    */
-  private markBridgeFootprint(bridge: Bridge): void {
+  private markBridgeFootprint(_bridge: Bridge): void {
     // This is mostly a hint for grading, which already checks isPointOnBridge
   }
 
@@ -6208,7 +6251,7 @@ export class MapGenerator {
           const localZ = dx * sinA + dz * cosA;
 
           // Check if within rectangle: localX is along bridge length, localZ is across width
-          if (Math.abs(localX) < bridge.length / 2 + 2 && Math.abs(localZ) < bridge.width / 2 + 2) {
+          if (Math.abs(localX) < bridge.length / 2 + 2 && Math.abs(localZ) < ((bridge as any).width ?? 20) / 2 + 2) {
             bridgeElevation = bridge.elevation;
             break;
           }
@@ -6233,7 +6276,7 @@ export class MapGenerator {
             // Check if within rectangle with a 70m buffer for the ramps/clearance
             // 70m covers standard highway ramps (approx 66m for 10m height at 15% grade)
             const rampBuffer = 70;
-            if (Math.abs(localX) < otherBridge.length / 2 + rampBuffer && Math.abs(localZ) < otherBridge.width / 2 + 5) {
+            if (Math.abs(localX) < otherBridge.length / 2 + rampBuffer && Math.abs(localZ) < ((otherBridge as any).width ?? 20) / 2 + 5) {
               nearOtherBridge = true;
               break;
             }
@@ -6420,10 +6463,24 @@ export class MapGenerator {
         // Skip water cells
         if (cell.type === 'water' || cell.type === 'river') continue;
 
+        // Check if this point is near a bridge (within approach ramp distance)
+        // If so, allow grading even if near river to create smooth bridge approaches
+        let nearBridgeApproach = false;
+        for (const [_bridgeRoadId, bridgeList] of this.bridgeElevations.entries()) {
+          for (const bridge of bridgeList) {
+            const distToBridge = Math.sqrt((worldX - bridge.x) ** 2 + (worldZ - bridge.z) ** 2);
+            // Allow grading within bridge approach area (bridge length + 40m buffer for ramps)
+            if (distToBridge < bridge.length / 2 + 40) {
+              nearBridgeApproach = true;
+              break;
+            }
+          }
+          if (nearBridgeApproach) break;
+        }
+
         // Skip if too close to river bank (preserve river geometry)
-        // River width is typically ~10-15m, banks are ~12m. 
-        // We want to avoid modifying anything within ~15-18m of the river center to protect the banks.
-        if (this.isPointNearRiver(worldX, worldZ, 18)) {
+        // UNLESS we're near a bridge approach - then we need to grade for smooth ramps
+        if (!nearBridgeApproach && this.isPointNearRiver(worldX, worldZ, 18)) {
           continue;
         }
 

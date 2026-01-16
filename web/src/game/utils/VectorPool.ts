@@ -16,7 +16,11 @@ class VectorPoolClass {
       // Expand pool if needed
       this.vectors.push(new THREE.Vector3());
     }
-    return this.vectors[this.index++].set(0, 0, 0);
+    const vector = this.vectors[this.index++];
+    if (!vector) {
+      throw new Error('Failed to acquire vector from pool');
+    }
+    return vector.set(0, 0, 0);
   }
 
   reset(): void {
