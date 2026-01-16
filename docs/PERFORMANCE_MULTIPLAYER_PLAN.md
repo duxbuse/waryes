@@ -687,7 +687,7 @@ export function disposeAllGeometries(): void {
 ---
 
 ### Task 3.2: Integrate Shared Geometry in Unit.ts
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Use shared geometries instead of per-unit creation
 

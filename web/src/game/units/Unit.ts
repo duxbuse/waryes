@@ -14,6 +14,7 @@ import type { UnitData, WeaponSlot, Building } from '../../data/types';
 import { getUnitById, getWeaponById } from '../../data/factions';
 import { UnitUI } from '../ui/UnitUI';
 import { getUnitMaterial, getWireframeMaterial, getSelectionRingMaterial } from './SharedMaterials';
+import { getUnitGeometry, CATEGORY_HEIGHTS, FLYING_ALTITUDES } from '../utils/SharedGeometryCache';
 
 export interface UnitConfig {
   id: string;
@@ -118,6 +119,7 @@ export class Unit {
   // 3D representation
   public readonly mesh: THREE.Group;
   private readonly bodyMesh: THREE.Mesh;
+  private readonly wireframe: THREE.LineSegments;
   private readonly selectionRing: THREE.Mesh;
 
   // Movement
@@ -191,12 +193,12 @@ export class Unit {
     // Ensure bounding sphere is computed for proper frustum culling
     this.bodyMesh.geometry.computeBoundingSphere();
 
-    // Add wireframe outline for better visibility (shared material)
+    // Add wireframe outline for better visibility (shared material, per-unit geometry)
     const wireframeGeometry = new THREE.EdgesGeometry(geometry);
-    const wireframe = new THREE.LineSegments(wireframeGeometry, getWireframeMaterial());
-    wireframe.position.y = height / 2;
-    wireframe.renderOrder = 1000; // Render wireframe above body
-    this.mesh.add(wireframe);
+    this.wireframe = new THREE.LineSegments(wireframeGeometry, getWireframeMaterial());
+    this.wireframe.position.y = height / 2;
+    this.wireframe.renderOrder = 1000; // Render wireframe above body
+    this.mesh.add(this.wireframe);
 
     // Create selection ring (shared material)
     const ringGeometry = new THREE.RingGeometry(1.5, 1.8, 32);
@@ -214,29 +216,19 @@ export class Unit {
   }
 
   private createGeometry(): { geometry: THREE.BufferGeometry; height: number } {
-    // Different shapes based on unit category
-    // All sizes increased for visibility at typical camera zoom
+    // Use shared geometry cache - all units of the same category share geometry
     const category = this.unitData?.category ?? 'INF';
+    const geometry = getUnitGeometry(category);
 
-    switch (category) {
-      case 'TNK': // Tanks - large box
-        return { geometry: new THREE.BoxGeometry(3, 1.5, 4), height: 1.5 };
-      case 'REC': // Recon - medium box
-        return { geometry: new THREE.BoxGeometry(2.2, 1.5, 3), height: 1.5 };
-      case 'ART': // Artillery - wide box
-        return { geometry: new THREE.BoxGeometry(2.5, 1.5, 3.5), height: 1.5 };
-      case 'AA': // Anti-air - medium box
-        return { geometry: new THREE.BoxGeometry(2.2, 1.5, 3), height: 1.5 };
-      case 'HEL': // Helicopters - flat box (flies higher)
-        return { geometry: new THREE.BoxGeometry(2.5, 0.8, 3.5), height: 8 }; // Height = flying altitude
-      case 'AIR': // Aircraft - flat wedge-like box (flies high)
-        return { geometry: new THREE.BoxGeometry(3, 0.6, 4), height: 15 }; // Height = flying altitude
-      case 'LOG': // Logistics - box
-        return { geometry: new THREE.BoxGeometry(2.5, 1.5, 3.5), height: 1.5 };
-      case 'INF': // Infantry - upright box
-      default:
-        return { geometry: new THREE.BoxGeometry(2, 2.5, 2), height: 2.5 };
+    // For aircraft, height represents 2x the flying altitude (gets halved for position.y)
+    const flyingAlt = FLYING_ALTITUDES[category];
+    if (flyingAlt !== undefined) {
+      return { geometry, height: flyingAlt };
     }
+
+    // For ground units, height is geometry height (bottom sits on ground after position.y = height/2)
+    const geometryHeight = CATEGORY_HEIGHTS[category] ?? 2.5;
+    return { geometry, height: geometryHeight };
   }
 
   // Position getter
@@ -1381,11 +1373,15 @@ export class Unit {
       this.unitUI = null;
     }
 
-    // Dispose geometries and materials
-    this.bodyMesh.geometry.dispose();
-    (this.bodyMesh.material as THREE.Material).dispose();
+    // Only dispose per-unit geometries (NOT shared ones)
+    // bodyMesh.geometry is SHARED (from SharedGeometryCache) - do NOT dispose
+    // bodyMesh.material is SHARED (from SharedMaterials) - do NOT dispose
+    // wireframe.geometry is per-unit (EdgesGeometry) - dispose it
+    // wireframe.material is SHARED - do NOT dispose
+    // selectionRing.geometry is per-unit (RingGeometry) - dispose it
+    // selectionRing.material is SHARED - do NOT dispose
+    this.wireframe.geometry.dispose();
     this.selectionRing.geometry.dispose();
-    (this.selectionRing.material as THREE.Material).dispose();
   }
 
   /**
