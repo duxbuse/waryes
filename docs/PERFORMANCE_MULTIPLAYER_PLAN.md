@@ -1092,7 +1092,7 @@ export function computeGameStateChecksum(units: readonly Unit[]): number {
 ---
 
 ### Task 5.2: Add Command Validation to Server
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Server validates commands before broadcasting
 

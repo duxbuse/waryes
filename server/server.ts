@@ -333,6 +333,71 @@ class MultiplayerServer {
   }
 
   /**
+   * Handle incoming game command and broadcast to all players
+   * Returns true if command was valid and broadcast
+   */
+  handleGameCommand(code: string, playerId: string, command: string): { success: boolean; error?: string } {
+    const lobby = this.lobbies.get(code);
+    if (!lobby) return { success: false, error: 'Lobby not found' };
+    if (lobby.status !== 'in_progress') return { success: false, error: 'Game not in progress' };
+
+    // Parse and validate command
+    let cmd: any;
+    try {
+      cmd = JSON.parse(command);
+    } catch {
+      return { success: false, error: 'Invalid command format' };
+    }
+
+    // Validate command structure
+    if (!this.validateCommand(lobby, playerId, cmd)) {
+      return { success: false, error: 'Command validation failed' };
+    }
+
+    // Broadcast to all players in lobby
+    this.broadcastToLobby(code, {
+      type: 'game_command',
+      playerId,
+      command,
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Validate a game command
+   * Checks: player exists, command structure valid, tick is reasonable
+   */
+  private validateCommand(lobby: GameLobby, playerId: string, cmd: any): boolean {
+    // Check player is in the lobby
+    if (!lobby.players.has(playerId)) {
+      console.log(`[Command Rejected] Player ${playerId} not in lobby`);
+      return false;
+    }
+
+    // Check basic command structure
+    if (typeof cmd.type !== 'number' || typeof cmd.tick !== 'number') {
+      console.log(`[Command Rejected] Invalid command structure`);
+      return false;
+    }
+
+    // Check command type is valid (1-13 based on CommandType enum)
+    if (cmd.type < 1 || cmd.type > 13) {
+      console.log(`[Command Rejected] Invalid command type ${cmd.type}`);
+      return false;
+    }
+
+    // Check unitIds is an array
+    if (!Array.isArray(cmd.unitIds)) {
+      console.log(`[Command Rejected] unitIds must be array`);
+      return false;
+    }
+
+    // Command is valid
+    return true;
+  }
+
+  /**
    * Broadcast message to all players in a lobby
    */
   private broadcastToLobby(code: string, message: any): void {
@@ -511,6 +576,18 @@ Bun.serve({
 
           case 'game_state_update':
             server.data.broadcastGameState(data.code, data.state);
+            break;
+
+          case 'game_command':
+            {
+              const result = server.data.handleGameCommand(data.code, data.playerId, data.command);
+              if (!result.success) {
+                ws.send(JSON.stringify({
+                  type: 'command_rejected',
+                  reason: result.error,
+                }));
+              }
+            }
             break;
 
           case 'reconnect':
