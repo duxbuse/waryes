@@ -165,7 +165,7 @@ VectorPool.reset();
 ---
 
 ### Task 1.4: Create Pooled Projectile Class
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Create a poolable projectile mesh wrapper
 
