@@ -71,6 +71,10 @@ export class AIManager {
   private lastStrategicUpdate = 0;
   private readonly strategicUpdateInterval = 2.0; // Update strategy every 2 seconds
   private zoneAssessments: ZoneAssessment[] = [];
+
+  // OPTIMIZATION: Stagger AI updates across frames
+  private updateFrameCounter = 0;
+  private readonly AI_UPDATE_THROTTLE = 5; // Only process 1/5th of units per frame
   private threatAssessment: ThreatAssessment = {
     totalEnemyStrength: 0,
     totalFriendlyStrength: 0,
@@ -106,10 +110,19 @@ export class AIManager {
       this.lastStrategicUpdate = currentTime;
     }
 
+    // OPTIMIZATION: Stagger AI updates - only process subset of units per frame
+    this.updateFrameCounter++;
     const enemyUnits = this.game.unitManager.getAllUnits('enemy');
     const decisionInterval = this.decisionIntervals[this.difficulty];
 
-    for (const unit of enemyUnits) {
+    // Only process units whose index % throttle == current frame % throttle
+    for (let i = 0; i < enemyUnits.length; i++) {
+      // Skip units that aren't assigned to this frame
+      if (i % this.AI_UPDATE_THROTTLE !== this.updateFrameCounter % this.AI_UPDATE_THROTTLE) {
+        continue;
+      }
+
+      const unit = enemyUnits[i];
       if (unit.health <= 0) continue;
 
       // Get or create AI state for this unit

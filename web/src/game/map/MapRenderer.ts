@@ -233,7 +233,7 @@ export class MapRenderer {
     this.renderCaptureZones(map.captureZones, map);
 
     // Render resupply points
-    this.renderResupplyPoints(map.resupplyPoints);
+    this.renderResupplyPoints(map.resupplyPoints, map);
 
     // Add trees to forests
     this.renderForestTrees(map);
@@ -2240,8 +2240,8 @@ export class MapRenderer {
         // Sample elevation
         const y = getElevationAt(wx, wz);
 
-        // Update Y with offset
-        positions.setY(i, y - terrainElevation + 1.0); // +1m above ground
+        // Update Y with offset - elevated to ensure visibility
+        positions.setY(i, y - terrainElevation + 0.5); // +0.5m above ground for visibility
       }
 
       geometry.computeVertexNormals();
@@ -2355,8 +2355,8 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;
     };
 
-    // Create zone fill renderer
-    this.zoneFillRenderer = new ZoneFillRenderer(this.mapGroup);
+    // Create zone fill renderer with terrain elevation sampling
+    this.zoneFillRenderer = new ZoneFillRenderer(this.mapGroup, getElevationAt);
 
     for (const zone of zones) {
       const group = new THREE.Group();
@@ -3600,9 +3600,37 @@ export class MapRenderer {
     return group;
   }
 
-  private renderResupplyPoints(resupplyPoints: ResupplyPoint[]): void {
+  private renderResupplyPoints(resupplyPoints: ResupplyPoint[], map: GameMap): void {
     const resupplyGroup = new THREE.Group();
     resupplyGroup.name = 'resupply-points';
+
+    // Helper to get elevation at world position
+    const rows = map.terrain.length;
+    const cols = map.terrain[0]?.length ?? 0;
+    const cellSizeX = map.width / cols;
+    const cellSizeZ = map.height / rows;
+
+    const getElevationAt = (worldX: number, worldZ: number): number => {
+      const gx = (worldX + map.width / 2) / cellSizeX;
+      const gz = (worldZ + map.height / 2) / cellSizeZ;
+      const x0 = Math.floor(gx);
+      const z0 = Math.floor(gz);
+      const cx0 = Math.max(0, Math.min(cols - 1, x0));
+      const cx1 = Math.max(0, Math.min(cols - 1, x0 + 1));
+      const cz0 = Math.max(0, Math.min(rows - 1, z0));
+      const cz1 = Math.max(0, Math.min(rows - 1, z0 + 1));
+      const e00 = map.terrain[cz0]?.[cx0]?.elevation ?? 0;
+      const e10 = map.terrain[cz0]?.[cx1]?.elevation ?? 0;
+      const e01 = map.terrain[cz1]?.[cx0]?.elevation ?? 0;
+      const e11 = map.terrain[cz1]?.[cx1]?.elevation ?? 0;
+      const fx = gx - x0;
+      const fz = gz - z0;
+      const e0 = e00 + (e10 - e00) * fx;
+      const e1 = e01 + (e11 - e01) * fx;
+      return e0 + (e1 - e0) * fz;
+    };
+
+    const heightOffset = 0.5; // Height above terrain
 
     for (const point of resupplyPoints) {
       const group = new THREE.Group();
@@ -3653,7 +3681,8 @@ export class MapRenderer {
       });
 
       const arrowMesh = new THREE.Mesh(arrowGeometry, arrowMaterial);
-      arrowMesh.position.set(point.x, 0.6, baseZ);
+      const arrowHeight = getElevationAt(point.x, baseZ) + heightOffset;
+      arrowMesh.position.set(point.x, arrowHeight, baseZ);
       arrowMesh.renderOrder = 95;
       group.add(arrowMesh);
 
@@ -3677,7 +3706,8 @@ export class MapRenderer {
         depthTest: false,
       });
       const border = new THREE.Line(borderGeometry, borderMaterial);
-      border.position.set(point.x, 0.7, baseZ);
+      const borderHeight = getElevationAt(point.x, baseZ) + heightOffset + 0.1;
+      border.position.set(point.x, borderHeight, baseZ);
       border.rotation.y = -point.direction;
       border.renderOrder = 96;
       group.add(border);
@@ -3694,7 +3724,8 @@ export class MapRenderer {
         depthTest: false,
       });
       const circleMesh = new THREE.Mesh(circleGeometry, circleMaterial);
-      circleMesh.position.set(point.x, 0.65, baseZ);
+      const circleHeight = getElevationAt(point.x, baseZ) + heightOffset + 0.05;
+      circleMesh.position.set(point.x, circleHeight, baseZ);
       circleMesh.renderOrder = 97;
       group.add(circleMesh);
 

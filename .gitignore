@@ -1,6 +1,8 @@
 # Claude Code local state files
 .claude/*.local.md
 claudecwd*
+null
+nul
 
 # Node.js / Web project
 web/node_modules/
@@ -17,3 +19,4 @@ web/test-results/
 # OS
 .DS_Store
 Thumbs.db
+

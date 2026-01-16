@@ -127,6 +127,10 @@ export class Unit {
   // Movement
   private targetPosition: THREE.Vector3 | null = null;
   private readonly velocity = new THREE.Vector3();
+  private waypoints: THREE.Vector3[] = []; // Pathfinding waypoints
+  private currentWaypointIndex = 0;
+  private stuckTimer = 0; // Track if unit is stuck and needs rerouting
+  private lastPosition = new THREE.Vector3();
   // @ts-expect-error Planned feature - movement modes
   private movementMode: 'normal' | 'fast' | 'reverse' = 'normal';
 
@@ -218,7 +222,8 @@ export class Unit {
     this.mesh.add(this.selectionRing);
 
     // Create UI (health bars, morale bars)
-    this.unitUI = new UnitUI(this, game);
+    // Use batched renderer for better performance
+    this.unitUI = new UnitUI(this, game, { useBatchedRenderer: true });
 
     // Initialize scan timer with random offset to stagger updates across units (deterministic)
     this.targetScanTimer = gameRNG.next() * 1.0;
@@ -531,7 +536,7 @@ export class Unit {
     // Recreate UI to show new veterancy stars
     if (this.unitUI) {
       this.unitUI.destroy();
-      this.unitUI = new UnitUI(this, this.game);
+      this.unitUI = new UnitUI(this, this.game, { useBatchedRenderer: true });
     }
 
     const rankName = this.veterancy === 1 ? 'Hardened' : 'Elite';
@@ -628,7 +633,20 @@ export class Unit {
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Move, target: target.clone() };
-    this.targetPosition = target.clone();
+
+    // Use pathfinding to find route
+    const path = this.game.pathfindingManager.findPath(this.position, target);
+
+    if (path && path.length > 0) {
+      this.waypoints = path;
+      this.currentWaypointIndex = 0;
+      this.targetPosition = this.waypoints[0]!.clone();
+      this.stuckTimer = 0;
+    } else {
+      // No path found, try direct movement as fallback
+      this.waypoints = [];
+      this.targetPosition = target.clone();
+    }
 
     // Update path visualization
     if (this.game.pathRenderer) {
@@ -667,7 +685,20 @@ export class Unit {
   setFastMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.FastMove, target: target.clone() };
-    this.targetPosition = target.clone();
+
+    // Use pathfinding to find route
+    const path = this.game.pathfindingManager.findPath(this.position, target);
+
+    if (path && path.length > 0) {
+      this.waypoints = path;
+      this.currentWaypointIndex = 0;
+      this.targetPosition = this.waypoints[0]!.clone();
+      this.stuckTimer = 0;
+    } else {
+      // No path found, try direct movement as fallback
+      this.waypoints = [];
+      this.targetPosition = target.clone();
+    }
 
     // Update path visualization
     if (this.game.pathRenderer) {
@@ -687,7 +718,20 @@ export class Unit {
   setReverseCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Reverse, target: target.clone() };
-    this.targetPosition = target.clone();
+
+    // Use pathfinding to find route
+    const path = this.game.pathfindingManager.findPath(this.position, target);
+
+    if (path && path.length > 0) {
+      this.waypoints = path;
+      this.currentWaypointIndex = 0;
+      this.targetPosition = this.waypoints[0]!.clone();
+      this.stuckTimer = 0;
+    } else {
+      // No path found, try direct movement as fallback
+      this.waypoints = [];
+      this.targetPosition = target.clone();
+    }
 
     // Update path visualization
     if (this.game.pathRenderer) {
@@ -707,7 +751,20 @@ export class Unit {
   setAttackMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.AttackMove, target: target.clone() };
-    this.targetPosition = target.clone();
+
+    // Use pathfinding to find route
+    const path = this.game.pathfindingManager.findPath(this.position, target);
+
+    if (path && path.length > 0) {
+      this.waypoints = path;
+      this.currentWaypointIndex = 0;
+      this.targetPosition = this.waypoints[0]!.clone();
+      this.stuckTimer = 0;
+    } else {
+      // No path found, try direct movement as fallback
+      this.waypoints = [];
+      this.targetPosition = target.clone();
+    }
 
     // Update path visualization
     if (this.game.pathRenderer) {
@@ -1195,16 +1252,48 @@ export class Unit {
       return;
     }
 
+    // Check if stuck (not moving for 2 seconds)
+    const distMoved = this.mesh.position.distanceTo(this.lastPosition);
+    if (distMoved < 0.1) {
+      this.stuckTimer += dt;
+      if (this.stuckTimer > 2.0 && this.currentCommand.target) {
+        // Try to reroute
+        const path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
+        if (path && path.length > 0) {
+          this.waypoints = path;
+          this.currentWaypointIndex = 0;
+          this.targetPosition = this.waypoints[0]!.clone();
+          this.stuckTimer = 0;
+        } else {
+          // Still no path, give up
+          this.completeCommand();
+          return;
+        }
+      }
+    } else {
+      this.stuckTimer = 0;
+      this.lastPosition.copy(this.mesh.position);
+    }
+
     const direction = this.targetPosition.clone().sub(this.mesh.position);
     direction.y = 0; // Keep on ground plane
     const distance = direction.length();
 
-    if (distance < 0.5) {
-      // Arrived at destination
-      this.mesh.position.copy(this.targetPosition);
-      this.targetPosition = null;
-      this.completeCommand();
-      return;
+    if (distance < 2.0) {
+      // Reached current waypoint, move to next
+      if (this.waypoints.length > 0 && this.currentWaypointIndex < this.waypoints.length - 1) {
+        this.currentWaypointIndex++;
+        this.targetPosition = this.waypoints[this.currentWaypointIndex]!.clone();
+        return;
+      } else {
+        // Reached final destination
+        this.mesh.position.copy(this.targetPosition);
+        this.targetPosition = null;
+        this.waypoints = [];
+        this.currentWaypointIndex = 0;
+        this.completeCommand();
+        return;
+      }
     }
 
     // Normalize and apply speed
@@ -1226,7 +1315,7 @@ export class Unit {
     // Move
     this.velocity.copy(direction).multiplyScalar(moveDistance);
 
-    // Slope validation (BEFORE movement)
+    // Slope validation (BEFORE movement) - now just slows down instead of stopping
     if (this.shouldCheckTerrain()) {
       const nextPos = this.mesh.position.clone().add(this.velocity);
       const currentHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
@@ -1238,8 +1327,8 @@ export class Unit {
         const MAX_SLOPE = 1.0; // 45 degrees
 
         if (slope > MAX_SLOPE) {
-          this.targetPosition = null;
-          this.completeCommand();
+          // Blocked - pathfinding should have avoided this, but trigger reroute
+          this.stuckTimer = 3.0; // Force immediate reroute
           return;
         }
       }

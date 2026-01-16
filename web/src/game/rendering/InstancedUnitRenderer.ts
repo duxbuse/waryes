@@ -39,6 +39,12 @@ export class InstancedUnitRenderer {
   // Maximum instances per InstancedMesh (can be adjusted if needed)
   private readonly MAX_INSTANCES = 200;
 
+  // Reusable temp objects (avoid creating new objects every frame)
+  private readonly tempMatrix = new THREE.Matrix4();
+  private readonly tempPosition = new THREE.Vector3();
+  private readonly tempQuaternion = new THREE.Quaternion();
+  private readonly tempScale = new THREE.Vector3(1, 1, 1);
+
   constructor(game: Game, scene: THREE.Scene) {
     this.game = game;
     this.scene = scene;
@@ -149,10 +155,11 @@ export class InstancedUnitRenderer {
    * Update instance matrices - called every frame
    */
   update(): void {
-    const tempMatrix = new THREE.Matrix4();
-    const tempPosition = new THREE.Vector3();
-    const tempQuaternion = new THREE.Quaternion();
-    const tempScale = new THREE.Vector3(1, 1, 1);
+    // Use reusable temp objects to avoid GC pressure
+    const tempMatrix = this.tempMatrix;
+    const tempPosition = this.tempPosition;
+    const tempQuaternion = this.tempQuaternion;
+    const tempScale = this.tempScale;
 
     // Update each group
     for (const [_groupKey, group] of this.groups) {

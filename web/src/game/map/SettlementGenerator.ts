@@ -246,8 +246,11 @@ export class SettlementGenerator {
       // For each sector between radials
       for (let i = 0; i < numRadials; i++) {
         const nextI = (i + 1) % numRadials;
-        const radialA = radials[i]!;
-        const radialB = radials[nextI]!;
+        const radialA = radials[i];
+        const radialB = radials[nextI];
+
+        // Skip if either radial is undefined
+        if (!radialA || !radialB) continue;
 
         // Pick a point roughly at this layer's distance on both radials
         // Add randomness so it's not a perfect circle
@@ -326,7 +329,8 @@ export class SettlementGenerator {
 
       // GEOGRAPHY CLIP FOR GRID (Simple endpoint check for now, can be improved)
       if (terrain && settlement.streets.length > 0) {
-        const lastStreet = settlement.streets[settlement.streets.length - 1]!;
+        const lastStreet = settlement.streets[settlement.streets.length - 1];
+        if (!lastStreet || lastStreet.points.length < 2) continue;
         const p1 = lastStreet.points[0]!;
         const p2 = lastStreet.points[1]!;
 
@@ -399,7 +403,8 @@ export class SettlementGenerator {
 
       // GEOGRAPHY CLIP FOR GRID (EW)
       if (terrain && settlement.streets.length > 0) {
-        const lastStreet = settlement.streets[settlement.streets.length - 1]!;
+        const lastStreet = settlement.streets[settlement.streets.length - 1];
+        if (!lastStreet || lastStreet.points.length < 2) continue;
         const p1 = lastStreet.points[0]!;
         const p2 = lastStreet.points[1]!;
 
@@ -1010,8 +1015,9 @@ export class SettlementGenerator {
         // Simple nearest searching
         for (const street of settlement.streets) {
           for (let j = 0; j < street.points.length - 1; j++) {
-            const p1 = street.points[j]!;
-            const p2 = street.points[j + 1]!;
+            const p1 = street.points[j];
+            const p2 = street.points[j + 1];
+            if (!p1 || !p2) continue;
             // Check distance to segment center for speed
             const mx = (p1.x + p2.x) / 2;
             const mz = (p1.z + p2.z) / 2;
@@ -1073,8 +1079,9 @@ export class SettlementGenerator {
 
       // Iterate segments
       for (let i = 0; i < street.points.length - 1; i++) {
-        const p1 = street.points[i]!;
-        const p2 = street.points[i + 1]!;
+        const p1 = street.points[i];
+        const p2 = street.points[i + 1];
+        if (!p1 || !p2) continue;
 
         const dx = p2.x - p1.x;
         const dz = p2.z - p1.z;
@@ -1205,8 +1212,9 @@ export class SettlementGenerator {
       for (const street of streets) {
         // Simple check against street points
         for (let i = 0; i < street.points.length - 1; i++) {
-          const p1 = street.points[i]!;
-          const p2 = street.points[i + 1]!;
+          const p1 = street.points[i];
+          const p2 = street.points[i + 1];
+          if (!p1 || !p2) continue;
 
           // Distance from point to line segment
           const l2 = (p1.x - p2.x) ** 2 + (p1.z - p2.z) ** 2;

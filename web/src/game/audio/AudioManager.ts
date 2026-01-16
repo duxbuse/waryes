@@ -17,9 +17,22 @@ export type SoundEffect =
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
-  private masterVolume: number = 0.3; // 30% volume by default
-  private sfxVolume: number = 0.3;
+  private masterVolume: number = 0.15; // 15% volume by default to prevent clipping
+  private sfxVolume: number = 0.4;
   private enabled: boolean = true;
+
+  // Sound throttling to prevent audio from homogenizing
+  private lastPlayTimes: Map<SoundEffect, number> = new Map();
+  private minTimeBetweenSounds: Map<SoundEffect, number> = new Map([
+    ['weapon_fire', 0.05],    // Max 20 weapon sounds per second
+    ['explosion', 0.1],       // Max 10 explosions per second
+    ['unit_select', 0.05],
+    ['unit_move', 0.05],
+    ['unit_death', 0.1],
+    ['victory', 1.0],
+    ['defeat', 1.0],
+    ['button_click', 0.05],
+  ]);
 
   constructor() {
     // Create audio context on first user interaction (browser policy)
@@ -53,6 +66,16 @@ export class AudioManager {
     this.resumeContext();
 
     const now = this.audioContext.currentTime;
+
+    // Throttle sounds to prevent homogenization
+    const lastPlayTime = this.lastPlayTimes.get(effect) ?? 0;
+    const minTimeBetween = this.minTimeBetweenSounds.get(effect) ?? 0;
+
+    if (now - lastPlayTime < minTimeBetween) {
+      return; // Skip this sound, it's playing too frequently
+    }
+
+    this.lastPlayTimes.set(effect, now);
 
     switch (effect) {
       case 'weapon_fire':
@@ -96,7 +119,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(200, now);
     osc.frequency.exponentialRampToValueAtTime(50, now + 0.05);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.03, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
 
     osc.start(now);
@@ -117,7 +140,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(100, now);
     osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.03, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
 
     osc.start(now);
@@ -137,7 +160,7 @@ export class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(800, now);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.2, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.08, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
 
     osc.start(now);
@@ -157,7 +180,7 @@ export class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(600, now);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.15, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
 
     osc.start(now);
@@ -178,7 +201,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(400, now);
     osc.frequency.exponentialRampToValueAtTime(100, now + 0.4);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.03, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
 
     osc.start(now);
@@ -201,7 +224,7 @@ export class AudioManager {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + i * 0.1);
 
-      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.2, now + i * 0.1);
+      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.1, now + i * 0.1);
       gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.5);
 
       osc.start(now + i * 0.1);
@@ -225,7 +248,7 @@ export class AudioManager {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + i * 0.15);
 
-      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.2, now + i * 0.15);
+      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.1, now + i * 0.15);
       gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.6);
 
       osc.start(now + i * 0.15);
@@ -246,7 +269,7 @@ export class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(1000, now);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.1, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.05, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
 
     osc.start(now);

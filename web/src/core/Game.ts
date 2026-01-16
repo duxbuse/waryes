@@ -25,6 +25,7 @@ import { MultiplayerBattleSync } from '../game/managers/MultiplayerBattleSync';
 import { BuildingManager } from '../game/managers/BuildingManager';
 import { TransportManager } from '../game/managers/TransportManager';
 import { SmokeManager } from '../game/managers/SmokeManager';
+import { PathfindingManager } from '../game/managers/PathfindingManager';
 import { DamageNumberManager } from '../game/effects/DamageNumbers';
 import { VisualEffectsManager } from '../game/effects/VisualEffects';
 import { AudioManager } from '../game/audio/AudioManager';
@@ -34,6 +35,7 @@ import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
 import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
+import { BatchedUnitUIRenderer } from '../game/rendering/BatchedUnitUIRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
 import { LAYERS } from '../game/utils/LayerConstants';
 import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell } from '../data/types';
@@ -75,6 +77,7 @@ export class Game {
   public readonly buildingManager: BuildingManager;
   public readonly transportManager: TransportManager;
   public readonly smokeManager: SmokeManager;
+  public readonly pathfindingManager: PathfindingManager;
   public readonly damageNumberManager: DamageNumberManager;
   public readonly visualEffectsManager: VisualEffectsManager;
   public readonly audioManager: AudioManager;
@@ -83,6 +86,7 @@ export class Game {
   public minimapRenderer: MinimapRenderer | null = null;
   public pathRenderer: PathRenderer | null = null;
   public instancedUnitRenderer: InstancedUnitRenderer | null = null;
+  public batchedUIRenderer: BatchedUnitUIRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
 
@@ -111,6 +115,7 @@ export class Game {
   private _fpsLastTime = 0;
   private _currentFps = 0;
   private _fpsOverlay: HTMLElement | null = null;
+  private _lastFrameTime = 0; // For measuring true frame-to-frame time
 
   // Current map
   public currentMap: GameMap | null = null;
@@ -199,15 +204,18 @@ export class Game {
     this.buildingManager = new BuildingManager(this);
     this.transportManager = new TransportManager(this);
     this.smokeManager = new SmokeManager(this);
+    this.pathfindingManager = new PathfindingManager(this);
     this.damageNumberManager = new DamageNumberManager(this);
     this.visualEffectsManager = new VisualEffectsManager(this);
     this.audioManager = new AudioManager();
     this.screenManager = new ScreenManager();
     // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);
-    this.pathRenderer = new PathRenderer(this.scene);
+    this.pathRenderer = new PathRenderer(this.scene, this);
     this.instancedUnitRenderer = new InstancedUnitRenderer(this, this.scene);
     this.instancedUnitRenderer.initialize();
+    this.batchedUIRenderer = new BatchedUnitUIRenderer(this, this.scene);
+    this.batchedUIRenderer.initialize();
     this.losPreviewRenderer = new LOSPreviewRenderer(this);
     this.benchmarkManager = new BenchmarkManager(this);
 
@@ -270,8 +278,8 @@ export class Game {
   private updateFps(currentTime: number): void {
     this._fpsFrameCount++;
 
-    // Update FPS every 500ms
-    if (currentTime - this._fpsLastTime >= 500) {
+    // Update FPS every 250ms for more responsive display
+    if (currentTime - this._fpsLastTime >= 250) {
       this._currentFps = Math.round((this._fpsFrameCount * 1000) / (currentTime - this._fpsLastTime));
       this._fpsFrameCount = 0;
       this._fpsLastTime = currentTime;
@@ -386,6 +394,10 @@ export class Game {
 
     requestAnimationFrame(this.gameLoop.bind(this));
 
+    // Measure true frame-to-frame time (includes GPU wait)
+    const trueFrameTime = this._lastFrameTime > 0 ? currentTime - this._lastFrameTime : 0;
+    this._lastFrameTime = currentTime;
+
     const deltaTime = (currentTime - this._lastTime) / 1000;
     this._lastTime = currentTime;
 
@@ -416,13 +428,19 @@ export class Game {
     const renderEnd = performance.now();
     const renderTime = renderEnd - renderStart;
 
-    // Log breakdown if total frame is slow
-    const totalFrameTime = renderEnd - fixedStart;
-    if (totalFrameTime > 50 && this._phase === GamePhase.Battle) {
-      console.warn(`[PERF] Frame breakdown: ${totalFrameTime.toFixed(1)}ms total`);
+    // Calculate our measured time vs true frame time
+    const measuredTime = renderEnd - fixedStart;
+    const unmeasuredTime = trueFrameTime - measuredTime;
+
+    // Log breakdown if frame is slow (sample 5% to avoid spam)
+    if (trueFrameTime > 20 && this._phase === GamePhase.Battle && Math.random() < 0.05) {
+      const trueFps = trueFrameTime > 0 ? 1000 / trueFrameTime : 0;
+      console.warn(`[PERF] True frame time: ${trueFrameTime.toFixed(1)}ms (${trueFps.toFixed(1)} FPS)`);
       console.log(`  FixedUpdate (${fixedIterations}x): ${fixedTime.toFixed(1)}ms`);
       console.log(`  Update: ${updateTime.toFixed(1)}ms`);
-      console.log(`  Render: ${renderTime.toFixed(1)}ms`);
+      console.log(`  Render (CPU): ${renderTime.toFixed(1)}ms`);
+      console.log(`  Measured total: ${measuredTime.toFixed(1)}ms`);
+      console.log(`  Unmeasured (GPU wait + overhead): ${unmeasuredTime.toFixed(1)}ms`);
     }
 
     // Update FPS display
@@ -443,8 +461,9 @@ export class Game {
       const t2 = performance.now();
 
       const fixedTotal = t2 - t0;
-      if (fixedTotal > 10) {
-        console.warn(`[PERF] FixedUpdate slow: ${fixedTotal.toFixed(1)}ms`);
+      // Log if slow OR randomly sample to see typical values
+      if (fixedTotal > 5 || Math.random() < 0.05) {
+        console.warn(`[PERF] FixedUpdate: ${fixedTotal.toFixed(1)}ms`);
         console.log(`  UnitManager.fixedUpdate: ${(t1 - t0).toFixed(1)}ms`);
         console.log(`  CombatManager.processCombat: ${(t2 - t1).toFixed(1)}ms`);
       }
@@ -483,6 +502,7 @@ export class Game {
 
       this.pathRenderer?.update(); // Update path lines as units move
       this.instancedUnitRenderer?.update(); // Update instanced unit rendering
+      this.batchedUIRenderer?.update(); // Update batched UI rendering (health/morale bars)
       t6 = performance.now();
 
       // Update LOS preview if active
@@ -543,9 +563,10 @@ export class Game {
     const frameEnd = performance.now();
     const frameTime = frameEnd - frameStart;
 
-    // Log slow frames (>50ms = <20 FPS)
-    if (frameTime > 20 && this._phase === GamePhase.Battle) {
-      console.warn(`[PERF] Slow frame: ${frameTime.toFixed(1)}ms`);
+    // Log slow frames (>16.67ms = <60 FPS), sample 30% to get more data
+    const isRelevantPhase = this._phase === GamePhase.Battle || this._phase === GamePhase.Setup;
+    if (frameTime > 16.67 && isRelevantPhase && Math.random() < 0.3) {
+      console.warn(`[PERF] Slow frame: ${frameTime.toFixed(1)}ms (FPS: ${(1000/frameTime).toFixed(1)})`);
       if (t0 !== undefined && t1 !== undefined) {
         console.log(`  Camera: ${(t1 - t0).toFixed(1)}ms`);
         console.log(`  Input: ${(t2! - t1).toFixed(1)}ms`);
@@ -1080,6 +1101,9 @@ export class Game {
 
     // Initialize fog of war
     this.fogOfWarManager.initialize();
+
+    // Initialize pathfinding
+    this.pathfindingManager.initialize();
 
     // Execute all pre-orders
     this.executePreOrders();

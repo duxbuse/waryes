@@ -48,6 +48,7 @@ interface ZoneFillState {
 export class ZoneFillRenderer {
   private zones: Map<string, ZoneFillState> = new Map();
   private mapGroup: THREE.Group;
+  private getElevationAt: ((x: number, z: number) => number) | null = null;
 
   // Colors
   private readonly PLAYER_COLOR = { r: 74, g: 158, b: 255 }; // #4a9eff
@@ -58,9 +59,12 @@ export class ZoneFillRenderer {
   private readonly FILL_SPEED = 15;
   // Rebalance speed (ratio change per second)
   private readonly REBALANCE_SPEED = 0.1;
+  // Height offset above terrain
+  private readonly HEIGHT_OFFSET = 0.5;
 
-  constructor(mapGroup: THREE.Group) {
+  constructor(mapGroup: THREE.Group, getElevationAt?: (x: number, z: number) => number) {
     this.mapGroup = mapGroup;
+    this.getElevationAt = getElevationAt ?? null;
   }
 
   /**
@@ -102,7 +106,9 @@ export class ZoneFillRenderer {
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(centerX, 1.5, centerZ);
+    // Sample terrain elevation at zone center and offset above it
+    const terrainHeight = this.getElevationAt ? this.getElevationAt(centerX, centerZ) : 0;
+    mesh.position.set(centerX, terrainHeight + this.HEIGHT_OFFSET, centerZ);
     mesh.renderOrder = 91;
 
     this.mapGroup.add(mesh);

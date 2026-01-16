@@ -56,7 +56,7 @@ export class BenchmarkManager {
 
         // 1. Setup map
         // Use a fixed seed for reproducibility
-        const seed = 12345;
+        const seed = 67890;
         const size = 'medium';
 
         // Start skirmish (this generates map and switches screens)
@@ -156,8 +156,10 @@ export class BenchmarkManager {
             const z = (Math.random() - 0.5) * spread;
             const type = Math.random() > 0.7 ? 'tank' : 'riflemen'; // Mix of tanks and infantry
 
+            const terrainHeight = this.game.getElevationAt(x, z);
+
             this.game.unitManager.spawnUnit({
-                position: new THREE.Vector3(x, 0, z),
+                position: new THREE.Vector3(x, terrainHeight, z),
                 team: 'player',
                 ownerId: 'player',
                 unitType: type === 'tank' ? 'vanguard_tank' : 'vanguard_infantry',
@@ -170,8 +172,10 @@ export class BenchmarkManager {
             const z = (Math.random() - 0.5) * spread;
             const type = Math.random() > 0.7 ? 'tank' : 'riflemen';
 
+            const terrainHeight = this.game.getElevationAt(x, z);
+
             this.game.unitManager.spawnUnit({
-                position: new THREE.Vector3(x, 0, z),
+                position: new THREE.Vector3(x, terrainHeight, z),
                 team: 'enemy',
                 ownerId: 'enemy',
                 unitType: type === 'tank' ? 'vanguard_tank' : 'vanguard_infantry',
@@ -184,10 +188,12 @@ export class BenchmarkManager {
         const enemyUnits = this.game.unitManager.getAllUnits('enemy');
 
         // All player units attack move to center right
-        this.game.unitManager.issueAttackMoveCommand(playerUnits, new THREE.Vector3(100, 0, 0), false);
+        const playerTargetHeight = this.game.getElevationAt(100, 0);
+        this.game.unitManager.issueAttackMoveCommand(playerUnits, new THREE.Vector3(100, playerTargetHeight, 0), false);
 
         // All enemy units attack move to center left
-        this.game.unitManager.issueAttackMoveCommand(enemyUnits, new THREE.Vector3(-100, 0, 0), false);
+        const enemyTargetHeight = this.game.getElevationAt(-100, 0);
+        this.game.unitManager.issueAttackMoveCommand(enemyUnits, new THREE.Vector3(-100, enemyTargetHeight, 0), false);
     }
 
     private showResults(): void {

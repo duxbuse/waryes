@@ -60,7 +60,7 @@ export class UnitUI {
   private readonly NEAR_DISTANCE = 20;  // Distance where scale is minimum
   private readonly FAR_DISTANCE = 150;  // Distance where scale is maximum
 
-  constructor(unit: Unit, game: Game) {
+  constructor(unit: Unit, game: Game, options?: { useBatchedRenderer?: boolean }) {
     this.unit = unit;
     this.game = game;
 
@@ -73,9 +73,12 @@ export class UnitUI {
     this.statusIcons.position.y = 0.6;
     this.container.add(this.statusIcons);
 
-    // Create bars
-    this.createHealthBar();
-    this.createMoraleBar();
+    // Create bars (skip if using batched renderer)
+    const useBatchedRenderer = options?.useBatchedRenderer ?? false;
+    if (!useBatchedRenderer) {
+      this.createHealthBar();
+      this.createMoraleBar();
+    }
 
     // Create veterancy stars
     this.createVeterancyStars();
@@ -541,36 +544,40 @@ export class UnitUI {
   }
 
   update(): void {
-    // Update health bar
-    const healthPercent = this.unit.health / this.unit.maxHealth;
-    this.healthBarFg.scale.x = Math.max(0.01, healthPercent); // Prevent zero scale
-    this.healthBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - healthPercent);
+    // Update health bar (skip if using batched renderer)
+    if (this.healthBarFg && this.healthBarBg) {
+      const healthPercent = this.unit.health / this.unit.maxHealth;
+      this.healthBarFg.scale.x = Math.max(0.01, healthPercent); // Prevent zero scale
+      this.healthBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - healthPercent);
 
-    // Color health bar based on percentage
-    const healthMaterial = this.healthBarFg.material as THREE.MeshBasicMaterial;
-    if (healthPercent > 0.6) {
-      healthMaterial.color.setHex(0x00ff00); // Green
-    } else if (healthPercent > 0.3) {
-      healthMaterial.color.setHex(0xffff00); // Yellow
-    } else {
-      healthMaterial.color.setHex(0xff0000); // Red
+      // Color health bar based on percentage
+      const healthMaterial = this.healthBarFg.material as THREE.MeshBasicMaterial;
+      if (healthPercent > 0.6) {
+        healthMaterial.color.setHex(0x00ff00); // Green
+      } else if (healthPercent > 0.3) {
+        healthMaterial.color.setHex(0xffff00); // Yellow
+      } else {
+        healthMaterial.color.setHex(0xff0000); // Red
+      }
     }
 
-    // Update morale bar
-    const moralePercent = this.unit.morale / 100;
-    this.moraleBarFg.scale.x = Math.max(0.01, moralePercent);
-    this.moraleBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - moralePercent);
+    // Update morale bar (skip if using batched renderer)
+    if (this.moraleBarFg && this.moraleBarBg) {
+      const moralePercent = this.unit.morale / 100;
+      this.moraleBarFg.scale.x = Math.max(0.01, moralePercent);
+      this.moraleBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - moralePercent);
 
-    // Color morale bar based on state
-    const moraleMaterial = this.moraleBarFg.material as THREE.MeshBasicMaterial;
-    if (this.unit.isRouting) {
-      moraleMaterial.color.setHex(0x666666); // Gray when routing
-    } else if (moralePercent < 0.25) {
-      moraleMaterial.color.setHex(0xff8800); // Orange when breaking
-    } else if (moralePercent < 0.5) {
-      moraleMaterial.color.setHex(0xffcc00); // Yellow-orange when shaken
-    } else {
-      moraleMaterial.color.setHex(0x4a9eff); // Blue when normal
+      // Color morale bar based on state
+      const moraleMaterial = this.moraleBarFg.material as THREE.MeshBasicMaterial;
+      if (this.unit.isRouting) {
+        moraleMaterial.color.setHex(0x666666); // Gray when routing
+      } else if (moralePercent < 0.25) {
+        moraleMaterial.color.setHex(0xff8800); // Orange when breaking
+      } else if (moralePercent < 0.5) {
+        moraleMaterial.color.setHex(0xffcc00); // Yellow-orange when shaken
+      } else {
+        moraleMaterial.color.setHex(0x4a9eff); // Blue when normal
+      }
     }
 
     // Update status icons visibility
@@ -594,20 +601,20 @@ export class UnitUI {
 
       // Hide detailed UI elements in tactical view
       if (isTacticalView) {
-        this.healthBarBg.visible = false;
-        this.healthBarFg.visible = false;
-        this.moraleBarBg.visible = false;
-        this.moraleBarFg.visible = false;
+        if (this.healthBarBg) this.healthBarBg.visible = false;
+        if (this.healthBarFg) this.healthBarFg.visible = false;
+        if (this.moraleBarBg) this.moraleBarBg.visible = false;
+        if (this.moraleBarFg) this.moraleBarFg.visible = false;
         this.statusIcons.visible = false;
         if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
         for (const star of this.veterancyStars) {
           star.visible = false;
         }
       } else {
-        this.healthBarBg.visible = true;
-        this.healthBarFg.visible = true;
-        this.moraleBarBg.visible = true;
-        this.moraleBarFg.visible = true;
+        if (this.healthBarBg) this.healthBarBg.visible = true;
+        if (this.healthBarFg) this.healthBarFg.visible = true;
+        if (this.moraleBarBg) this.moraleBarBg.visible = true;
+        if (this.moraleBarFg) this.moraleBarFg.visible = true;
         this.statusIcons.visible = true;
         if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
         // Other indicators remain dynamically controlled
@@ -635,15 +642,23 @@ export class UnitUI {
   }
 
   destroy(): void {
-    // Clean up geometries and materials
-    this.healthBarBg.geometry.dispose();
-    (this.healthBarBg.material as THREE.Material).dispose();
-    this.healthBarFg.geometry.dispose();
-    (this.healthBarFg.material as THREE.Material).dispose();
-    this.moraleBarBg.geometry.dispose();
-    (this.moraleBarBg.material as THREE.Material).dispose();
-    this.moraleBarFg.geometry.dispose();
-    (this.moraleBarFg.material as THREE.Material).dispose();
+    // Clean up geometries and materials (skip if using batched renderer)
+    if (this.healthBarBg) {
+      this.healthBarBg.geometry.dispose();
+      (this.healthBarBg.material as THREE.Material).dispose();
+    }
+    if (this.healthBarFg) {
+      this.healthBarFg.geometry.dispose();
+      (this.healthBarFg.material as THREE.Material).dispose();
+    }
+    if (this.moraleBarBg) {
+      this.moraleBarBg.geometry.dispose();
+      (this.moraleBarBg.material as THREE.Material).dispose();
+    }
+    if (this.moraleBarFg) {
+      this.moraleBarFg.geometry.dispose();
+      (this.moraleBarFg.material as THREE.Material).dispose();
+    }
 
     // Clean up veterancy stars
     for (const star of this.veterancyStars) {
