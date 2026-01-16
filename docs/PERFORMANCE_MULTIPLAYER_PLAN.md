@@ -792,7 +792,7 @@ for (const unit of allUnits) {
 ## Phase 4: Deterministic Multiplayer Foundation
 
 ### Task 4.1: Create Deterministic RNG
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Replace Math.random() with seeded deterministic PRNG
 
