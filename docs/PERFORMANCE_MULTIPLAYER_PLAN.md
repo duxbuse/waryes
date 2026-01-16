@@ -595,7 +595,7 @@ const friendlyUnits = this.game.unitManager.getUnitsInRadius(
 ---
 
 ### Task 2.4: Optimize AI Nearest Enemy with Spatial Queries
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Reduce O(n) nearest enemy search using spatial grid
 

@@ -476,7 +476,14 @@ export class AIManager {
   }
 
   private findNearestEnemy(unit: Unit): Unit | null {
-    const playerUnits = this.game.unitManager.getAllUnits('player');
+    // Use spatial query with max search radius for efficiency
+    const SEARCH_RADIUS = 500; // Max engagement search range
+    const playerUnits = this.game.unitManager.getUnitsInRadius(
+      unit.position,
+      SEARCH_RADIUS,
+      'player'
+    );
+
     let nearest: Unit | null = null;
     let nearestDist = Infinity;
 
@@ -494,7 +501,13 @@ export class AIManager {
   }
 
   private findNearestEnemyInRange(unit: Unit, range: number): Unit | null {
-    const playerUnits = this.game.unitManager.getAllUnits('player');
+    // Use spatial query limited to the actual range for efficiency
+    const playerUnits = this.game.unitManager.getUnitsInRadius(
+      unit.position,
+      range,
+      'player'
+    );
+
     let nearest: Unit | null = null;
     let nearestDist = range;
 
