@@ -854,7 +854,7 @@ export function setGameSeed(seed: number): void {
 ---
 
 ### Task 4.2: Replace Math.random() in CombatManager
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Make combat deterministic
 

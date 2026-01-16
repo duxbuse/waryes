@@ -11,6 +11,7 @@ import { MapGenerator } from '../map/MapGenerator';
 import { ObjectPool } from '../utils/ObjectPool';
 import { PooledProjectile } from '../combat/PooledProjectile';
 import { VectorPool } from '../utils/VectorPool';
+import { gameRNG } from '../utils/DeterministicRNG';
 
 export interface DamageResult {
   damage: number;
@@ -119,8 +120,8 @@ export class CombatManager {
     const moralePenalty = (100 - attacker.morale) / 100;
     hitChance *= (1 - moralePenalty * 0.5); // Max 50% penalty at 0 morale
 
-    // Roll for hit
-    if (Math.random() > hitChance) {
+    // Roll for hit (deterministic)
+    if (gameRNG.next() > hitChance) {
       // Miss - create tracer anyway for visual
       this.createProjectile(attacker, target, weapon, false, distance);
       // Create muzzle flash and sound
@@ -157,9 +158,9 @@ export class CombatManager {
     targetPos.y += 1;
 
     if (!willHit) {
-      // Miss offset
-      targetPos.x += (Math.random() - 0.5) * 5;
-      targetPos.z += (Math.random() - 0.5) * 5;
+      // Miss offset (deterministic)
+      targetPos.x += (gameRNG.next() - 0.5) * 5;
+      targetPos.z += (gameRNG.next() - 0.5) * 5;
     }
 
     // Acquire pooled projectile
@@ -287,8 +288,8 @@ export class CombatManager {
     // Get armor facing
     const armor = this.getTargetArmor(proj, target);
 
-    // Check penetration
-    const penetrationRoll = Math.random() * proj.penetration;
+    // Check penetration (deterministic)
+    const penetrationRoll = gameRNG.next() * proj.penetration;
     const penetrated = penetrationRoll > armor;
 
     if (!penetrated) {
@@ -301,8 +302,8 @@ export class CombatManager {
       };
     }
 
-    // Critical hit chance (10% base)
-    const criticalHit = Math.random() < 0.1;
+    // Critical hit chance (10% base, deterministic)
+    const criticalHit = gameRNG.nextBool(0.1);
     const damageMultiplier = criticalHit ? 2 : 1;
 
     // Calculate final damage
@@ -380,8 +381,8 @@ export class CombatManager {
       // This staggers expensive scan operations across multiple frames/seconds
       if (!unit.combatTarget && unit.targetScanTimer <= 0) {
         unit.combatTarget = this.findTarget(unit);
-        // Reset timer (1.0s average + random jitter to keep staggered)
-        unit.targetScanTimer = 0.8 + Math.random() * 0.4;
+        // Reset timer (1.0s average + random jitter to keep staggered, deterministic)
+        unit.targetScanTimer = 0.8 + gameRNG.next() * 0.4;
       }
 
       // Engage target if we have one
