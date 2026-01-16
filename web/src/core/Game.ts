@@ -39,6 +39,7 @@ import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
 import { BenchmarkManager } from '../game/debug/BenchmarkManager';
+import { VectorPool } from '../game/utils/VectorPool';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -413,6 +414,9 @@ export class Game {
    * Variable timestep update for visuals
    */
   private update(dt: number): void {
+    // Reset vector pool at start of each frame
+    VectorPool.reset();
+
     // Only update game systems in appropriate phases (and not paused)
     if (!this._isPaused && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
       this.cameraController.update(dt);
