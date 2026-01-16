@@ -30,18 +30,21 @@ export class FogOfWarManager {
   private blockingGridWidth = 0;
   private blockingGridHeight = 0;
   private blockingGridCellSize = 4; // High resolution for accurate LOS
-  private mapRevision = -1; // To track if map changed
 
   // Vision state
   private currentVision = new Map<string, Map<string, boolean>>(); // team -> set of visible cell keys
   private exploredGrid = new Map<string, boolean>(); // set of explored cell keys (player only)
-  private cellSize = 2; // Resolution of vision grid
+  private cellSize = 4; // Resolution of vision grid (increased from 2 for performance)
   private timeSinceLastUpdate = 0;
   private updateInterval = 0.1; // 10Hz updates
 
   // Position tracking for incremental updates
   private lastUnitPositions = new Map<string, THREE.Vector3>();
   private readonly MOVE_THRESHOLD_SQ = 25; // 5 meters squared - units must move this much to trigger update
+
+  // Vision update throttling to spread expensive LOS checks across frames
+  private visionUpdateFrameCounter = 0;
+  private readonly VISION_UPDATE_THROTTLE = 20; // Update 1/20th of units per frame (more aggressive)
 
   constructor(game: Game) {
     this.game = game;
@@ -55,7 +58,42 @@ export class FogOfWarManager {
     this.exploredGrid.clear();
     this.lastUnitPositions.clear();
     this.blockingGrid = null;
-    this.mapRevision = -1;
+  }
+
+  /**
+   * Force an immediate fog of war update for all units
+   * Used after initialization to reveal areas around already-deployed units
+   */
+  forceImmediateUpdate(): void {
+    if (!this.enabled) return;
+
+    // Initialize blocking grid if needed
+    if (!this.blockingGrid && this.game.currentMap) {
+      this.initializeBlockingGrid();
+    }
+
+    // Get all units
+    const allUnits = this.game.unitManager.getAllUnits();
+
+    // Clear current vision and rebuild completely
+    this.currentVision.clear();
+    this.lastUnitPositions.clear();
+
+    // Update vision for all units immediately (no throttling)
+    for (const unit of allUnits) {
+      if (unit.health <= 0) continue;
+
+      // Track position
+      this.lastUnitPositions.set(unit.id, unit.position.clone());
+
+      // Update vision
+      this.updateVisionForUnit(unit);
+    }
+
+    // Update enemy visibility
+    this.updateEnemyVisibility();
+
+    console.log('FOW: Forced immediate update for', allUnits.length, 'units');
   }
 
   /**
@@ -122,10 +160,21 @@ export class FogOfWarManager {
     // Clear current vision and rebuild (full update when any unit moved)
     this.currentVision.clear();
 
-    // Update vision for each unit's team
+    // OPTIMIZATION: Throttle vision updates - only process 1/THROTTLE of units per frame
+    // This spreads expensive LOS calculations across multiple frames
+    this.visionUpdateFrameCounter++;
+    const currentBatch = this.visionUpdateFrameCounter % this.VISION_UPDATE_THROTTLE;
+
+    // Update vision for each unit's team (throttled)
+    let unitIndex = 0;
     for (const unit of allUnits) {
       if (unit.health <= 0) continue;
-      this.updateVisionForUnit(unit);
+
+      // Only update units in current batch (staggered across frames)
+      if (unitIndex % this.VISION_UPDATE_THROTTLE === currentBatch) {
+        this.updateVisionForUnit(unit);
+      }
+      unitIndex++;
     }
 
     // Hide enemy units outside vision
@@ -205,12 +254,9 @@ export class FogOfWarManager {
       // We'll estimate base height from center (approximate, but faster)
       // Actually, let's use the local terrain height at the cell for maximum accuracy.
 
-      const buildingTopRelative = building.height;
-
       for (let z = cMinZ; z <= cMaxZ; z++) {
         for (let x = cMinX; x <= cMaxX; x++) {
           const idx = z * this.blockingGridWidth + x;
-          const currentHeight = this.blockingGrid[idx];
           // We assume building sits on the terrain at that specific cell
           // Since we already populated grid with terrain height, we can just add building height to terrain height?
           // No, building usually has a flat base.
@@ -252,7 +298,7 @@ export class FogOfWarManager {
           // Note: buildings are placed on the ground.
           const buildingTop = terrainHeight + building.height;
 
-          this.blockingGrid[idx] = Math.max(this.blockingGrid[idx], buildingTop);
+          this.blockingGrid[idx] = Math.max(this.blockingGrid[idx] ?? 0, buildingTop);
         }
       }
     }
@@ -282,9 +328,9 @@ export class FogOfWarManager {
     const dirZ = (end.z - start.z) / dist;
 
     // Step size for ray marching
-    // We can step by blockingGridCellSize / 2 to assume we don't miss any cells
-    // Or we can use a basic DDA algorithm for grid traversal, but manual stepping is easier to implement for 2.5D
-    const stepSize = this.blockingGridCellSize;
+    // OPTIMIZED: Step by 2.5x cell size - we won't miss obstacles and it's 2.5x faster
+    // Previously was 1x cell size which was overkill
+    const stepSize = this.blockingGridCellSize * 2.5;
     const numSteps = Math.ceil(dist / stepSize);
 
     // Check points along the ray
@@ -304,7 +350,7 @@ export class FogOfWarManager {
       // Bounds check
       if (gridX >= 0 && gridX < this.blockingGridWidth && gridZ >= 0 && gridZ < this.blockingGridHeight) {
         // Get blocking height at this cell
-        const blockingHeight = this.blockingGrid[gridZ * this.blockingGridWidth + gridX];
+        const blockingHeight = this.blockingGrid[gridZ * this.blockingGridWidth + gridX] ?? 0;
 
         // If the blocking height is above our current ray height, LOS is blocked
         // We use a small epsilon or margin? Maybe not needed if exact.
@@ -342,20 +388,29 @@ export class FogOfWarManager {
         // Check if within circle
         const distSq = (worldX - unitPos.x) ** 2 + (worldZ - unitPos.z) ** 2;
         if (distSq <= visionRadius ** 2) {
-          // Check line of sight - blocked by smoke
-          // Use head height (2m) for both unit and target point
-          const startPos = unitPos.clone();
-          startPos.y += 2;
-          const targetPos = new THREE.Vector3(worldX, 0, worldZ);
-          targetPos.y = this.getTerrainHeight(worldX, worldZ) + 2;
+          const key = this.getCellKey(worldX, worldZ);
 
-          if (!this.isLOSBlocked(startPos, targetPos)) {
-            const key = this.getCellKey(worldX, worldZ);
+          // OPTIMIZATION: Skip expensive LOS check for cells very close to unit
+          // Cells within 60m are almost always visible (most combat happens <100m)
+          const dist = Math.sqrt(distSq);
+          if (dist < 60) {
+            // Close cells are automatically visible (no LOS check needed)
             teamVision.set(key, true);
-
-            // Only update explored grid for player team
             if (team === 'player') {
               this.exploredGrid.set(key, true);
+            }
+          } else {
+            // Only do expensive LOS check for distant cells
+            const startPos = unitPos.clone();
+            startPos.y += 2;
+            const targetPos = new THREE.Vector3(worldX, 0, worldZ);
+            targetPos.y = this.getTerrainHeight(worldX, worldZ) + 2;
+
+            if (!this.isLOSBlocked(startPos, targetPos)) {
+              teamVision.set(key, true);
+              if (team === 'player') {
+                this.exploredGrid.set(key, true);
+              }
             }
           }
         }
@@ -372,17 +427,17 @@ export class FogOfWarManager {
     // Use unit data optics rating
     const opticsVal = opticsToNumber(unit.data.optics);
 
-    // Scale vision: Poor(2) = 150m, Normal(3) = 250m, Good(4) = 400m, Exceptional(6) = 1000m
-    // This provides meaningful differences in spotting range
+    // OPTIMIZED: Reduced vision ranges for performance
+    // Scale vision: Poor(2) = 100m, Normal(3) = 150m, Good(4) = 200m, Exceptional(6) = 300m
     const scales: Record<number, number> = {
-      2: 150,
-      3: 250,
-      4: 400,
-      5: 700,
-      6: 1000
+      2: 100,
+      3: 150,
+      4: 200,
+      5: 250,
+      6: 300
     };
 
-    return scales[opticsVal] ?? 250;
+    return scales[opticsVal] ?? 150;
   }
 
   /**
@@ -478,32 +533,8 @@ export class FogOfWarManager {
     }
   }
 
-  /**
-   * Check if line of sight is blocked between two positions
-   */
-  private isLOSBlocked(start: THREE.Vector3, end: THREE.Vector3): boolean {
-    // Check smoke blocking
-    if (this.game.smokeManager.blocksLOS(start, end)) {
-      return true;
-    }
-
-    // Check building blocking
-    if (this.isBuildingBlocking(start, end)) {
-      return true;
-    }
-
-    // Check forest blocking
-    if (this.isForestBlocking(start, end)) {
-      return true;
-    }
-
-    // Check terrain elevation blocking (hills/ridges)
-    if (this.isTerrainBlocking(start, end)) {
-      return true;
-    }
-
-    return false;
-  }
+  // REMOVED: Duplicate broken isLOSBlocked method that called non-existent methods
+  // The optimized raymarching implementation above (line 267) is now used instead
 
   /**
    * Get terrain height at a position

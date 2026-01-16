@@ -610,6 +610,9 @@ export const GAME_CONSTANTS = {
   SUPPRESSION_RECOVERY_RATE: 5, // per second
   MORALE_RECOVERY_RATE: 2, // per second when not under fire
   CAPTURE_RATE: 10, // per second
+  MAX_TRAVERSABLE_SLOPE: 1.0, // 45° slope (rise/run = 1)
+  MIN_MOVEMENT_FOR_SLOPE_CHECK: 0.01, // Skip checks for tiny movements
+  HELICOPTER_FLIGHT_ALTITUDE: 20, // meters above terrain
 } as const;
 
 // Map Size Configurations

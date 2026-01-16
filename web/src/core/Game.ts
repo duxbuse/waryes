@@ -29,12 +29,14 @@ import { DamageNumberManager } from '../game/effects/DamageNumbers';
 import { VisualEffectsManager } from '../game/effects/VisualEffects';
 import { AudioManager } from '../game/audio/AudioManager';
 import { ScreenManager, ScreenType } from './ScreenManager';
-import { MapGenerator, type TerrainCell } from '../game/map/MapGenerator';
+import { MapGenerator } from '../game/map/MapGenerator';
 import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
+import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
-import type { GameMap, DeckData, MapSize, BiomeType } from '../data/types';
+import { LAYERS } from '../game/utils/LayerConstants';
+import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
@@ -80,6 +82,7 @@ export class Game {
   public mapRenderer: MapRenderer | null = null;
   public minimapRenderer: MinimapRenderer | null = null;
   public pathRenderer: PathRenderer | null = null;
+  public instancedUnitRenderer: InstancedUnitRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
 
@@ -161,6 +164,12 @@ export class Game {
     this.camera.position.set(0, 150, 150);
     this.camera.lookAt(0, 0, 0);
 
+    // OPTIMIZATION: Configure camera to render DEFAULT and RENDER_ONLY layers
+    // RAYCAST_ONLY layer is invisible (used for selection hit-testing only)
+    this.camera.layers.enable(LAYERS.DEFAULT);
+    this.camera.layers.enable(LAYERS.RENDER_ONLY);
+    this.camera.layers.disable(LAYERS.RAYCAST_ONLY);
+
     // Create ground plane (will be replaced by map terrain)
     const groundGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
     const groundMaterial = new THREE.MeshStandardMaterial({
@@ -197,6 +206,8 @@ export class Game {
     // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);
     this.pathRenderer = new PathRenderer(this.scene);
+    this.instancedUnitRenderer = new InstancedUnitRenderer(this, this.scene);
+    this.instancedUnitRenderer.initialize();
     this.losPreviewRenderer = new LOSPreviewRenderer(this);
     this.benchmarkManager = new BenchmarkManager(this);
 
@@ -383,16 +394,36 @@ export class Game {
 
     // Fixed timestep update for game logic
     this._accumulator += clampedDelta;
+    const fixedStart = performance.now();
+    let fixedIterations = 0;
     while (this._accumulator >= this.FIXED_TIMESTEP) {
       this.fixedUpdate(this.FIXED_TIMESTEP);
       this._accumulator -= this.FIXED_TIMESTEP;
+      fixedIterations++;
     }
+    const fixedEnd = performance.now();
+    const fixedTime = fixedEnd - fixedStart;
 
     // Variable update for visual interpolation
+    const updateStart = performance.now();
     this.update(clampedDelta);
+    const updateEnd = performance.now();
+    const updateTime = updateEnd - updateStart;
 
     // Render
+    const renderStart = performance.now();
     this.render();
+    const renderEnd = performance.now();
+    const renderTime = renderEnd - renderStart;
+
+    // Log breakdown if total frame is slow
+    const totalFrameTime = renderEnd - fixedStart;
+    if (totalFrameTime > 50 && this._phase === GamePhase.Battle) {
+      console.warn(`[PERF] Frame breakdown: ${totalFrameTime.toFixed(1)}ms total`);
+      console.log(`  FixedUpdate (${fixedIterations}x): ${fixedTime.toFixed(1)}ms`);
+      console.log(`  Update: ${updateTime.toFixed(1)}ms`);
+      console.log(`  Render: ${renderTime.toFixed(1)}ms`);
+    }
 
     // Update FPS display
     this.updateFps(currentTime);
@@ -405,8 +436,18 @@ export class Game {
     if (this._isPaused) return;
 
     if (this._phase === GamePhase.Battle) {
+      const t0 = performance.now();
       this.unitManager.fixedUpdate(dt);
+      const t1 = performance.now();
       this.combatManager.processCombat(dt);
+      const t2 = performance.now();
+
+      const fixedTotal = t2 - t0;
+      if (fixedTotal > 10) {
+        console.warn(`[PERF] FixedUpdate slow: ${fixedTotal.toFixed(1)}ms`);
+        console.log(`  UnitManager.fixedUpdate: ${(t1 - t0).toFixed(1)}ms`);
+        console.log(`  CombatManager.processCombat: ${(t2 - t1).toFixed(1)}ms`);
+      }
     }
   }
 
@@ -414,17 +455,35 @@ export class Game {
    * Variable timestep update for visuals
    */
   private update(dt: number): void {
+    const frameStart = performance.now();
+
     // Reset vector pool at start of each frame
     VectorPool.reset();
 
+    // Declare all timing variables at function scope
+    let t0, t1, t2, t3, t4, t5, t6;
+
     // Only update game systems in appropriate phases (and not paused)
     if (!this._isPaused && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
+      t0 = performance.now();
       this.cameraController.update(dt);
+      t1 = performance.now();
+
       this.inputManager.update(dt);
+      t2 = performance.now();
+
       this.selectionManager.update(dt);
+      t3 = performance.now();
+
       this.unitManager.update(dt);
+      t4 = performance.now();
+
       this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
+      t5 = performance.now();
+
       this.pathRenderer?.update(); // Update path lines as units move
+      this.instancedUnitRenderer?.update(); // Update instanced unit rendering
+      t6 = performance.now();
 
       // Update LOS preview if active
       if (this.inputManager.isLOSPreviewActive) {
@@ -440,24 +499,75 @@ export class Game {
       }
     }
 
+    let t7, t8, t9, t10, t11, t12, t13, t14, t15, t16;
     if (!this._isPaused && this._phase === GamePhase.Battle) {
+      t7 = performance.now();
       this.economyManager.update(dt);
+      t8 = performance.now();
+
       this.combatManager.update(dt);
+      t9 = performance.now();
+
       this.aiManager.update(dt);
+      t10 = performance.now();
+
       this.reinforcementManager.update(dt);
+      t11 = performance.now();
+
       this.fogOfWarManager.update(dt);
+      t12 = performance.now();
+
       this.multiplayerBattleSync.update(dt);
+      t13 = performance.now();
+
       this.transportManager.update(dt);
+      t14 = performance.now();
+
       this.smokeManager.update(dt);
+      t15 = performance.now();
+
       this.damageNumberManager.update(dt);
+      t16 = performance.now();
+
       this.visualEffectsManager.update(dt);
     }
 
+    const beforeScreen = performance.now();
     // Screen manager always updates
     this.screenManager.update(dt);
+    const afterScreen = performance.now();
 
     // Update benchmark
     this.benchmarkManager.update(dt);
+
+    const frameEnd = performance.now();
+    const frameTime = frameEnd - frameStart;
+
+    // Log slow frames (>50ms = <20 FPS)
+    if (frameTime > 20 && this._phase === GamePhase.Battle) {
+      console.warn(`[PERF] Slow frame: ${frameTime.toFixed(1)}ms`);
+      if (t0 !== undefined && t1 !== undefined) {
+        console.log(`  Camera: ${(t1 - t0).toFixed(1)}ms`);
+        console.log(`  Input: ${(t2! - t1).toFixed(1)}ms`);
+        console.log(`  Selection: ${(t3! - t2!).toFixed(1)}ms`);
+        console.log(`  UnitManager: ${(t4! - t3!).toFixed(1)}ms`);
+        console.log(`  MapRenderer: ${(t5! - t4!).toFixed(1)}ms`);
+        console.log(`  PathRenderer: ${(t6! - t5!).toFixed(1)}ms`);
+      }
+      if (t7) {
+        console.log(`  Economy: ${(t8! - t7).toFixed(1)}ms`);
+        console.log(`  Combat: ${(t9! - t8!).toFixed(1)}ms`);
+        console.log(`  AI: ${(t10! - t9!).toFixed(1)}ms`);
+        console.log(`  Reinforcement: ${(t11! - t10!).toFixed(1)}ms`);
+        console.log(`  FogOfWar: ${(t12! - t11!).toFixed(1)}ms`);
+        console.log(`  Multiplayer: ${(t13! - t12!).toFixed(1)}ms`);
+        console.log(`  Transport: ${(t14! - t13!).toFixed(1)}ms`);
+        console.log(`  Smoke: ${(t15! - t14!).toFixed(1)}ms`);
+        console.log(`  DamageNumbers: ${(t16! - t15!).toFixed(1)}ms`);
+        console.log(`  VisualEffects: ${(beforeScreen - t16!).toFixed(1)}ms`);
+      }
+      console.log(`  ScreenManager: ${(afterScreen - beforeScreen).toFixed(1)}ms`);
+    }
   }
 
   private render(): void {
@@ -1168,6 +1278,7 @@ export class Game {
    */
   screenToWorld(screenX: number, screenY: number): THREE.Vector3 | null {
     const raycaster = new THREE.Raycaster();
+    // No layer restriction for terrain raycasting - we want to hit everything
     const mouse = new THREE.Vector2(
       (screenX / window.innerWidth) * 2 - 1,
       -(screenY / window.innerHeight) * 2 + 1
@@ -1281,6 +1392,10 @@ export class Game {
    */
   getUnitsAtScreen(screenX: number, screenY: number): THREE.Object3D[] {
     const raycaster = new THREE.Raycaster();
+    // OPTIMIZATION: Only test RAYCAST_ONLY layer for unit selection
+    // Unit bodyMeshes are on RAYCAST_ONLY layer (invisible but clickable)
+    // InstancedUnitRenderer handles actual rendering on RENDER_ONLY layer
+    raycaster.layers.set(LAYERS.RAYCAST_ONLY);
     const mouse = new THREE.Vector2(
       (screenX / window.innerWidth) * 2 - 1,
       -(screenY / window.innerHeight) * 2 + 1

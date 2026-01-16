@@ -168,7 +168,7 @@ export class AIManager {
     this.zoneAssessments.sort((a, b) => b.priority - a.priority);
   }
 
-  private assessThreat(friendlyUnits: Unit[], enemyUnits: Unit[]): ThreatAssessment {
+  private assessThreat(friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[]): ThreatAssessment {
     // Calculate strength based on health and unit count
     const friendlyStrength = friendlyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
     const enemyStrength = enemyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
@@ -189,7 +189,7 @@ export class AIManager {
     };
   }
 
-  private assessZone(zone: CaptureZone, friendlyUnits: Unit[], enemyUnits: Unit[]): ZoneAssessment {
+  private assessZone(zone: CaptureZone, friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[]): ZoneAssessment {
     // Count units in/near zone
     const zoneY = this.game.getElevationAt(zone.x, zone.z);
     const zonePos = new THREE.Vector3(zone.x, zoneY, zone.z);

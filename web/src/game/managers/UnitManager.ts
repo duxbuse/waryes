@@ -73,6 +73,9 @@ export class UnitManager {
     this.spatialGrid.insert(unit);
     this.rebuildTeamArrays();
 
+    // Register with instanced renderer for GPU batching
+    this.game.instancedUnitRenderer?.registerUnit(unit);
+
     // If game is already in battle phase, unfreeze immediately
     if (this.game.phase === GamePhase.Battle) {
       unit.setFrozen(false);
@@ -111,6 +114,9 @@ export class UnitManager {
 
     // Remove from selection
     this.game.selectionManager.removeFromSelection(unit);
+
+    // Unregister from instanced renderer
+    this.game.instancedUnitRenderer?.unregisterUnit(unit);
 
     // Remove from scene
     this.game.scene.remove(unit.mesh);
@@ -158,7 +164,7 @@ export class UnitManager {
     this.unitsByTeam.all = Array.from(this.units.values());
     this.unitsByTeam.player = this.unitsByTeam.all.filter(u => u.team === 'player');
     this.unitsByTeam.enemy = this.unitsByTeam.all.filter(u => u.team === 'enemy');
-    this.unitsByTeam.ally = this.unitsByTeam.all.filter(u => u.team === 'ally');
+    this.unitsByTeam.ally = this.unitsByTeam.all.filter(u => u.isAllied());
   }
 
   /**
@@ -205,7 +211,7 @@ export class UnitManager {
   /**
    * Issue move command to units
    */
-  issueMoveCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+  issueMoveCommand(units: readonly Unit[], target: THREE.Vector3, queue: boolean): void {
     if (units.length === 0) return;
 
     // Formation offset calculation
@@ -233,7 +239,7 @@ export class UnitManager {
   /**
    * Issue attack command to units
    */
-  issueAttackCommand(units: Unit[], target: Unit, queue: boolean): void {
+  issueAttackCommand(units: readonly Unit[], target: Unit, queue: boolean): void {
     for (const unit of units) {
       if (queue) {
         unit.queueAttackCommand(target);
@@ -246,7 +252,7 @@ export class UnitManager {
   /**
    * Issue fast move command to units (F + Right Click)
    */
-  issueFastMoveCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+  issueFastMoveCommand(units: readonly Unit[], target: THREE.Vector3, queue: boolean): void {
     if (units.length === 0) return;
 
     const spacing = 4;
@@ -270,7 +276,7 @@ export class UnitManager {
   /**
    * Issue reverse command to units (R + Right Click)
    */
-  issueReverseCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+  issueReverseCommand(units: readonly Unit[], target: THREE.Vector3, queue: boolean): void {
     if (units.length === 0) return;
 
     const spacing = 4;
@@ -294,7 +300,7 @@ export class UnitManager {
   /**
    * Issue attack-move command to units (A + Right Click)
    */
-  issueAttackMoveCommand(units: Unit[], target: THREE.Vector3, queue: boolean): void {
+  issueAttackMoveCommand(units: readonly Unit[], target: THREE.Vector3, queue: boolean): void {
     if (units.length === 0) return;
 
     const spacing = 4;

@@ -16,6 +16,7 @@ import { UnitUI } from '../ui/UnitUI';
 import { getUnitMaterial, getWireframeMaterial, getSelectionRingMaterial } from './SharedMaterials';
 import { getUnitGeometry, CATEGORY_HEIGHTS, FLYING_ALTITUDES } from '../utils/SharedGeometryCache';
 import { gameRNG } from '../utils/DeterministicRNG';
+import { LAYERS } from '../utils/LayerConstants';
 
 export interface UnitConfig {
   id: string;
@@ -187,6 +188,11 @@ export class Unit {
     this.bodyMesh = new THREE.Mesh(geometry, material);
     this.bodyMesh.position.y = height / 2; // Raise mesh so bottom sits on ground
     this.bodyMesh.renderOrder = 999; // Very high to ensure visibility over all terrain/overlays
+
+    // OPTIMIZATION: Set to RAYCAST_ONLY layer - invisible but clickable
+    // InstancedUnitRenderer handles actual rendering on RENDER_ONLY layer
+    this.bodyMesh.layers.set(LAYERS.RAYCAST_ONLY);
+
     // Frustum culling enabled - compute proper bounding sphere after positioning
     this.bodyMesh.castShadow = false;
     this.bodyMesh.receiveShadow = false;
@@ -194,11 +200,13 @@ export class Unit {
     // Ensure bounding sphere is computed for proper frustum culling
     this.bodyMesh.geometry.computeBoundingSphere();
 
+    // OPTIMIZATION: Wireframe disabled - InstancedUnitRenderer handles it
     // Add wireframe outline for better visibility (shared material, per-unit geometry)
     const wireframeGeometry = new THREE.EdgesGeometry(geometry);
     this.wireframe = new THREE.LineSegments(wireframeGeometry, getWireframeMaterial());
     this.wireframe.position.y = height / 2;
     this.wireframe.renderOrder = 1000; // Render wireframe above body
+    this.wireframe.visible = false; // Disabled - instanced renderer handles it
     this.mesh.add(this.wireframe);
 
     // Create selection ring (shared material)
@@ -1117,7 +1125,40 @@ export class Unit {
 
     // Keep facing original direction while moving backwards
     this.velocity.copy(direction).multiplyScalar(moveSpeed);
+
+    // Slope validation (BEFORE movement)
+    if (this.shouldCheckTerrain()) {
+      const nextPos = this.mesh.position.clone().add(this.velocity);
+      const currentHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
+      const nextHeight = this.game.getElevationAt(nextPos.x, nextPos.z);
+      const horizontalDist = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
+
+      if (horizontalDist > 0.01) {
+        const slope = Math.abs(nextHeight - currentHeight) / horizontalDist;
+        const MAX_SLOPE = 1.0; // 45 degrees
+
+        if (slope > MAX_SLOPE) {
+          this.targetPosition = null;
+          this.completeCommand();
+          return;
+        }
+      }
+    }
+
     this.mesh.position.add(this.velocity);
+
+    // Height clamping (AFTER movement)
+    const terrainHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
+    const category = this.unitData?.category ?? 'INF';
+    const isAircraft = category === 'HEL' || category === 'AIR';
+
+    if (isAircraft) {
+      // Aircraft maintain altitude above terrain
+      this.mesh.position.y = terrainHeight + 20; // HELICOPTER_FLIGHT_ALTITUDE
+    } else {
+      // Ground units clamp to terrain
+      this.mesh.position.y = terrainHeight;
+    }
   }
 
   private processAttackMove(dt: number): void {
@@ -1184,7 +1225,48 @@ export class Unit {
 
     // Move
     this.velocity.copy(direction).multiplyScalar(moveDistance);
+
+    // Slope validation (BEFORE movement)
+    if (this.shouldCheckTerrain()) {
+      const nextPos = this.mesh.position.clone().add(this.velocity);
+      const currentHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
+      const nextHeight = this.game.getElevationAt(nextPos.x, nextPos.z);
+      const horizontalDist = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
+
+      if (horizontalDist > 0.01) {
+        const slope = Math.abs(nextHeight - currentHeight) / horizontalDist;
+        const MAX_SLOPE = 1.0; // 45 degrees
+
+        if (slope > MAX_SLOPE) {
+          this.targetPosition = null;
+          this.completeCommand();
+          return;
+        }
+      }
+    }
+
     this.mesh.position.add(this.velocity);
+
+    // Height clamping (AFTER movement)
+    const terrainHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
+    const category = this.unitData?.category ?? 'INF';
+    const isAircraft = category === 'HEL' || category === 'AIR';
+
+    if (isAircraft) {
+      // Aircraft maintain altitude above terrain
+      this.mesh.position.y = terrainHeight + 20; // HELICOPTER_FLIGHT_ALTITUDE
+    } else {
+      // Ground units clamp to terrain
+      this.mesh.position.y = terrainHeight;
+    }
+  }
+
+  /**
+   * Check if this unit should perform terrain elevation checks
+   */
+  private shouldCheckTerrain(): boolean {
+    const category = this.unitData?.category ?? 'INF';
+    return category !== 'HEL' && category !== 'AIR';
   }
 
   private processAttack(dt: number): void {

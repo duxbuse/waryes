@@ -165,10 +165,10 @@ export class MinimapRenderer {
     const canvasWidth = this.canvas.width;
     const canvasHeight = this.canvas.height;
 
-    // Calculate scale to fit map in canvas
+    // Calculate scale to fit map in canvas (fill entire canvas)
     const scaleX = canvasWidth / this.map.width;
     const scaleY = canvasHeight / this.map.height;
-    this.pixelsPerMeter = Math.min(scaleX, scaleY) * 0.9; // 90% to leave margin
+    this.pixelsPerMeter = Math.min(scaleX, scaleY);
 
     // Calculate offsets to center map
     this.offsetX = (canvasWidth - this.map.width * this.pixelsPerMeter) / 2;
@@ -223,7 +223,6 @@ export class MinimapRenderer {
 
     const ctx = this.ctx;
     const terrain = this.map.terrain;
-    const fogEnabled = this.game.fogOfWarManager.isEnabled();
     const cellSize = this.map.cellSize; // Use actual cell size from map
 
     for (let z = 0; z < terrain.length; z++) {
@@ -240,21 +239,7 @@ export class MinimapRenderer {
         const pixelY = z * cellSize * this.pixelsPerMeter;
         const pixelSize = cellSize * this.pixelsPerMeter;
 
-        // Apply fog of war to terrain rendering
-        if (fogEnabled) {
-          const worldX = x * cellSize; // Convert grid position to world
-          const worldZ = z * cellSize;
-          const visibility = this.game.fogOfWarManager.getVisibilityState(worldX, worldZ);
-
-          if (visibility === VisibilityState.Unexplored) {
-            color = '#000000'; // Black for unexplored
-          } else if (visibility === VisibilityState.Explored) {
-            // Darken the color for explored but not visible areas
-            color = this.darkenColor(color, 0.5);
-          }
-          // Visible areas keep their original color
-        }
-
+        // Minimap terrain is always fully visible - only enemy units are hidden by fog of war
         ctx.fillStyle = color;
         ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
       }

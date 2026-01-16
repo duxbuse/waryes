@@ -37,7 +37,7 @@ export class SelectionManager {
   /**
    * Set selection to specific units (replaces existing)
    */
-  setSelection(units: Unit[]): void {
+  setSelection(units: readonly Unit[]): void {
     // Deselect old units
     for (const unit of this.selectedUnits) {
       unit.setSelected(false);

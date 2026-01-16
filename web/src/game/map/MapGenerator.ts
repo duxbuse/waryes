@@ -2171,7 +2171,7 @@ export class MapGenerator {
    * Get town positions from settlements for road generation
    * Uses the already-generated settlements for consistency
    */
-  private getTownPositions(): Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: EntryPoint[] }> {
+  private getTownPositions(): Array<{ x: number; z: number; radius: number; size: SettlementSize; layoutType: LayoutType; entryPoints: import('../../data/types').SettlementEntryPoint[] }> {
     // Return positions from settlements (already generated)
     return this.settlements.map(s => ({
       x: s.position.x,
@@ -3687,62 +3687,6 @@ export class MapGenerator {
     return true;
   }
 
-  /**
-   * Find a valid position for a capture zone near the target position
-   * Searches in expanding circles until a valid position is found
-   */
-  private findValidCaptureZonePosition(
-    targetX: number,
-    targetZ: number,
-    width: number,
-    height: number,
-    maxSearchRadius: number,
-    deploymentZones?: DeploymentZone[]
-  ): { x: number; z: number } | null {
-    // Helper to check deployment zone overlap
-    const checkDeployment = (x: number, z: number, w: number, h: number): boolean => {
-      if (!deploymentZones) return true;
-      const buffer = 50;
-      for (const zone of deploymentZones) {
-        const minX = zone.minX - buffer - w / 2;
-        const maxX = zone.maxX + buffer + w / 2;
-        const minZ = zone.minZ - buffer - h / 2;
-        const maxZ = zone.maxZ + buffer + h / 2;
-        if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) return false;
-      }
-      return true;
-    };
-
-    // First check if target position is valid
-    if (this.isTerrainSuitableForCaptureZone(targetX, targetZ, width, height) && checkDeployment(targetX, targetZ, width, height)) {
-      return { x: targetX, z: targetZ };
-    }
-
-    // Search in expanding rings
-    const searchStep = Math.min(width, height) * 0.5;
-    const numAngles = 8;
-
-    for (let searchDist = searchStep; searchDist <= maxSearchRadius; searchDist += searchStep) {
-      for (let i = 0; i < numAngles; i++) {
-        const angle = (i / numAngles) * Math.PI * 2 + this.rng.nextFloat(-0.2, 0.2);
-        const testX = targetX + Math.cos(angle) * searchDist;
-        const testZ = targetZ + Math.sin(angle) * searchDist;
-
-        // Stay within map bounds
-        const marginX = width / 2 + 10;
-        const marginZ = height / 2 + 10;
-        if (Math.abs(testX) > this.width / 2 - marginX || Math.abs(testZ) > this.height / 2 - marginZ) {
-          continue;
-        }
-
-        if (this.isTerrainSuitableForCaptureZone(testX, testZ, width, height) && checkDeployment(testX, testZ, width, height)) {
-          return { x: testX, z: testZ };
-        }
-      }
-    }
-
-    return null; // No valid position found
-  }
 
 
   /**
@@ -3905,8 +3849,8 @@ export class MapGenerator {
             name: `Zone ${String.fromCharCode(65 + zones.length)}`,
             x: pos.x,
             z: pos.z,
-            objectiveX: pos.objectiveX,
-            objectiveZ: pos.objectiveZ,
+            objectiveX: pos.objectiveX ?? pos.x,
+            objectiveZ: pos.objectiveZ ?? pos.z,
             width,
             height,
             pointsPerTick: 1,

@@ -17,8 +17,8 @@ export type SoundEffect =
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
-  private masterVolume: number = 0.5; // 50% volume by default
-  private sfxVolume: number = 0.5;
+  private masterVolume: number = 0.3; // 30% volume by default
+  private sfxVolume: number = 0.3;
   private enabled: boolean = true;
 
   constructor() {
@@ -96,7 +96,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(200, now);
     osc.frequency.exponentialRampToValueAtTime(50, now + 0.05);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.3, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
 
     osc.start(now);
@@ -117,7 +117,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(100, now);
     osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.5, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
 
     osc.start(now);
@@ -178,7 +178,7 @@ export class AudioManager {
     osc.frequency.setValueAtTime(400, now);
     osc.frequency.exponentialRampToValueAtTime(100, now + 0.4);
 
-    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.3, now);
+    gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
 
     osc.start(now);

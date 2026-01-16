@@ -300,6 +300,20 @@ export class MultiplayerManager {
   }
 
   /**
+   * Send game command during battle (for lockstep multiplayer)
+   */
+  sendGameCommand(serializedCommand: string): void {
+    if (!this.currentLobby) return;
+    if (this.currentLobby.status !== 'in_progress') return;
+
+    this.send({
+      type: 'game_command',
+      code: this.currentLobby.code,
+      command: serializedCommand,
+    });
+  }
+
+  /**
    * Handle incoming messages from server
    */
   private handleMessage(message: any): void {

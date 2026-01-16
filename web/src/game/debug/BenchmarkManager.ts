@@ -61,7 +61,7 @@ export class BenchmarkManager {
 
         // Start skirmish (this generates map and switches screens)
         this.game.startSkirmish(
-            { id: 'benchmark', name: 'Benchmark', cards: [] }, // Dummy deck
+            { id: 'benchmark', name: 'Benchmark', divisionId: 'test', units: [], activationPoints: 0 }, // Dummy deck
             size,
             seed,
             [{ type: 'YOU', difficulty: 'Medium' }],
