@@ -15,6 +15,7 @@ import { getUnitById, getWeaponById } from '../../data/factions';
 import { UnitUI } from '../ui/UnitUI';
 import { getUnitMaterial, getWireframeMaterial, getSelectionRingMaterial } from './SharedMaterials';
 import { getUnitGeometry, CATEGORY_HEIGHTS, FLYING_ALTITUDES } from '../utils/SharedGeometryCache';
+import { gameRNG } from '../utils/DeterministicRNG';
 
 export interface UnitConfig {
   id: string;
@@ -211,8 +212,8 @@ export class Unit {
     // Create UI (health bars, morale bars)
     this.unitUI = new UnitUI(this, game);
 
-    // Initialize scan timer with random offset to stagger updates across units
-    this.targetScanTimer = Math.random() * 1.0;
+    // Initialize scan timer with random offset to stagger updates across units (deterministic)
+    this.targetScanTimer = gameRNG.next() * 1.0;
   }
 
   private createGeometry(): { geometry: THREE.BufferGeometry; height: number } {
@@ -802,12 +803,12 @@ export class Unit {
     // TransportManager will handle the actual unload
     const passengers = this.game.transportManager.unloadAll(this);
 
-    // Give each passenger a small move command to spread out
+    // Give each passenger a small move command to spread out (deterministic)
     for (const passenger of passengers) {
       const offset = new THREE.Vector3(
-        (Math.random() - 0.5) * 5,
+        (gameRNG.next() - 0.5) * 5,
         0,
-        (Math.random() - 0.5) * 5
+        (gameRNG.next() - 0.5) * 5
       );
       const moveTarget = passenger.position.clone().add(offset);
       passenger.setMoveCommand(moveTarget);
@@ -1209,8 +1210,8 @@ export class Unit {
       this.mesh.rotation.y = targetAngle;
 
       // TODO: Implement actual firing logic
-      // For now, just deal damage occasionally
-      if (Math.random() < dt * 2) {
+      // For now, just deal damage occasionally (deterministic)
+      if (gameRNG.next() < dt * 2) {
         target.takeDamage(5);
       }
     }

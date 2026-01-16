@@ -892,7 +892,7 @@ export function setGameSeed(seed: number): void {
 ---
 
 ### Task 4.3: Replace Math.random() in Unit.ts
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Make unit behavior deterministic
 
