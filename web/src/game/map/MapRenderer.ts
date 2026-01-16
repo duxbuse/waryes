@@ -138,7 +138,11 @@ export class MapRenderer {
         transparent: true,
         opacity: 0.8,
         side: THREE.DoubleSide,
-        depthWrite: true, // Enable depthWrite to prevent overlapping transparent faces from darkening junctions
+        depthWrite: false, // Disable depth write to avoid z-fighting with overlapping water
+        stencilWrite: true,
+        stencilFunc: THREE.NotEqualStencilFunc,
+        stencilRef: 1,
+        stencilZPass: THREE.ReplaceStencilOp,
       }),
       building: new THREE.MeshStandardMaterial({
         color: 0xd4c4a8,
@@ -523,6 +527,9 @@ export class MapRenderer {
     getElevationAt: (x: number, z: number) => number,
     allWaterBodies: WaterBody[]
   ): THREE.BufferGeometry | null {
+    const points = river.points;
+    if (points.length < 2) return null;
+
     const width = river.width ?? 10;
     const halfWidth = width / 2;
     const waterHeight = 0.3; // Elevated above terrain for visibility
@@ -533,14 +540,11 @@ export class MapRenderer {
     // Helper to check if a point is near a lake
     const isNearLake = (x: number, z: number): boolean => {
       for (const lake of lakes) {
-        // Calculate lake center from points
         if (lake.points.length === 0) continue;
         const lakeCenterX = lake.points.reduce((sum, p) => sum + p.x, 0) / lake.points.length;
         const lakeCenterZ = lake.points.reduce((sum, p) => sum + p.z, 0) / lake.points.length;
         const lakeRadius = lake.radius ?? 50;
         const dist = Math.sqrt((x - lakeCenterX) ** 2 + (z - lakeCenterZ) ** 2);
-        // Extended buffer to ensure rivers properly overlap with lake edges
-        // This prevents gaps between river and lake rendering
         if (dist < lakeRadius + 20) {
           return true;
         }
@@ -548,85 +552,200 @@ export class MapRenderer {
       return false;
     };
 
-    const vertices: number[] = [];
-    const indices: number[] = [];
+    // Helper to safely calculate perpendicular direction
+    const getPerp = (dx: number, dz: number): { x: number; z: number } => {
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.001) {
+        return { x: 1, z: 0 };
+      }
+      return { x: -dz / len, z: dx / len };
+    };
 
-    // Subdivide segments for smooth terrain following
-    const maxSegmentLength = 5; // Sample every 5 meters
-    const points: typeof river.points = [];
+    // Helper to calculate angle between two vectors
+    const angleBetween = (dx1: number, dz1: number, dx2: number, dz2: number): number => {
+      const len1 = Math.sqrt(dx1 * dx1 + dz1 * dz1);
+      const len2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+      if (len1 < 0.001 || len2 < 0.001) return 0;
+      const dot = (dx1 * dx2 + dz1 * dz2) / (len1 * len2);
+      return Math.acos(Math.max(-1, Math.min(1, dot)));
+    };
 
-    for (let i = 0; i < river.points.length - 1; i++) {
-      const p1 = river.points[i]!;
-      const p2 = river.points[i + 1]!;
+    // 1. Smooth sharp corners using arc insertion (same as roads)
+    const smoothedPoints: { x: number; z: number }[] = [];
+    const cornerThreshold = Math.PI / 12; // 15 degrees
+    const maxTurnAngle = Math.PI / 2; // 90 degrees
+    const baseCornerRadius = Math.max(width * 2, 10);
+
+    for (let i = 0; i < points.length; i++) {
+      const curr = points[i]!;
+
+      if (i === 0 || i === points.length - 1) {
+        smoothedPoints.push({ x: curr.x, z: curr.z });
+        continue;
+      }
+
+      const prev = points[i - 1]!;
+      const next = points[i + 1]!;
+
+      const dx1 = curr.x - prev.x;
+      const dz1 = curr.z - prev.z;
+      const dx2 = next.x - curr.x;
+      const dz2 = next.z - curr.z;
+
+      const angle = angleBetween(dx1, dz1, dx2, dz2);
+      const effectiveAngle = Math.min(angle, maxTurnAngle);
+
+      if (effectiveAngle > cornerThreshold) {
+        // Insert arc
+        const len1 = Math.sqrt(dx1 * dx1 + dz1 * dz1);
+        const len2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+        const ndx1 = dx1 / len1;
+        const ndz1 = dz1 / len1;
+        const ndx2 = dx2 / len2;
+        const ndz2 = dz2 / len2;
+
+        const sharpnessFactor = effectiveAngle / maxTurnAngle;
+        const cornerRadius = baseCornerRadius * (1 + sharpnessFactor);
+        const arcDist = Math.min(cornerRadius, len1 * 0.45, len2 * 0.45);
+
+        const arcStart = { x: curr.x - ndx1 * arcDist, z: curr.z - ndz1 * arcDist };
+        const arcEnd = { x: curr.x + ndx2 * arcDist, z: curr.z + ndz2 * arcDist };
+
+        // Control point for Bezier
+        const controlPullback = 0.3 + 0.4 * (1 - sharpnessFactor);
+        const controlX = curr.x - ndx1 * arcDist * controlPullback + ndx2 * arcDist * controlPullback;
+        const controlZ = curr.z - ndz1 * arcDist * controlPullback + ndz2 * arcDist * controlPullback;
+
+        smoothedPoints.push(arcStart);
+
+        const numArcPoints = Math.max(5, Math.ceil(effectiveAngle / (Math.PI / 16)));
+        for (let j = 1; j < numArcPoints; j++) {
+          const t = j / numArcPoints;
+          const oneMinusT = 1 - t;
+          const x = oneMinusT * oneMinusT * arcStart.x +
+            2 * oneMinusT * t * controlX +
+            t * t * arcEnd.x;
+          const z = oneMinusT * oneMinusT * arcStart.z +
+            2 * oneMinusT * t * controlZ +
+            t * t * arcEnd.z;
+          smoothedPoints.push({ x, z });
+        }
+        smoothedPoints.push(arcEnd);
+      } else {
+        smoothedPoints.push({ x: curr.x, z: curr.z });
+      }
+    }
+
+    // 2. Subdivide long segments
+    const densePoints: { x: number; z: number }[] = [];
+    const maxSegmentLength = 5;
+
+    for (let i = 0; i < smoothedPoints.length - 1; i++) {
+      const p1 = smoothedPoints[i]!;
+      const p2 = smoothedPoints[i + 1]!;
       const dx = p2.x - p1.x;
       const dz = p2.z - p1.z;
       const segmentLength = Math.sqrt(dx * dx + dz * dz);
-      const numSubdivisions = Math.ceil(segmentLength / maxSegmentLength);
 
-      for (let j = 0; j < numSubdivisions; j++) {
-        const t = j / numSubdivisions;
-        points.push({
-          x: p1.x + dx * t,
-          z: p1.z + dz * t,
-        });
+      densePoints.push({ x: p1.x, z: p1.z });
+
+      if (segmentLength > maxSegmentLength) {
+        const numSubdivisions = Math.ceil(segmentLength / maxSegmentLength);
+        for (let j = 1; j < numSubdivisions; j++) {
+          const t = j / numSubdivisions;
+          densePoints.push({ x: p1.x + dx * t, z: p1.z + dz * t });
+        }
       }
     }
-    // Add last point
-    points.push(river.points[river.points.length - 1]!);
+    // Add final point
+    const last = smoothedPoints[smoothedPoints.length - 1]!;
+    densePoints.push({ x: last.x, z: last.z });
 
-    // Create strip geometry
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i]!;
+    // 3. Generate geometry with averaged normals
+    const vertices: number[] = [];
+    const indices: number[] = [];
 
-      // Calculate perpendicular direction for river width
-      let perpX = 0, perpZ = 0;
-      if (i < points.length - 1) {
-        const next = points[i + 1]!;
-        const dx = next.x - p.x;
-        const dz = next.z - p.z;
-        const length = Math.sqrt(dx * dx + dz * dz);
-        if (length > 0.001) {
-          perpX = -dz / length;
-          perpZ = dx / length;
-        }
-      } else if (i > 0) {
-        const prev = points[i - 1]!;
-        const dx = p.x - prev.x;
-        const dz = p.z - prev.z;
-        const length = Math.sqrt(dx * dx + dz * dz);
-        if (length > 0.001) {
-          perpX = -dz / length;
-          perpZ = dx / length;
+    for (let i = 0; i < densePoints.length; i++) {
+      const p = densePoints[i]!;
+
+      // Calculate averaged perpendicular
+      let perpX: number, perpZ: number;
+      if (i === 0) {
+        const next = densePoints[1]!;
+        const perp = getPerp(next.x - p.x, next.z - p.z);
+        perpX = perp.x;
+        perpZ = perp.z;
+      } else if (i === densePoints.length - 1) {
+        const prev = densePoints[i - 1]!;
+        const perp = getPerp(p.x - prev.x, p.z - prev.z);
+        perpX = perp.x;
+        perpZ = perp.z;
+      } else {
+        const prev = densePoints[i - 1]!;
+        const next = densePoints[i + 1]!;
+        const perp1 = getPerp(p.x - prev.x, p.z - prev.z);
+        const perp2 = getPerp(next.x - p.x, next.z - p.z);
+        // Average the normals
+        perpX = (perp1.x + perp2.x) / 2;
+        perpZ = (perp1.z + perp2.z) / 2;
+        const normLen = Math.sqrt(perpX * perpX + perpZ * perpZ);
+        if (normLen > 0.001) {
+          perpX /= normLen;
+          perpZ /= normLen;
+        } else {
+          perpX = perp1.x;
+          perpZ = perp1.z;
         }
       }
 
-      // Left and right edge positions
-      const leftX = p.x + perpX * halfWidth;
-      const leftZ = p.z + perpZ * halfWidth;
-      const rightX = p.x - perpX * halfWidth;
-      const rightZ = p.z - perpZ * halfWidth;
+      // Generate left and right vertices with width tapering for lake connections
+      let effectiveHalfWidth = halfWidth;
 
-      // Get elevation at edges (water follows terrain depression)
+      // Check if this river connects to a lake and taper width near the end
+      const connectsToLake = (river as any).connectsToLake === true;
+      if (connectsToLake) {
+        // Calculate distance from end of river
+        const totalPoints = densePoints.length;
+        const pointsFromEnd = totalPoints - 1 - i;
+
+        // Taper over the last 30m (approximately 6 points at 5m spacing)
+        const taperDistance = 30; // meters
+        const taperPoints = Math.ceil(taperDistance / maxSegmentLength);
+
+        if (pointsFromEnd < taperPoints) {
+          // Calculate taper factor (1.0 at start of taper, 0.0 at end)
+          const taperFactor = pointsFromEnd / taperPoints;
+          // Use smooth cubic easing for natural taper
+          const smoothTaper = taperFactor * taperFactor * (3 - 2 * taperFactor);
+          effectiveHalfWidth = halfWidth * smoothTaper;
+        }
+      }
+
+      const leftX = p.x + perpX * effectiveHalfWidth;
+      const leftZ = p.z + perpZ * effectiveHalfWidth;
+      const rightX = p.x - perpX * effectiveHalfWidth;
+      const rightZ = p.z - perpZ * effectiveHalfWidth;
+
       const leftElev = getElevationAt(leftX, leftZ);
       const rightElev = getElevationAt(rightX, rightZ);
+      const centerElev = getElevationAt(p.x, p.z);
 
-      // Check if this point is near a lake connection
+      // Check lake connection
       const nearLake = isNearLake(p.x, p.z);
-      // Slightly elevate river at lake connections to render above lake edge
       const heightBoost = nearLake ? 0.05 : 0;
 
-      // Water is at lowest point plus small offset
-      const leftY = leftElev + waterHeight + heightBoost;
-      const rightY = rightElev + waterHeight + heightBoost;
+      // Use center elevation only for water height to ensure longitudinal smoothness
+      // Banks can be noisy in mountains, but center path should be smooth after generation
+      const waterY = centerElev + waterHeight + heightBoost;
+      const leftY = waterY;
+      const rightY = waterY;
 
-      // Add vertices (left and right edge)
       vertices.push(leftX, leftY, leftZ);
       vertices.push(rightX, rightY, rightZ);
 
-      // Create triangles (except for last point)
-      if (i < points.length - 1) {
+      // Add indices
+      if (i < densePoints.length - 1) {
         const baseIdx = i * 2;
-        // Two triangles per segment
         indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
         indices.push(baseIdx + 1, baseIdx + 3, baseIdx + 2);
       }
@@ -722,7 +841,7 @@ export class MapRenderer {
     const cellSizeZ = map.height / rows;
 
     // Helper to get terrain elevation at world position using bilinear interpolation
-    const getElevationAt = (worldX: number, worldZ: number): number => {
+    const getTerrainElevationAt = (worldX: number, worldZ: number): number => {
       // Convert to grid coordinates (floating point)
       const gx = (worldX + map.width / 2) / cellSizeX;
       const gz = (worldZ + map.height / 2) / cellSizeZ;
@@ -755,8 +874,49 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;        // Interpolate along z
     };
 
+    // Helper to get global surface elevation (terrain or bridge)
+    const getSurfaceElevationAt = (worldX: number, worldZ: number): number => {
+      // Check for bridge presence
+      for (const bridge of map.bridges) {
+        const cosA = Math.cos(-bridge.angle);
+        const sinA = Math.sin(-bridge.angle);
+        const dx = worldX - bridge.x;
+        const dz = worldZ - bridge.z;
+        const localX = dx * cosA - dz * sinA;
+        const localZ = dx * sinA + dz * cosA;
+
+        // If within bridge footprint, return bridge elevation
+        if (Math.abs(localX) < bridge.length / 2 + 0.1 && Math.abs(localZ) < bridge.width / 2 + 0.1) {
+          return bridge.elevation;
+        }
+      }
+      return getTerrainElevationAt(worldX, worldZ);
+    };
+
     // Helper to check if a point is over water (river) or a bridge segment
     const isOverBridgeOrWater = (worldX: number, worldZ: number, roadId?: string): boolean => {
+      const roadElevation = getTerrainElevationAt(worldX, worldZ);
+
+      // Check for bridge presence (overpass or bridge object)
+      for (const bridge of map.bridges) {
+        // Use OBB check for precise alignment
+        const cosA = Math.cos(-bridge.angle);
+        const sinA = Math.sin(-bridge.angle);
+        const dx = worldX - bridge.x;
+        const dz = worldZ - bridge.z;
+        const localX = dx * cosA - dz * sinA;
+        const localZ = dx * sinA + dz * cosA;
+
+        // Only skip if the road is actually ON the bridge (vertically close)
+        // This allows underpasses to render correctly beneath overpasses
+        if (Math.abs(localX) < bridge.length / 2 + 0.5 && Math.abs(localZ) < bridge.width / 2 + 0.5) {
+          if (Math.abs(roadElevation - bridge.elevation) < 1.0) {
+            return true;
+          }
+        }
+      }
+
+      // Also check terrain-based river/water
       const gridX = Math.floor((worldX + map.width / 2) / cellSizeX);
       const gridZ = Math.floor((worldZ + map.height / 2) / cellSizeZ);
       const clampedX = Math.max(0, Math.min(cols - 1, gridX));
@@ -765,21 +925,33 @@ export class MapRenderer {
 
       if (terrainType === 'river' || terrainType === 'water') return true;
 
-      // Check if there's an overpass or bridge for this road at this position
-      if (roadId) {
-        for (const bridge of map.bridges) {
-          if (bridge.roadId === roadId) {
-            const dx = worldX - bridge.x;
-            const dz = worldZ - bridge.z;
-            const distSq = dx * dx + dz * dz;
-            // Buffer slightly larger than half length to ensure clean connection (stop before bridge starts)
-            const bridgeBuffer = bridge.length * 0.5 + 2;
-            if (distSq < bridgeBuffer * bridgeBuffer) return true;
-          }
+      return false;
+    };
+
+    // Special helper for lane markings that only skips segments that are truly "over water" 
+    // without a bridge deck underneath them.
+    const isOverWaterOnly = (worldX: number, worldZ: number): boolean => {
+      // If we are on a bridge, we are NOT "only over water" (we have a surface)
+      for (const bridge of map.bridges) {
+        const cosA = Math.cos(-bridge.angle);
+        const sinA = Math.sin(-bridge.angle);
+        const dx = worldX - bridge.x;
+        const dz = worldZ - bridge.z;
+        const localX = dx * cosA - dz * sinA;
+        const localZ = dx * sinA + dz * cosA;
+
+        if (Math.abs(localX) < bridge.length / 2 + 0.5 && Math.abs(localZ) < bridge.width / 2 + 0.5) {
+          return false; // On a bridge, so not just water
         }
       }
 
-      return false;
+      const gridX = Math.floor((worldX + map.width / 2) / cellSizeX);
+      const gridZ = Math.floor((worldZ + map.height / 2) / cellSizeZ);
+      const clampedX = Math.max(0, Math.min(cols - 1, gridX));
+      const clampedZ = Math.max(0, Math.min(rows - 1, gridZ));
+      const terrainType = map.terrain[clampedZ]?.[clampedX]?.type;
+
+      return terrainType === 'river' || terrainType === 'water';
     };
 
     // Collect geometries for batch merging (better performance)
@@ -796,7 +968,7 @@ export class MapRenderer {
 
       // Create smooth road mesh using continuous strip geometry
       // Skip segments over water (bridges will be rendered separately)
-      const roadGeometry = this.createRoadStripGeometry(road, getElevationAt, (x, z) => isOverBridgeOrWater(x, z, road.id));
+      const roadGeometry = this.createRoadStripGeometry(road, getSurfaceElevationAt, (x, z) => isOverBridgeOrWater(x, z, road.id));
       if (roadGeometry) {
         roadGeometriesByType[road.type].push(roadGeometry);
       }
@@ -820,10 +992,10 @@ export class MapRenderer {
     this.mapGroup.add(roadGroup);
 
     // Render intersections (patches where roads meet)
-    this.renderIntersections(map.intersections, roads, getElevationAt);
+    this.renderIntersections(map.intersections, roads, getSurfaceElevationAt);
 
     // Render lane markings for paved roads (pass intersections to stop markings at them)
-    this.renderLaneMarkings(roads, map.intersections, getElevationAt, isOverBridgeOrWater);
+    this.renderLaneMarkings(roads, map.intersections, getSurfaceElevationAt, isOverBridgeOrWater, isOverWaterOnly);
   }
 
   /**
@@ -1228,7 +1400,8 @@ export class MapRenderer {
     roads: Road[],
     intersections: Intersection[],
     getElevationAt: (x: number, z: number) => number,
-    isOverBridgeOrWater: (x: number, z: number, roadId?: string) => boolean
+    isOverBridgeOrWater: (x: number, z: number, roadId?: string) => boolean,
+    isOverWaterOnly: (x: number, z: number) => boolean
   ): void {
     const markingsGroup = new THREE.Group();
     markingsGroup.name = 'lane-markings';
@@ -1284,8 +1457,8 @@ export class MapRenderer {
       transparent: true,
     });
 
-    // Wrapped skipper that passes the specific road ID
-    const getSkipperForRoad = (roadId?: string) => (x: number, z: number) => isOverBridgeOrWater(x, z, roadId);
+    // Use the passed isOverWaterOnly for markings to ensure they show up on bridges
+    const getSkipperForMarkings = () => (x: number, z: number) => isOverWaterOnly(x, z);
 
     const lineWidth = 0.3; // Width of lane markings in meters (smaller and more subtle)
     const lineHeightOffset = 0.1; // Height above road surface (minimal to avoid visible gap)
@@ -1412,7 +1585,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
+          getSkipperForMarkings()
         );
         if (centerlineGeometry) {
           const centerlineMesh = new THREE.Mesh(centerlineGeometry, centerlineMaterial);
@@ -1428,7 +1601,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
+          getSkipperForMarkings()
         );
         if (leftEdgeGeometry) {
           const leftEdgeMesh = new THREE.Mesh(leftEdgeGeometry, edgeLineMaterial);
@@ -1444,7 +1617,7 @@ export class MapRenderer {
           getElevationAt,
           lineHeightOffset,
           road.width, // Pass road width for proper elevation sampling
-          getSkipperForRoad(road.id) // Pass water/bridge detection to skip bridge sections
+          getSkipperForMarkings()
         );
         if (rightEdgeGeometry) {
           const rightEdgeMesh = new THREE.Mesh(rightEdgeGeometry, edgeLineMaterial);
@@ -1658,12 +1831,9 @@ export class MapRenderer {
         const x = startX + (endX - startX) * t;
         const z = startZ + (endZ - startZ) * t;
 
-        // Smooth elevation curve - higher in middle, lower at ends
-        // Use a parabola: y = -4*(t-0.5)^2 + 1 scaled to elevations
-        const archFactor = -4 * (t - 0.5) * (t - 0.5) + 1; // 0 at ends, 1 at center
-        const baseElevation = startElevation + (endElevation - startElevation) * t;
-        const archHeight = Math.max(0, centerElevation - Math.min(startElevation, endElevation));
-        const y = baseElevation + archFactor * archHeight;
+        // Use linear interpolation for a smooth, flat deck transition
+        // This prevents the "up and down" arching that caused wobbliness
+        const y = startElevation + (endElevation - startElevation) * t;
 
         // Calculate perpendicular for width
         const perpX = -sinAngle;
@@ -1714,10 +1884,8 @@ export class MapRenderer {
           const x = startX + (endX - startX) * t;
           const z = startZ + (endZ - startZ) * t;
 
-          const archFactor = -4 * (t - 0.5) * (t - 0.5) + 1;
-          const baseElevation = startElevation + (endElevation - startElevation) * t;
-          const archHeight = Math.max(0, centerElevation - Math.min(startElevation, endElevation));
-          const y = baseElevation + archFactor * archHeight;
+          // Match linear deck elevation
+          const y = startElevation + (endElevation - startElevation) * t;
 
           const perpX = -sinAngle;
           const perpZ = cosAngle;

@@ -108,6 +108,10 @@ export class MapGenerator {
   // Terrain features
   private terrainFeatures: TerrainFeature[] = [];
 
+  // Elevation slope tracking
+  private riverSource: { x: number; z: number } | null = null;
+  private riverSinks: { x: number; z: number }[] = [];
+
   constructor(seed: number, size: MapSize, biomeOverride?: BiomeType) {
     this.seed = seed;
     this.size = size;
@@ -173,11 +177,12 @@ export class MapGenerator {
     // Create bridges where roads cross rivers
     this.createBridgesForRoads(roads);
 
+    // Create bridges where roads cross at different elevations (overpasses/underpasses)
+    // MUST be called BEFORE gradeTerrainAroundRoads so we can compare planned road elevations
+    this.createBridgesForRoadCrossings(roads);
+
     // Grade terrain around highways to create ramps and cuts
     this.gradeTerrainAroundRoads(roads);
-
-    // Create bridges where roads cross at different elevations (overpasses/underpasses)
-    this.createBridgesForRoadCrossings(roads);
 
     // Add settlement internal streets to road list (filter out those overlapping main roads)
     const settlementStreets = SettlementGenerator.flattenSettlementStreets(this.settlements);
@@ -225,6 +230,9 @@ export class MapGenerator {
         maxElevation = Math.max(maxElevation, cell.elevation);
       }
     }
+
+    // Final global smoothing pass to ensure everything is perfectly blended
+    this.smoothWaterBankElevations();
 
     // Validate map balance and log metrics
     this.validateMapBalance();
@@ -751,18 +759,49 @@ export class MapGenerator {
       this.rng.nextFloat(config.featureCount.min, config.featureCount.max + 1)
     );
 
-    // Mountain biome needs MORE features to actually look mountainous
-    if (this.biome === 'mountains') {
-      featureCount = Math.max(featureCount * 2, 6); // At least 6 features, double the normal count
-    }
-
     // Calculate deployment zone buffer (scaled to map size)
     const deploymentBuffer = Math.max(50, Math.max(this.width, this.height) * 0.1);
 
     // Map edge margin (10% of smallest dimension)
     const edgeMargin = Math.min(this.width, this.height) * 0.1;
 
-    // Try to place each feature
+    // Mountain biome uses special distributed placement to avoid center clustering
+    if (this.biome === 'mountains') {
+      // Reduce deployment buffer for mountain biome to allow more placement (mountains can be near deployment zones)
+      const mountainDeploymentBuffer = deploymentBuffer * 0.5;
+      this.createDistributedMountainRanges(deploymentZones, mountainDeploymentBuffer, edgeMargin);
+      return; // Skip normal feature generation
+    }
+
+    // Guaranteed features for specific biomes
+    if (this.biome === 'mesa') {
+      // Always generate at least one plateau for mesa
+      const plateau = this.createTerrainFeature(
+        'plateau',
+        deploymentZones,
+        deploymentBuffer,
+        edgeMargin
+      );
+
+      if (plateau) {
+        this.terrainFeatures.push(plateau);
+
+        // ALWAYS create a cluster for the main plateau
+        const clusterMembers = this.createFeatureCluster(
+          plateau,
+          'plateau',
+          deploymentZones,
+          deploymentBuffer,
+          edgeMargin
+        );
+        this.terrainFeatures.push(...clusterMembers);
+
+        // Count this towards the total feature count
+        featureCount = Math.max(0, featureCount - 1);
+      }
+    }
+
+    // Try to place each remaining feature
     for (let i = 0; i < featureCount; i++) {
       const featureType = this.selectFeatureType(featureChances);
       const feature = this.createTerrainFeature(
@@ -791,6 +830,311 @@ export class MapGenerator {
   }
 
   /**
+   * Create distributed mountain ranges across multiple map regions
+   * Prevents all mountains from clustering in the center by placing ranges in different strategic areas
+   */
+  private createDistributedMountainRanges(
+    deploymentZones: DeploymentZone[],
+    deploymentBuffer: number,
+    edgeMargin: number
+  ): void {
+    // Instead of fixed regions, use a more natural approach:
+    // 1. Scatter anchor mountains with bias away from center
+    // 2. Create ranges around successful anchors
+    // 3. Add standalone mountains in gaps
+
+    // Determine how many mountain ranges to create (5-8 ranges for proper mountain biome)
+    const numRanges = Math.floor(this.rng.nextFloat(5, 9));
+
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+
+    // Create mountain ranges with natural scatter
+    for (let i = 0; i < numRanges; i++) {
+      // Use rejection sampling to bias placement away from center
+      let x = 0, z = 0;
+      let attempts = 0;
+      const maxAttempts = 100;
+
+      while (attempts < maxAttempts) {
+        // Random position across entire map
+        x = this.rng.nextFloat(-halfWidth * 0.9, halfWidth * 0.9);
+        z = this.rng.nextFloat(-halfHeight * 0.9, halfHeight * 0.9);
+
+        // Calculate distance from center (normalized 0-1)
+        const distFromCenter = Math.sqrt((x / halfWidth) ** 2 + (z / halfHeight) ** 2);
+
+        // Bias: prefer positions further from center (60%+ distance from center)
+        // Accept with probability based on distance
+        const acceptProbability = Math.max(0.2, distFromCenter);
+        if (this.rng.next() < acceptProbability) {
+          break; // Accept this position
+        }
+        attempts++;
+      }
+
+      // Try to place an anchor mountain at this position
+      const anchor = this.createMountainAtPosition(
+        x,
+        z,
+        deploymentZones,
+        deploymentBuffer,
+        edgeMargin
+      );
+
+      if (anchor) {
+        this.terrainFeatures.push(anchor);
+
+        // Create a cluster (range) around this anchor
+        const clusterMembers = this.createFeatureCluster(
+          anchor,
+          'mountain',
+          deploymentZones,
+          deploymentBuffer,
+          edgeMargin
+        );
+        this.terrainFeatures.push(...clusterMembers);
+      } else {
+        console.warn(`[MapGen] Failed to place anchor mountain ${i + 1}`);
+      }
+    }
+
+    // Add standalone mountains (50-70% of total mountain count)
+    // These are scattered across the map without clustering
+    const totalMountains = this.terrainFeatures.filter(f => f.type === 'mountain').length;
+    const targetStandalone = Math.floor(totalMountains * this.rng.nextFloat(0.5, 0.7));
+
+    let standalonesCreated = 0;
+    const maxStandaloneAttempts = targetStandalone * 10; // Allow many attempts
+    let standaloneAttempts = 0;
+
+    while (standalonesCreated < targetStandalone && standaloneAttempts < maxStandaloneAttempts) {
+      standaloneAttempts++;
+
+      // Random position with slight bias away from center
+      const x = this.rng.nextFloat(-halfWidth * 0.9, halfWidth * 0.9);
+      const z = this.rng.nextFloat(-halfHeight * 0.9, halfHeight * 0.9);
+
+      const standalone = this.createMountainAtPosition(
+        x,
+        z,
+        deploymentZones,
+        deploymentBuffer,
+        edgeMargin
+      );
+
+      if (standalone) {
+        this.terrainFeatures.push(standalone);
+        standalonesCreated++;
+      }
+    }
+
+
+
+    // Also add some other terrain features for variety (hills, ridges, valleys)
+    const config = ELEVATION_CONFIGS[this.size];
+    const otherFeatureCount = Math.floor(this.rng.nextFloat(config.featureCount.min, config.featureCount.max + 1));
+
+    for (let i = 0; i < otherFeatureCount; i++) {
+      // Select non-mountain features
+      const featureTypes: TerrainFeatureType[] = ['hill', 'ridge', 'valley', 'plains'];
+      const featureType = featureTypes[Math.floor(this.rng.next() * featureTypes.length)]!;
+
+      const feature = this.createTerrainFeature(
+        featureType,
+        deploymentZones,
+        deploymentBuffer,
+        edgeMargin
+      );
+
+      if (feature) {
+        this.terrainFeatures.push(feature);
+      }
+    }
+  }
+
+  /**
+   * Create a mountain at a specific position
+   */
+  private createMountainAtPosition(
+    targetX: number,
+    targetZ: number,
+    deploymentZones: DeploymentZone[],
+    deploymentBuffer: number,
+    edgeMargin: number
+  ): TerrainFeature | null {
+    const featureParams = FEATURE_PARAMS['mountain'];
+
+    // Scale radius with map size
+    const mapScale = Math.max(this.width, this.height) / 1000;
+    const radiusScale = featureParams.radiusScaleWithMap ? Math.max(1, mapScale) : 1;
+
+    const radius = this.rng.nextFloat(
+      featureParams.radiusRange.min * radiusScale,
+      featureParams.radiusRange.max * radiusScale
+    );
+
+    // Try positions near the target with some variance
+    const maxAttempts = 50;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Add some randomness around target position (within 100m)
+      const variance = 100;
+      const x = targetX + this.rng.nextFloat(-variance, variance);
+      const z = targetZ + this.rng.nextFloat(-variance, variance);
+
+      // Check map bounds with reduced edge margin
+      const effectiveMargin = edgeMargin * 0.5;
+      if (Math.abs(x) > this.width / 2 - effectiveMargin - radius ||
+        Math.abs(z) > this.height / 2 - effectiveMargin - radius) {
+        continue;
+      }
+
+      // Check deployment zones
+      if (!this.isPositionValidForFeature(x, z, radius, deploymentZones, deploymentBuffer)) {
+        continue;
+      }
+
+      // Check spacing - allow up to 50% overlap for realistic ranges
+      let tooClose = false;
+      for (const existing of this.terrainFeatures) {
+        const dx = x - existing.x;
+        const dz = z - existing.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        // Mountains can overlap up to 50% (so minimum distance is 50% of combined radii)
+        // This creates realistic mountain ranges with overlapping peaks
+        const minDist = (radius + existing.params.radius) * 0.5;
+
+        if (dist < minDist) {
+          tooClose = true;
+          break;
+        }
+      }
+
+      if (tooClose) continue;
+
+      // Valid position found! Create the mountain
+      let elevationDelta = this.rng.nextFloat(
+        featureParams.elevationRange.min,
+        featureParams.elevationRange.max
+      );
+
+      // If there are mountains on the plains biome, they are never more than 50% the max height
+      if (this.biome === 'plains') {
+        elevationDelta *= 0.5;
+      }
+
+      const params: any = {
+        elevationDelta,
+        radius,
+        falloffExponent: 2,
+        peakSharpness: this.rng.nextFloat(0.3, 0.7),
+      };
+
+      params.falloffExponent = this.rng.nextFloat(1.8, 2.5);
+
+      return {
+        id: `mountain_${this.terrainFeatures.length}`,
+        type: 'mountain',
+        x,
+        z,
+        params,
+      };
+    }
+
+    // Failed to find valid position
+    return null;
+  }
+
+  /**
+   * Create a terrain feature within a specific region
+   */
+  private createTerrainFeatureInRegion(
+    type: TerrainFeatureType,
+    region: { centerX: number; centerZ: number; radiusX: number; radiusZ: number },
+    deploymentZones: DeploymentZone[],
+    deploymentBuffer: number,
+    edgeMargin: number
+  ): TerrainFeature | null {
+    const featureParams = FEATURE_PARAMS[type];
+
+    // Scale radius with map size if needed
+    const mapScale = Math.max(this.width, this.height) / 1000;
+    const radiusScale = featureParams.radiusScaleWithMap ? Math.max(1, mapScale) : 1;
+
+    const radius = this.rng.nextFloat(
+      featureParams.radiusRange.min * radiusScale,
+      featureParams.radiusRange.max * radiusScale
+    );
+
+    // Try multiple positions within the region (more attempts for mountains)
+    const maxAttempts = type === 'mountain' ? 50 : 20;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Random position within region bounds
+      const x = region.centerX + this.rng.nextFloat(-region.radiusX, region.radiusX);
+      const z = region.centerZ + this.rng.nextFloat(-region.radiusZ, region.radiusZ);
+
+      // Check map bounds with edge margin (reduced for mountains to allow edge placement)
+      const effectiveMargin = type === 'mountain' ? edgeMargin * 0.5 : edgeMargin;
+      if (Math.abs(x) > this.width / 2 - effectiveMargin - radius ||
+        Math.abs(z) > this.height / 2 - effectiveMargin - radius) {
+        continue;
+      }
+
+      // Check if position is valid
+      if (!this.isPositionValidForFeature(x, z, radius, deploymentZones, deploymentBuffer)) {
+        continue;
+      }
+
+      // Check spacing with existing features (more lenient for mountains)
+      let tooClose = false;
+      for (const existing of this.terrainFeatures) {
+        const dx = x - existing.x;
+        const dz = z - existing.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        // Allow mountains to be closer together (30% instead of 50%)
+        const minDist = type === 'mountain' ? (radius + existing.params.radius) * 0.3 : (radius + existing.params.radius) * 0.5;
+
+        if (dist < minDist) {
+          tooClose = true;
+          break;
+        }
+      }
+
+      if (tooClose) continue;
+
+      // Valid position found! Create the feature
+      const elevationDelta = this.rng.nextFloat(
+        featureParams.elevationRange.min,
+        featureParams.elevationRange.max
+      );
+
+      const params: any = {
+        elevationDelta,
+        radius,
+        falloffExponent: 2,
+      };
+
+      // Add mountain-specific parameters
+      if (type === 'mountain') {
+        params.peakSharpness = this.rng.nextFloat(0.3, 0.7);
+        params.falloffExponent = this.rng.nextFloat(1.8, 2.5);
+      }
+
+      return {
+        id: `${type}_${this.terrainFeatures.length}`,
+        type,
+        x,
+        z,
+        params,
+      };
+    }
+
+    // Failed to find valid position in this region
+    return null;
+  }
+
+  /**
    * Create a cluster of similar features around an anchor feature
    * Used to create mesa regions (clustered plateaus) and mountain ranges (clustered mountains)
    */
@@ -803,8 +1147,8 @@ export class MapGenerator {
   ): TerrainFeature[] {
     const clusterMembers: TerrainFeature[] = [];
 
-    // Number of cluster members (2-4 additional features)
-    const memberCount = Math.floor(this.rng.nextFloat(2, 5));
+    // Number of cluster members (4-7 additional features for mountain ranges)
+    const memberCount = Math.floor(this.rng.nextFloat(4, 8));
 
     // Cluster radius - how far cluster members can be from anchor
     // Larger for plateaus (mesas are spread out), tighter for mountains
@@ -964,10 +1308,16 @@ export class MapGenerator {
       if (tooClose) continue;
 
       // Valid position found! Create the feature
-      const elevationDelta = this.rng.nextFloat(
+      let elevationDelta = this.rng.nextFloat(
         featureParams.elevationRange.min,
         featureParams.elevationRange.max
       );
+
+      // Biome-specific height scaling for plateaus
+      // Plains: reduce plateau heights by 50-70% for gentler terrain (15-30m vs 30-60m in mesa)
+      if (type === 'plateau' && this.biome === 'plains') {
+        elevationDelta *= this.rng.nextFloat(0.3, 0.5); // 30-50% of original height
+      }
 
       const params: any = {
         elevationDelta,
@@ -2720,22 +3070,95 @@ export class MapGenerator {
 
     console.log(`Found ${nsRoutes.length} N-S routes and ${ewRoutes.length} E-W routes`);
 
-    // Calculate needed routes
-    const nsNeeded = Math.max(0, minNSRoutes - nsRoutes.length);
+    // --- N/S Roads Logic ---
+    // We need at least 3 N/S roads total.
+    // We specifically need:
+    // 1. One "straight" highway (low variance)
+    // 2. One "curvy" highway (high variance/diagonal)
+    // The existing nsRoutes might count towards the total, but we force the specific highways if missing.
 
-    // We want at least 5 total, so calculate how many E-W we need
-    // considering we will add nsNeeded routes
-    const currentProjectedTotal = nsRoutes.length + ewRoutes.length + nsNeeded;
-    const ewNeeded = Math.max(0, minTotalRoutes - currentProjectedTotal);
+    // 1. Ensure Straight Highway
+    const hasStraightHighway = nsRoutes.some(r => r.road.type === 'highway' || r.road.type === 'interstate');
+    // Technically we should check curve amount, but for now just existence of a major road suggests one might be straight-ish.
+    // However, the requirement is explicit: generate one if we don't think we have a definitive "straight" one from *this* function (although mainCorridor is usually straight-ish).
+    // Let's force generate a straight highway if we have fewer than 2 total highways, OR if we just want to guarantee it.
+    // Given the prompt "2 of the NS roads should be highways", let's track highways.
 
-    console.log(`Adding ${nsNeeded} N-S routes and ${ewNeeded} E-W routes`);
+    let nsHighways = nsRoutes.filter(r => r.road.type === 'highway' || r.road.type === 'interstate').length;
 
-    // Add north-south routes
-    for (let i = 0; i < nsNeeded; i++) {
+    // We'll generate the Straight Highway if we have < 1 highway
+    if (nsHighways < 1) {
       const existingXPositions = nsRoutes.map(r => r.position);
       const newX = this.findDiversePosition(existingXPositions, this.width);
 
-      // Add margin to keep roads within battlefield boundaries
+      const margin = 10;
+      const startZ = -this.height / 2 + margin;
+      const endZ = this.height / 2 - margin;
+
+      // STRAIGHT: Minimal variance in X
+      const points = this.generateSmoothBezierPath(
+        { x: newX + this.rng.nextFloat(-5, 5), z: startZ },
+        { x: newX + this.rng.nextFloat(-5, 5), z: endZ },
+        'highway',
+        towns
+      );
+
+      const newRoad: Road = {
+        id: `connectivity_ns_straight_highway`,
+        points,
+        width: ROAD_WIDTHS.highway,
+        type: 'highway',
+      };
+
+      roads.push(newRoad);
+      nsRoutes.push({ direction: 'north-south', position: newX, road: newRoad });
+      nsHighways++;
+      console.log(`Added N-S Straight Highway at x=${Math.round(newX)}`);
+    }
+
+    // 2. Ensure Curvy/Diagonal Highway
+    // We'll generate this if we have < 2 highways.
+    if (nsHighways < 2) {
+      const existingXPositions = nsRoutes.map(r => r.position);
+      const newX = this.findDiversePosition(existingXPositions, this.width);
+
+      const margin = 10;
+      const startZ = -this.height / 2 + margin;
+      const endZ = this.height / 2 - margin;
+
+      // CURVY/DIAGONAL: Large variance in X between start and end
+      // 30-50% of width delta
+      const deltaX = this.width * this.rng.nextFloat(0.3, 0.5);
+      const direction = this.rng.next() > 0.5 ? 1 : -1;
+
+      const startX = Math.max(-this.width / 2 + margin, Math.min(this.width / 2 - margin, newX - (deltaX / 2 * direction)));
+      const endX = Math.max(-this.width / 2 + margin, Math.min(this.width / 2 - margin, newX + (deltaX / 2 * direction)));
+
+      const points = this.generateSmoothBezierPath(
+        { x: startX, z: startZ },
+        { x: endX, z: endZ },
+        'highway',
+        towns
+      );
+
+      const newRoad: Road = {
+        id: `connectivity_ns_curvy_highway`,
+        points,
+        width: ROAD_WIDTHS.highway,
+        type: 'highway',
+      };
+
+      roads.push(newRoad);
+      nsRoutes.push({ direction: 'north-south', position: (startX + endX) / 2, road: newRoad });
+      nsHighways++;
+      console.log(`Added N-S Curvy Highway from x=${Math.round(startX)} to x=${Math.round(endX)}`);
+    }
+
+    // 3. Fill remaining N/S quota (min 3 total) with standard town roads
+    const nsNeeded = Math.max(0, minNSRoutes - nsRoutes.length);
+    for (let i = 0; i < nsNeeded; i++) {
+      const existingXPositions = nsRoutes.map(r => r.position);
+      const newX = this.findDiversePosition(existingXPositions, this.width);
       const margin = 10;
       const startZ = -this.height / 2 + margin;
       const endZ = this.height / 2 - margin;
@@ -2743,37 +3166,50 @@ export class MapGenerator {
       const points = this.generateSmoothBezierPath(
         { x: newX + this.rng.nextFloat(-15, 15), z: startZ },
         { x: newX + this.rng.nextFloat(-15, 15), z: endZ },
-        'town', // Use town roads for connectivity
+        'town',
         towns
       );
 
       const newRoad: Road = {
-        id: `connectivity_ns_${i}`,
+        id: `connectivity_ns_filler_${i}`,
         points,
         width: ROAD_WIDTHS.town,
         type: 'town',
       };
 
       roads.push(newRoad);
-      // Track the new position so subsequent roads don't bunch up
       nsRoutes.push({ direction: 'north-south', position: newX, road: newRoad });
-
-      console.log(`Added N-S connectivity road at x=${Math.round(newX)}`);
+      console.log(`Added N-S connectivity road (filler) at x=${Math.round(newX)}`);
     }
 
-    // Add east-west routes (can be angled)
+    // --- E/W Roads Logic ---
+    // Ensure 1 Highway for E/W. 
+    // Fill remaining to meet total quota logic (balanced).
+
+    let ewHighways = ewRoutes.filter(r => r.road.type === 'highway' || r.road.type === 'interstate').length;
+
+    // Calculate how many more we need to balance or meet minimums
+    // The original logic tried to balance N-S and E-W to sum to 5.
+    // We currently have nsRoutes.length N/S routes.
+    // We want minTotalRoutes (5) total.
+    const currentTotal = nsRoutes.length + ewRoutes.length;
+    let ewNeeded = Math.max(0, minTotalRoutes - currentTotal);
+
+    // Ensure we create at least one E/W highway if none exist, even if we have enough total routes
+    if (ewHighways < 1) {
+      // If we don't *need* more routes but must add a highway, we force add one.
+      ewNeeded = Math.max(ewNeeded, 1);
+    }
+
     for (let i = 0; i < ewNeeded; i++) {
       const existingZPositions = ewRoutes.map(r => r.position);
       const newZ = this.findDiversePosition(existingZPositions, this.height);
 
-      // Add margin to keep roads within battlefield boundaries
       const margin = 10;
       const startX = -this.width / 2 + margin;
       const endX = this.width / 2 - margin;
 
-      // Allow significant Z variance for angled roads
-      // But keep start/end roughly on opposite sides
-      const angleVariance = this.height * 0.4; // Valid start/end points can vary by 40% of map height
+      const angleVariance = this.height * 0.4;
 
       const startZ = Math.max(-this.height / 2 + margin, Math.min(this.height / 2 - margin,
         newZ + this.rng.nextFloat(-angleVariance, angleVariance)));
@@ -2781,24 +3217,29 @@ export class MapGenerator {
       const endZ = Math.max(-this.height / 2 + margin, Math.min(this.height / 2 - margin,
         newZ + this.rng.nextFloat(-angleVariance, angleVariance)));
 
+      // Determine type: First one added (if needed) should be highway
+      const useHighway = (ewHighways < 1);
+      const type: RoadType = useHighway ? 'highway' : 'town';
+      if (useHighway) ewHighways++;
+
       const points = this.generateSmoothBezierPath(
         { x: startX, z: startZ },
         { x: endX, z: endZ },
-        'town',
+        type,
         towns
       );
 
       const newRoad: Road = {
         id: `connectivity_ew_${i}`,
         points,
-        width: ROAD_WIDTHS.town,
-        type: 'town',
+        width: ROAD_WIDTHS[type],
+        type: type,
       };
 
       roads.push(newRoad);
       ewRoutes.push({ direction: 'east-west', position: (startZ + endZ) / 2, road: newRoad });
 
-      console.log(`Added E-W connectivity road near z=${Math.round(newZ)} from z=${Math.round(startZ)} to z=${Math.round(endZ)}`);
+      console.log(`Added E-W connectivity road (${type}) near z=${Math.round(newZ)}`);
     }
   }
 
@@ -3645,9 +4086,14 @@ export class MapGenerator {
       this.biomeConfig.forestDensity.max
     );
 
-    // Base forest count scales with density
-    const minForests = Math.floor(4 * forestDensity);
-    const maxForests = Math.floor(Math.min(30, (4 + mapScale * 2) * forestDensity));
+    // Base forest count scales with density AND map size
+    // Scale min forests with map size (at least 1, but scaling up)
+    const minForests = Math.floor(4 * forestDensity * Math.max(1, mapScale * 0.5));
+
+    // Remove cap, scale roughly linearly with map scale
+    // (4 + mapScale * 3) gives good base scaling, multiplied by density
+    const maxForests = Math.floor((4 + mapScale * 3) * forestDensity);
+
     const numForests = this.rng.nextInt(minForests, Math.max(minForests + 1, maxForests));
 
     // Forest size also scales with density
@@ -4387,6 +4833,10 @@ export class MapGenerator {
    * Called BEFORE road generation so roads can avoid lakes and create bridges
    */
   private generateWaterBodies(deploymentZones: DeploymentZone[]): void {
+    // Reset slope tracking
+    this.riverSource = null;
+    this.riverSinks = [];
+
     // Generate lake (70% chance)
     const lake = this.generateLake(deploymentZones);
 
@@ -4396,8 +4846,102 @@ export class MapGenerator {
       this.generateRiverSystem(lake);
     }
 
+    // Apply general elevation slope based on river flow BEFORE smoothing
+    this.applyRiverBasedElevationSlope();
+
     // Smooth water bank transitions to eliminate jaggedness
     this.smoothWaterBankElevations();
+  }
+
+  /**
+   * Apply a linear elevation slope across the map based on river flow.
+   * Source: 1-10m raised, Sinks: 0-10m lowered.
+   */
+  private applyRiverBasedElevationSlope(): void {
+    if (!this.riverSource || this.riverSinks.length === 0) return;
+
+    // Calculate average sink position
+    let avgSinkX = 0;
+    let avgSinkZ = 0;
+    for (const sink of this.riverSinks) {
+      avgSinkX += sink.x;
+      avgSinkZ += sink.z;
+    }
+    avgSinkX /= this.riverSinks.length;
+    avgSinkZ /= this.riverSinks.length;
+
+    // Gradient vector from source to average sink
+    const dx = avgSinkX - this.riverSource.x;
+    const dz = avgSinkZ - this.riverSource.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq < 100) return; // Points too close to define a meaningful slope
+
+    const dist = Math.sqrt(distSq);
+    const ux = dx / dist;
+    const uz = dz / dist;
+
+    // Determine raise/lower amounts
+    const raiseAmount = this.rng.nextFloat(1, 10);
+    const lowerAmount = this.rng.nextFloat(0, 10);
+    const totalDiff = raiseAmount + lowerAmount;
+
+    // We want to apply an adjustment: adj = raiseAmount - (projection_distance / total_distance) * totalDiff
+    // Where projection_distance is the distance along the (ux, uz) vector from the source.
+
+    // Find map extent along this axis to normalize
+    const corners = [
+      { x: -this.width / 2, z: -this.height / 2 },
+      { x: this.width / 2, z: -this.height / 2 },
+      { x: -this.width / 2, z: this.height / 2 },
+      { x: this.width / 2, z: this.height / 2 },
+    ];
+
+    let minProj = Infinity;
+    let maxProj = -Infinity;
+    for (const corner of corners) {
+      const proj = (corner.x - this.riverSource.x) * ux + (corner.z - this.riverSource.z) * uz;
+      minProj = Math.min(minProj, proj);
+      maxProj = Math.max(maxProj, proj);
+    }
+
+    const projRange = maxProj - minProj;
+    if (projRange < 10) return;
+
+    // Calculate source projection to offset correctly
+    const sourceProj = 0; // By definition since we subtract riverSource.x/z
+
+    const cols = this.terrain[0]?.length ?? 0;
+    const rows = this.terrain.length;
+
+    for (let z = 0; z < rows; z++) {
+      for (let x = 0; x < cols; x++) {
+        const worldX = x * this.cellSize - this.width / 2;
+        const worldZ = z * this.cellSize - this.height / 2;
+
+        const proj = (worldX - this.riverSource.x) * ux + (worldZ - this.riverSource.z) * uz;
+
+        // Linear interpolation: 
+        // At sourceProj (0), we want roughly +raiseAmount (actually depends on where source is in the range)
+        // Let's normalize proj to [0, 1] across the map extent
+        const t = (proj - minProj) / projRange;
+
+        // We want source to be high, sinks to be low.
+        // If the vector points from Source to Sinks, then Sinks have higher t than Source.
+        // sourceT = (sourceProj - minProj) / projRange
+        const sourceT = (0 - minProj) / projRange;
+
+        // Adjustment should be: adj = raiseAmount at sourceT, -lowerAmount at some "average sinkT"
+        // Simplest: adj = (1 - t) * raiseAmount - t * lowerAmount is not quite right because it doesn't pivot on sourceT.
+
+        // Let's use: adjustment = raiseAmount - t * (raiseAmount + lowerAmount)
+        // This gives raiseAmount at t=0 and -lowerAmount at t=1.
+        const adjustment = raiseAmount - t * totalDiff;
+
+        this.terrain[z]![x]!.elevation += adjustment;
+      }
+    }
+
+    console.log(`Applied elevation slope: source(${this.riverSource.x.toFixed(0)}, ${this.riverSource.z.toFixed(0)}) raised ${raiseAmount.toFixed(1)}m, sinks lowered ${lowerAmount.toFixed(1)}m`);
   }
 
   /**
@@ -4411,8 +4955,50 @@ export class MapGenerator {
     // Define smoothing radius in cells (roughly 3-5 cells)
     const smoothRadius = Math.max(2, Math.ceil(15 / this.cellSize));
 
-    // Multiple passes for smoother results
-    const numPasses = 2;
+    // Pass 1: SPECIFIC smoothing for water beds (water-to-water only)
+    // This removes "mountain noise" from the river bed by ignoring non-water neighbors
+    for (let pass = 0; pass < 3; pass++) {
+      const bedElevations: (number | null)[][] = [];
+      for (let z = 0; z < rows; z++) {
+        bedElevations[z] = [];
+        for (let x = 0; x < cols; x++) {
+          const cell = this.terrain[z]![x]!;
+          const isWater = cell.type === 'river' || cell.type === 'water' || cell.type === 'pond';
+
+          if (!isWater) {
+            bedElevations[z]![x] = null;
+            continue;
+          }
+
+          let waterTotal = 0;
+          let waterCount = 0;
+          for (let dz = -1; dz <= 1; dz++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nz = z + dz;
+              const nx = x + dx;
+              if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
+                const neighbor = this.terrain[nz]![nx]!;
+                const isNeighborWater = neighbor.type === 'river' || neighbor.type === 'water' || neighbor.type === 'pond';
+                if (isNeighborWater) {
+                  waterTotal += neighbor.elevation;
+                  waterCount++;
+                }
+              }
+            }
+          }
+          bedElevations[z]![x] = waterCount > 0 ? waterTotal / waterCount : cell.elevation;
+        }
+      }
+      for (let z = 0; z < rows; z++) {
+        for (let x = 0; x < cols; x++) {
+          const val = bedElevations[z]![x];
+          if (val !== null) this.terrain[z]![x]!.elevation = val;
+        }
+      }
+    }
+
+    // Pass 2: General transition smoothing for banks (as before, but water is now cleaner)
+    const numPasses = 5;
 
     for (let pass = 0; pass < numPasses; pass++) {
       // Store new elevations to avoid modifying during iteration
@@ -4422,24 +5008,23 @@ export class MapGenerator {
         newElevations[z] = [];
         for (let x = 0; x < cols; x++) {
           const cell = this.terrain[z]![x]!;
-
-          // Only smooth cells near water (not water itself)
-          if (cell.type === 'river' || cell.type === 'water') {
-            newElevations[z]![x] = cell.elevation;
-            continue;
-          }
+          const isWater = cell.type === 'river' || cell.type === 'water' || cell.type === 'pond';
 
           // Check if this cell is near water
           let nearWater = false;
-          for (let dz = -smoothRadius; dz <= smoothRadius && !nearWater; dz++) {
-            for (let dx = -smoothRadius; dx <= smoothRadius; dx++) {
-              const nz = z + dz;
-              const nx = x + dx;
-              if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
-                const neighbor = this.terrain[nz]![nx]!;
-                if (neighbor.type === 'river' || neighbor.type === 'water') {
-                  nearWater = true;
-                  break;
+          if (isWater) {
+            nearWater = true;
+          } else {
+            for (let dz = -smoothRadius; dz <= smoothRadius && !nearWater; dz++) {
+              for (let dx = -smoothRadius; dx <= smoothRadius; dx++) {
+                const nz = z + dz;
+                const nx = x + dx;
+                if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
+                  const neighbor = this.terrain[nz]![nx]!;
+                  if (neighbor.type === 'river' || neighbor.type === 'water' || neighbor.type === 'pond') {
+                    nearWater = true;
+                    break;
+                  }
                 }
               }
             }
@@ -4468,7 +5053,9 @@ export class MapGenerator {
               }
             }
 
-            newElevations[z]![x] = totalWeight > 0 ? totalElevation / totalWeight : cell.elevation;
+            let averagedElevation = totalWeight > 0 ? totalElevation / totalWeight : cell.elevation;
+
+            newElevations[z]![x] = averagedElevation;
           } else {
             // Not near water, keep original elevation
             newElevations[z]![x] = cell.elevation;
@@ -4476,12 +5063,10 @@ export class MapGenerator {
         }
       }
 
-      // Apply smoothed elevations
+      // Apply smoothed elevations to all cells involved
       for (let z = 0; z < rows; z++) {
         for (let x = 0; x < cols; x++) {
-          if (this.terrain[z]![x]!.type !== 'river' && this.terrain[z]![x]!.type !== 'water') {
-            this.terrain[z]![x]!.elevation = newElevations[z]![x]!;
-          }
+          this.terrain[z]![x]!.elevation = newElevations[z]![x]!;
         }
       }
     }
@@ -4670,12 +5255,27 @@ export class MapGenerator {
     const end = lake ? this.getLakeEdgePoint(lake, start) : this.getEdgePoint(endEdge);
     const points = this.generateMeanderingPath(start, end);
 
-    return {
+    // Track slope source and sinks
+    this.riverSource = start;
+    if (!lake) {
+      this.riverSinks.push(end);
+    }
+
+    const river: WaterBody = {
       id: `river_${this.waterBodies.length}`,
       type: 'river',
       points,
       width: riverWidth,
     };
+
+    // Add metadata for renderer to know this river connects to a lake
+    // This enables smooth width tapering at the connection point
+    if (lake) {
+      (river as any).connectsToLake = true;
+      (river as any).lakeId = lake.id;
+    }
+
+    return river;
   }
 
   private generateTributary(mainRiver: WaterBody): WaterBody | null {
@@ -4700,6 +5300,10 @@ export class MapGenerator {
       // Minimum length check (15% of map size)
       if (dist > Math.min(this.width, this.height) * 0.15) {
         const points = this.generateMeanderingPath(start, joinPoint);
+
+        // Tributary starts at edge, so it's a sink (water flowing into main river)
+        this.riverSinks.push(start);
+
         return {
           id: `tributary_${this.waterBodies.length}`,
           type: 'river',
@@ -4791,14 +5395,26 @@ export class MapGenerator {
       }
     }
 
-    // If we found an intersection, extend it a bit further into the lake
-    // This creates a more natural connection where the river enters the lake
-    // Increased to 25m to ensure it cuts through the 15m lake bank completely
+    // If we found an intersection, extend it further into the lake
+    // CRITICAL: Must extend far enough so that BOTH EDGES of the river width are within the lake
+    // Otherwise, one edge will terminate on land, leaving a visible gap
     if (closestIntersection) {
-      const extensionDistance = 25; // Push 25m further into the lake
+      // Calculate required extension: river half-width + safety margin + lake bank width
+      // River can be up to 15m wide (7.5m half-width), lake bank is 15m
+      // Need to extend at least: 7.5 (half-width) + 15 (bank) + 10 (safety) = 32.5m
+      const extensionDistance = 40; // Push 40m into the lake to ensure full connection
+
+      const extendedX = closestIntersection.x + dirX * extensionDistance;
+      const extendedZ = closestIntersection.z + dirZ * extensionDistance;
+
+      // Clamp to battlefield boundaries to prevent river from going off-map
+      const margin = 10; // Small margin from edge
+      const clampedX = Math.max(-this.width / 2 + margin, Math.min(this.width / 2 - margin, extendedX));
+      const clampedZ = Math.max(-this.height / 2 + margin, Math.min(this.height / 2 - margin, extendedZ));
+
       return {
-        x: closestIntersection.x + dirX * extensionDistance,
-        z: closestIntersection.z + dirZ * extensionDistance,
+        x: clampedX,
+        z: clampedZ,
       };
     }
 
@@ -5127,132 +5743,328 @@ export class MapGenerator {
     const rivers = this.waterBodies.filter((w) => w.type === 'river');
 
     for (const road of roads) {
+      // Calculate preliminary road elevation profile to know where the road will be graded
+      const preliminaryProfile = this.calculateRoadElevationProfile(road);
+
+      // Step 1: Collect ALL river crossings for THIS SPECIFIC ROAD
+      interface RiverCrossing {
+        river: WaterBody;
+        crossing: { x: number; z: number };
+        segmentIndex: number;
+        distanceAlongRoad: number;
+      }
+
+      const allCrossings: RiverCrossing[] = [];
+      let cumulativeDistance = 0;
+
       for (let i = 0; i < road.points.length - 1; i++) {
         const p1 = road.points[i]!;
         const p2 = road.points[i + 1]!;
 
+        const segmentDx = p2.x - p1.x;
+        const segmentDz = p2.z - p1.z;
+        const segmentLength = Math.sqrt(segmentDx * segmentDx + segmentDz * segmentDz);
+
         for (const river of rivers) {
           const crossing = this.findRiverCrossing(p1, p2, river);
           if (crossing) {
-            const dx = p2.x - p1.x;
-            const dz = p2.z - p1.z;
-            const angle = Math.atan2(dz, dx);
+            // Calculate distance along road to this crossing
+            const crossingDx = crossing.x - p1.x;
+            const crossingDz = crossing.z - p1.z;
+            const distInSegment = Math.sqrt(crossingDx * crossingDx + crossingDz * crossingDz);
 
-            // Make bridge long enough to span water cells plus overlap with roads
-            // Use river.width * 1.5 + 15 to ensure it covers the painted water area
-            const bridgeLength = Math.max(river.width * 1.5 + 15, 25);
-
-            // Calculate bridge endpoints to sample bank elevation
-            const bridgeHalfLength = bridgeLength / 2;
-            const startX = crossing.x - Math.cos(angle) * bridgeHalfLength;
-            const startZ = crossing.z - Math.sin(angle) * bridgeHalfLength;
-            const endX = crossing.x + Math.cos(angle) * bridgeHalfLength;
-            const endZ = crossing.z + Math.sin(angle) * bridgeHalfLength;
-
-            const startElev = this.getTerrainElevationAt(startX, startZ);
-            const endElev = this.getTerrainElevationAt(endX, endZ);
-            const centerElev = this.getTerrainElevationAt(crossing.x, crossing.z);
-
-            // Bridge height should be the higher of the two banks, plus a small clearance
-            // Also ensure it's at least 3m above the water/riverbed
-            let bridgeElevation = Math.max(startElev, endElev) + 0.5;
-            bridgeElevation = Math.max(bridgeElevation, centerElev + 3.0);
-
-            const bridge: Bridge = {
-              id: `bridge_${this.bridges.length}`,
-              x: crossing.x,
-              z: crossing.z,
-              length: bridgeLength,
-              width: road.width + 2, // Slightly wider than road for visual connection
-              angle,
-              elevation: bridgeElevation,
-            };
-            if (road.id) {
-              bridge.roadId = road.id;
-
-              // Store bridge elevation data for this road
-              if (!this.bridgeElevations.has(road.id)) {
-                this.bridgeElevations.set(road.id, []);
-              }
-              this.bridgeElevations.get(road.id)!.push({
-                x: crossing.x,
-                z: crossing.z,
-                elevation: bridgeElevation,
-                length: bridgeLength,
-                angle,
-              });
-            }
-            this.bridges.push(bridge);
+            allCrossings.push({
+              river,
+              crossing,
+              segmentIndex: i,
+              distanceAlongRoad: cumulativeDistance + distInSegment,
+            });
           }
         }
+
+        cumulativeDistance += segmentLength;
+      }
+
+      // Step 2: Sort crossings by distance along THIS road
+      allCrossings.sort((a, b) => a.distanceAlongRoad - b.distanceAlongRoad);
+
+      // Step 3: Group crossings by river object for THIS road
+      // This handles winding rivers that cross THIS road multiple times
+      const riverGroups = new Map<WaterBody, RiverCrossing[]>();
+
+      for (const crossing of allCrossings) {
+        if (!riverGroups.has(crossing.river)) {
+          riverGroups.set(crossing.river, []);
+        }
+        riverGroups.get(crossing.river)!.push(crossing);
+      }
+
+      // Step 4: For each river crossed by THIS road, check if crossings are continuous
+      // If there's a large gap, split into separate bridge groups
+      const crossingGroups: RiverCrossing[][] = [];
+      const maxGapWithinRiver = 50; // meters - max gap between crossings of the same river
+
+      for (const [river, riverCrossings] of riverGroups) {
+        if (riverCrossings.length === 0) continue;
+
+        // Start first group for this river
+        let currentGroup: RiverCrossing[] = [riverCrossings[0]!];
+
+        for (let i = 1; i < riverCrossings.length; i++) {
+          const prev = riverCrossings[i - 1]!;
+          const curr = riverCrossings[i]!;
+          const gap = curr.distanceAlongRoad - prev.distanceAlongRoad;
+
+          if (gap <= maxGapWithinRiver) {
+            // Continuous crossing - add to current group
+            currentGroup.push(curr);
+          } else {
+            // Large gap - this is a separate crossing of the same river
+            crossingGroups.push(currentGroup);
+            currentGroup = [curr];
+          }
+        }
+
+        // Add the last group
+        if (currentGroup.length > 0) {
+          crossingGroups.push(currentGroup);
+        }
+      }
+
+      // Step 5: Create one bridge for each group
+      for (const group of crossingGroups) {
+        if (group.length === 0) continue;
+
+        // Use the middle crossing as the reference point
+        const midIndex = Math.floor(group.length / 2);
+        const refCrossing = group[midIndex]!;
+
+        // Calculate bridge direction from road
+        const segIdx = refCrossing.segmentIndex;
+        const p1 = road.points[segIdx]!;
+        const p2 = road.points[segIdx + 1]!;
+
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const segmentLength = Math.sqrt(dx * dx + dz * dz);
+        if (segmentLength < 0.1) continue;
+
+        const angle = Math.atan2(dz, dx);
+        const dirX = Math.cos(angle);
+        const dirZ = Math.sin(angle);
+
+        // Sample terrain elevations around the crossing
+        const centerElev = this.getTerrainElevationAt(refCrossing.crossing.x, refCrossing.crossing.z);
+
+        // Dynamically extend bridge endpoints first to find where they'll meet the road
+        const maxBridgeLength = 200;
+        const elevationTolerance = 2.0;
+        const stepSize = 2;
+
+        // Map boundaries
+        const minX = -this.width / 2;
+        const maxX = this.width / 2;
+        const minZ = -this.height / 2;
+        const maxZ = this.height / 2;
+
+        // Extend backwards to find bridge start
+        let bridgeStartX = refCrossing.crossing.x;
+        let bridgeStartZ = refCrossing.crossing.z;
+        let distanceBack = 0;
+
+        // We need to find the bridge elevation first by sampling the road at a reasonable distance
+        // Use the widest river to estimate initial search distance
+        const maxRiverWidth = Math.max(...group.map(c => c.river.width ?? 10));
+        const initialHalfLength = Math.max(maxRiverWidth * 1.5, 25);
+
+        // Sample road elevation at estimated bridge approach points to determine bridge height
+        const approachStartX = refCrossing.crossing.x - dirX * initialHalfLength;
+        const approachStartZ = refCrossing.crossing.z - dirZ * initialHalfLength;
+        const approachEndX = refCrossing.crossing.x + dirX * initialHalfLength;
+        const approachEndZ = refCrossing.crossing.z + dirZ * initialHalfLength;
+
+        const roadElevStart = this.getRoadElevationFromProfile(approachStartX, approachStartZ, road.points, preliminaryProfile);
+        const roadElevEnd = this.getRoadElevationFromProfile(approachEndX, approachEndZ, road.points, preliminaryProfile);
+
+        // Bridge elevation should match the road elevation at the approaches
+        // Use the higher of the two ends, plus a small clearance above the water
+        let bridgeElevation = Math.max(roadElevStart, roadElevEnd);
+        bridgeElevation = Math.max(bridgeElevation, centerElev + 3.0); // Ensure at least 3m above water
+
+        // Now extend backwards to find exact bridge start point
+        while (distanceBack < maxBridgeLength) {
+          const testX = refCrossing.crossing.x - dirX * distanceBack;
+          const testZ = refCrossing.crossing.z - dirZ * distanceBack;
+
+          if (testX < minX || testX > maxX || testZ < minZ || testZ > maxZ) {
+            break;
+          }
+
+          const roadElev = this.getRoadElevationFromProfile(
+            testX,
+            testZ,
+            road.points,
+            preliminaryProfile
+          );
+
+          if (Math.abs(roadElev - bridgeElevation) <= elevationTolerance) {
+            bridgeStartX = testX;
+            bridgeStartZ = testZ;
+            break;
+          }
+          distanceBack += stepSize;
+        }
+
+        // Extend forwards
+        let bridgeEndX = refCrossing.crossing.x;
+        let bridgeEndZ = refCrossing.crossing.z;
+        let distanceForward = 0;
+        while (distanceForward < maxBridgeLength) {
+          const testX = refCrossing.crossing.x + dirX * distanceForward;
+          const testZ = refCrossing.crossing.z + dirZ * distanceForward;
+
+          if (testX < minX || testX > maxX || testZ < minZ || testZ > maxZ) {
+            break;
+          }
+
+          const roadElev = this.getRoadElevationFromProfile(
+            testX,
+            testZ,
+            road.points,
+            preliminaryProfile
+          );
+
+          if (Math.abs(roadElev - bridgeElevation) <= elevationTolerance) {
+            bridgeEndX = testX;
+            bridgeEndZ = testZ;
+            break;
+          }
+          distanceForward += stepSize;
+        }
+
+        // Calculate final bridge length and center
+        const bridgeDx = bridgeEndX - bridgeStartX;
+        const bridgeDz = bridgeEndZ - bridgeStartZ;
+        const bridgeLength = Math.sqrt(bridgeDx * bridgeDx + bridgeDz * bridgeDz);
+        const bridgeCenterX = (bridgeStartX + bridgeEndX) / 2;
+        const bridgeCenterZ = (bridgeStartZ + bridgeEndZ) / 2;
+
+        const bridge: Bridge = {
+          id: `bridge_${this.bridges.length}`,
+          x: bridgeCenterX,
+          z: bridgeCenterZ,
+          length: Math.max(bridgeLength, 25),
+          width: road.width + 2,
+          angle,
+          elevation: bridgeElevation,
+        };
+
+        if (road.id) {
+          bridge.roadId = road.id;
+
+          if (!this.bridgeElevations.has(road.id)) {
+            this.bridgeElevations.set(road.id, []);
+          }
+          this.bridgeElevations.get(road.id)!.push({
+            x: bridgeCenterX,
+            z: bridgeCenterZ,
+            elevation: bridgeElevation,
+            length: bridge.length,
+            angle,
+          });
+        }
+
+        this.bridges.push(bridge);
+        this.markBridgeFootprint(bridge);
       }
     }
   }
 
   /**
    * Create bridges (overpasses/underpasses) where roads cross at different elevations
-   * This prevents one road from forcing steep grades on the crossing road
+   * This prevents one road from forcing steep grades on the crossing road.
+   * Also handles vertical clearance between bridges.
    */
   private createBridgesForRoadCrossings(roads: Road[]): void {
-    const minElevationDifferenceForBridge = 3.5; // meters - if roads differ by this much, create a bridge
-    const bridgeLength = 30; // meters - length of overpass bridge
+    const minClearance = 5.0; // meters - minimum clearance for a road to pass under a bridge
+    const defaultBridgeLength = 40; // meters - default length of overpass bridge
 
-    // Check all pairs of roads for crossings
     for (let i = 0; i < roads.length; i++) {
       for (let j = i + 1; j < roads.length; j++) {
         const roadA = roads[i]!;
         const roadB = roads[j]!;
 
-        // Find all intersection points between these roads
         const intersections = this.findRoadIntersectionPoints(roadA, roadB);
+        if (intersections.length === 0) continue;
 
-        for (const intersection of intersections) {
-          // Get elevation of each road at the intersection point
-          const elevA = this.getTerrainElevationAt(intersection.x, intersection.z);
-          const elevB = this.getTerrainElevationAt(intersection.x, intersection.z);
+        // Cluster intersections
+        const clusters: { x: number; z: number }[][] = [];
+        const clusterThreshold = 40;
 
-          const elevationDiff = Math.abs(elevA - elevB);
-
-          // If elevation difference is significant, create a bridge for the higher road
-          if (elevationDiff >= minElevationDifferenceForBridge) {
-            // Determine which road is higher
-            const higherRoad = elevA > elevB ? roadA : roadB;
-            const higherElevation = Math.max(elevA, elevB);
-
-            // Calculate the angle of the higher road at this point
-            const angle = this.getRoadDirectionAtPoint(higherRoad, intersection);
-
-            // Create a bridge for the higher road
-            const bridge: Bridge = {
-              id: `overpass_${this.bridges.length}`,
-              x: intersection.x,
-              z: intersection.z,
-              length: bridgeLength,
-              width: higherRoad.width + 2,
-              angle,
-              elevation: higherElevation,
-            };
-
-            if (higherRoad.id) {
-              bridge.roadId = higherRoad.id;
-
-              // Store bridge elevation data for this road
-              if (!this.bridgeElevations.has(higherRoad.id)) {
-                this.bridgeElevations.set(higherRoad.id, []);
-              }
-              this.bridgeElevations.get(higherRoad.id)!.push({
-                x: intersection.x,
-                z: intersection.z,
-                elevation: higherElevation,
-                length: bridgeLength,
-                angle,
-              });
+        for (const inter of intersections) {
+          let paired = false;
+          for (const cluster of clusters) {
+            const first = cluster[0]!;
+            const dist = Math.sqrt((inter.x - first.x) ** 2 + (inter.z - first.z) ** 2);
+            if (dist < clusterThreshold) {
+              cluster.push(inter);
+              paired = true;
+              break;
             }
+          }
+          if (!paired) clusters.push([inter]);
+        }
 
-            this.bridges.push(bridge);
+        for (const cluster of clusters) {
+          let centerX = 0, centerZ = 0;
+          for (const p of cluster) {
+            centerX += p.x;
+            centerZ += p.z;
+          }
+          centerX /= cluster.length;
+          centerZ /= cluster.length;
 
-            // Mark the terrain under the bridge to prevent grading
-            this.markBridgeFootprint(bridge);
+          // Recalculate profiles to ensure they include any bridges created in previous loops or createBridgesForRoads
+          const profileA = this.calculateRoadElevationProfile(roadA);
+          const profileB = this.calculateRoadElevationProfile(roadB);
+
+          let elevA = this.getRoadElevationFromProfile(centerX, centerZ, roadA.points, profileA);
+          let elevB = this.getRoadElevationFromProfile(centerX, centerZ, roadB.points, profileB);
+
+          // Check if either road is already on a bridge here
+          const bridgeA = this.findExistingBridgeAt(centerX, centerZ, roadA.id);
+          const bridgeB = this.findExistingBridgeAt(centerX, centerZ, roadB.id);
+
+          const isAlreadyBridged = !!bridgeA || !!bridgeB;
+          const currentDiff = Math.abs(elevA - elevB);
+
+          // If they are too close and should be separated by a bridge, or if they are already bridged but lack clearance
+          if (currentDiff < minClearance) {
+            // Check if we SHOULD have a bridge here (either significant terrain difference or deliberate overpass)
+            // For now, if they are within the same elevation profile context and have been bridged elsewhere,
+            // or if they are crossing and one is "clearly" meant to be an overpass.
+            // A common case is a highway crossing another highway at ground level - we usually want an intersection.
+            // But if one is a bridge (over a valley), and the other crosses it, we MUST have clearance.
+
+            if (isAlreadyBridged || currentDiff > 2.0) {
+              // Enforce clearance
+              const higherRoad = elevA >= elevB ? roadA : roadB;
+              const lowerRoad = elevA >= elevB ? roadB : roadA;
+
+              const newHigherElev = Math.max(elevA, elevB, Math.min(elevA, elevB) + minClearance);
+
+              // Update elevation data
+              if (higherRoad === roadA) elevA = newHigherElev;
+              else elevB = newHigherElev;
+
+              // Update or Create bridge for the higher road
+              this.applyBridgeElevation(higherRoad, centerX, centerZ, newHigherElev, defaultBridgeLength, cluster);
+            }
+          } else {
+            // Already have enough clearance, just ensure bridge objects exist for the higher road
+            const higherRoad = elevA > elevB ? roadA : roadB;
+            const higherElev = Math.max(elevA, elevB);
+            this.applyBridgeElevation(higherRoad, centerX, centerZ, higherElev, defaultBridgeLength, cluster);
           }
         }
       }
@@ -5260,40 +6072,101 @@ export class MapGenerator {
   }
 
   /**
-   * Mark the terrain under a bridge to prevent terrain grading from modifying it
-   * This ensures the lower road maintains its elevation under the overpass
+   * Find an existing bridge entry in bridgeElevations for a specific road near a point
    */
-  private markBridgeFootprint(bridge: Bridge): void {
-    const halfLength = bridge.length / 2;
-    const halfWidth = bridge.width / 2;
+  private findExistingBridgeAt(x: number, z: number, roadId?: string): { elevation: number; length: number; angle: number } | null {
+    if (!roadId) return null;
+    const entries = this.bridgeElevations.get(roadId);
+    if (!entries) return null;
 
-    const cos = Math.cos(bridge.angle);
-    const sin = Math.sin(bridge.angle);
+    for (const entry of entries) {
+      const distSq = (entry.x - x) ** 2 + (entry.z - z) ** 2;
+      if (distSq < (entry.length / 2 + 10) ** 2) {
+        return entry;
+      }
+    }
+    return null;
+  }
 
-    // Mark cells within the bridge footprint
-    const sampleInterval = 2; // meters
-    for (let along = -halfLength; along <= halfLength; along += sampleInterval) {
-      for (let across = -halfWidth; across <= halfWidth; across += sampleInterval) {
-        const worldX = bridge.x + along * cos - across * sin;
-        const worldZ = bridge.z + along * sin + across * cos;
+  /**
+   * Apply bridge elevation to a road at a specific point.
+   * Updates existing bridge data if present, otherwise creates new bridge object.
+   */
+  private applyBridgeElevation(
+    road: Road,
+    x: number,
+    z: number,
+    elevation: number,
+    defaultLength: number,
+    cluster: { x: number; z: number }[]
+  ): void {
+    if (!road.id) return;
 
-        // Convert to cell coordinates
-        const cellX = Math.floor((worldX + this.width / 2) / this.cellSize);
-        const cellZ = Math.floor((worldZ + this.height / 2) / this.cellSize);
+    // Calculate length based on cluster extent
+    let maxDist = 0;
+    for (const p of cluster) {
+      const d = Math.sqrt((p.x - x) ** 2 + (p.z - z) ** 2);
+      if (d > maxDist) maxDist = d;
+    }
+    const length = Math.max(defaultLength, maxDist * 2 + 15);
+    const angle = this.getRoadDirectionAtPoint(road, { x, z });
 
-        const cols = this.terrain[0]?.length ?? 0;
-        const rows = this.terrain.length;
+    // 1. Update bridgeElevations (used for terrain grading and road profiles)
+    if (!this.bridgeElevations.has(road.id)) {
+      this.bridgeElevations.set(road.id, []);
+    }
 
-        if (cellX >= 0 && cellX < cols && cellZ >= 0 && cellZ < rows) {
-          const cell = this.terrain[cellZ]?.[cellX];
-          if (cell) {
-            // Mark cell as under a bridge (you can add a flag to TerrainCell if needed)
-            // For now, we'll just ensure it doesn't get graded by checking bridge proximity
-            // in the grading methods
-          }
+    const entries = this.bridgeElevations.get(road.id)!;
+    let existingEntry = null;
+    for (const entry of entries) {
+      const dSq = (entry.x - x) ** 2 + (entry.z - z) ** 2;
+      if (dSq < 30 * 30) { // If within 30m, it's the same crossing
+        existingEntry = entry;
+        break;
+      }
+    }
+
+    if (existingEntry) {
+      existingEntry.elevation = Math.max(existingEntry.elevation, elevation);
+      existingEntry.length = Math.max(existingEntry.length, length);
+    } else {
+      entries.push({ x, z, elevation, length, angle });
+    }
+
+    // 2. Update/Create Bridge visual objects
+    let existingBridge = null;
+    for (const bridge of this.bridges) {
+      if (bridge.roadId === road.id) {
+        const dSq = (bridge.x - x) ** 2 + (bridge.z - z) ** 2;
+        if (dSq < 30 * 30) {
+          existingBridge = bridge;
+          break;
         }
       }
     }
+
+    if (existingBridge) {
+      existingBridge.elevation = Math.max(existingBridge.elevation, elevation);
+      existingBridge.length = Math.max(existingBridge.length, length);
+    } else {
+      const newBridge: Bridge = {
+        id: `bridge_${this.bridges.length}`,
+        roadId: road.id,
+        x, z, length,
+        width: road.width + 2,
+        angle,
+        elevation
+      };
+      this.bridges.push(newBridge);
+      this.markBridgeFootprint(newBridge);
+    }
+  }
+
+  /**
+   * Mark the terrain under a bridge to prevent terrain grading from modifying it
+   */
+  private markBridgeFootprint(bridge: Bridge): void {
+    // This is mostly a hint for grading, which already checks isPointOnBridge
   }
 
   /**
@@ -5380,25 +6253,43 @@ export class MapGenerator {
       let bridgeElevation: number | undefined = undefined;
       if (roadBridges) {
         for (const bridge of roadBridges) {
-          const distToBridge = Math.sqrt((p2.x - bridge.x) ** 2 + (p2.z - bridge.z) ** 2);
-          // If within half the bridge length, use bridge elevation
-          if (distToBridge < bridge.length / 2) {
+          // Use oriented bounding box check for the bridge footprint
+          const cosA = Math.cos(-bridge.angle);
+          const sinA = Math.sin(-bridge.angle);
+          const dx = p2.x - bridge.x;
+          const dz = p2.z - bridge.z;
+
+          // Project point into bridge-aligned coordinate system
+          const localX = dx * cosA - dz * sinA;
+          const localZ = dx * sinA + dz * cosA;
+
+          // Check if within rectangle: localX is along bridge length, localZ is across width
+          if (Math.abs(localX) < bridge.length / 2 + 2 && Math.abs(localZ) < bridge.width / 2 + 2) {
             bridgeElevation = bridge.elevation;
             break;
           }
         }
       }
 
-      // Check if this point is near another road's bridge (overpass) - if so, use base terrain
+      // Check if this point is near another road's bridge (overpass) - if so, we should pass underneath
       let nearOtherBridge = false;
       if (!bridgeElevation) { // Only check if not on our own bridge
         for (const [otherRoadId, otherBridges] of this.bridgeElevations.entries()) {
-          if (otherRoadId === road.id) continue; // Skip our own bridges
+          if (otherRoadId === road.id) continue;
 
           for (const otherBridge of otherBridges) {
-            const distToOtherBridge = Math.sqrt((p2.x - otherBridge.x) ** 2 + (p2.z - otherBridge.z) ** 2);
-            // If within the other bridge's footprint, we should pass underneath
-            if (distToOtherBridge < otherBridge.length / 2 + 5) {
+            // Use OBB check for other bridge
+            const cosA = Math.cos(-otherBridge.angle);
+            const sinA = Math.sin(-otherBridge.angle);
+            const dx = p2.x - otherBridge.x;
+            const dz = p2.z - otherBridge.z;
+            const localX = dx * cosA - dz * sinA;
+            const localZ = dx * sinA + dz * cosA;
+
+            // Check if within rectangle with a 70m buffer for the ramps/clearance
+            // 70m covers standard highway ramps (approx 66m for 10m height at 15% grade)
+            const rampBuffer = 70;
+            if (Math.abs(localX) < otherBridge.length / 2 + rampBuffer && Math.abs(localZ) < otherBridge.width / 2 + 5) {
               nearOtherBridge = true;
               break;
             }

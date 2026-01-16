@@ -3,7 +3,7 @@
  */
 
 import { ScreenType, type Screen } from '../core/ScreenManager';
-import type { DeckData, MapSize, BiomeType } from '../data/types';
+import type { GameMap, DeckData, MapSize, BiomeType } from '../data/types';
 import { loadSavedDecks } from './DeckBuilderScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { BIOME_CONFIGS } from '../data/biomeConfigs';
@@ -48,6 +48,7 @@ export interface SkirmishConfig {
   biome?: BiomeType;  // Optional biome override (undefined = auto-select from seed)
   team1: PlayerSlot[];
   team2: PlayerSlot[];
+  existingMap?: GameMap;
 }
 
 export interface SkirmishSetupCallbacks {
@@ -62,6 +63,8 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   let mapSize: MapSize = 'medium';
   let mapSeed = Math.floor(Math.random() * 999999);
   let selectedBiome: BiomeType | undefined = undefined;  // undefined = auto-select from seed
+  let generatedMap: GameMap | null = null;
+  let isGeneratingMap = false;
 
   // Team configuration (5v5 format)
   let team1: PlayerSlot[] = [
@@ -145,6 +148,10 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
             <h3>Map Preview</h3>
             <div id="map-preview" class="map-preview">
               <canvas id="preview-canvas" width="200" height="200"></canvas>
+              <div id="map-loading" class="map-preview-loading hidden">
+                <div class="loading-spinner"></div>
+                <span>Generating...</span>
+              </div>
             </div>
           </div>
         </div>
@@ -543,6 +550,51 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       transform: scale(1.02);
       box-shadow: 0 0 30px rgba(255, 152, 0, 0.4);
     }
+
+    .map-preview {
+      position: relative;
+    }
+
+    .map-preview-loading {
+      position: absolute;
+      top: 10%;
+      left: 10%;
+      width: 80%;
+      height: 80%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      color: #fff;
+      font-size: 14px;
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 10;
+    }
+
+    .map-preview-loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(74, 158, 255, 0.3);
+      border-top: 3px solid #4a9eff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   `;
   document.head.appendChild(style);
 
@@ -764,255 +816,427 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       return;
     }
 
-    // Show loading state
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, 200, 200);
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px monospace';
-    ctx.fillText('Generating...', 60, 100);
+    // Show loading state immediately
+    const loadingOverlay = element.querySelector('#map-loading');
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
 
-    // Import map generator dynamically to render preview
-    import('../game/map/MapGenerator').then(({ MapGenerator }) => {
-      try {
-        const generator = new MapGenerator(mapSeed, mapSize, selectedBiome);
-        const map = generator.generate();
+    // Disable start button while generating
+    isGeneratingMap = true;
+    updateStartButton();
 
-        const canvasSize = 200;
-        const biomeConfig = BIOME_CONFIGS[map.biome];
+    // Defer generation to next tick to allow UI to update
+    setTimeout(() => {
+      // Import map generator dynamically to render preview
+      import('../game/map/MapGenerator').then(({ MapGenerator }) => {
+        try {
+          const generator = new MapGenerator(mapSeed, mapSize, selectedBiome);
+          generatedMap = generator.generate(); // Store map for reuse
+          const map = generatedMap;
 
-        // Convert hex color to CSS color string
-        const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
+          const canvasSize = 200;
+          const biomeConfig = BIOME_CONFIGS[map.biome];
 
-        // Clear canvas with biome ground color
-        ctx.fillStyle = hexToCSS(biomeConfig.groundColor);
-        ctx.fillRect(0, 0, canvasSize, canvasSize);
+          // Convert hex color to CSS color string
+          const hexToCSS = (hex: number) => '#' + hex.toString(16).padStart(6, '0');
 
-        const scale = canvasSize / map.width;
+          // Clear canvas with biome ground color
+          ctx.fillStyle = hexToCSS(biomeConfig.groundColor);
+          ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-        // Draw terrain (simplified) - use biome colors
-        const cellSize = map.cellSize * scale;
-        for (let z = 0; z < map.terrain.length; z++) {
-          for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
-            const cell = map.terrain[z]![x]!;
-            let color = hexToCSS(biomeConfig.groundColor); // field - use biome color
+          const scale = canvasSize / map.width;
 
-            switch (cell.type) {
-              case 'forest':
-                color = hexToCSS(biomeConfig.forestColor);
-                break;
-              case 'road':
-                color = '#5a5a5a';
-                break;
-              case 'river':
-              case 'water':
-                color = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-                break;
-              case 'hill':
-                // Darken ground color slightly for hills
-                const hillColor = biomeConfig.groundColor;
-                const r = ((hillColor >> 16) & 0xFF) * 0.85;
-                const g = ((hillColor >> 8) & 0xFF) * 0.85;
-                const b = (hillColor & 0xFF) * 0.85;
-                color = `rgb(${r},${g},${b})`;
-                break;
-              case 'building':
-                color = '#8a7a6a';
-                break;
+          // Draw terrain (simplified) - use biome colors
+          const cellSize = map.cellSize * scale;
+          for (let z = 0; z < map.terrain.length; z++) {
+            for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
+              const cell = map.terrain[z]![x]!;
+              let color = hexToCSS(biomeConfig.groundColor); // field - use biome color
+
+              switch (cell.type) {
+                case 'forest':
+                  color = hexToCSS(biomeConfig.forestColor);
+                  break;
+                case 'road':
+                  color = '#5a5a5a';
+                  break;
+                case 'river':
+                case 'water':
+                  color = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+                  break;
+                case 'hill':
+                  // Darken ground color slightly for hills
+                  const hillColor = biomeConfig.groundColor;
+                  const r = ((hillColor >> 16) & 0xFF) * 0.85;
+                  const g = ((hillColor >> 8) & 0xFF) * 0.85;
+                  const b = (hillColor & 0xFF) * 0.85;
+                  color = `rgb(${r},${g},${b})`;
+                  break;
+                case 'building':
+                  color = '#8a7a6a';
+                  break;
+              }
+
+              ctx.fillStyle = color;
+              ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
+            }
+          }
+
+          // Draw elevation shading overlay for mountains/hills
+          // This makes mountains visible in the preview
+          for (let z = 0; z < map.terrain.length; z++) {
+            for (let x = 0; x < (map.terrain[z]?.length ?? 0); x++) {
+              const cell = map.terrain[z]![x]!;
+
+              // Add shading based on elevation
+              if (cell.elevation > 20) {
+                // Calculate intensity based on elevation (20-100m range)
+                const intensity = Math.min((cell.elevation - 20) / 80, 1);
+
+                // Darken for mountains (brown/gray tint)
+                const alpha = intensity * 0.4;
+                ctx.fillStyle = `rgba(80, 70, 60, ${alpha})`;
+                ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
+              }
+            }
+          }
+
+          // Draw terrain feature markers (mountains, plateaus, ridges, hills)
+          if ((map as any).terrainFeatures) {
+            const terrainFeatures = (map as any).terrainFeatures || [];
+
+            for (const feature of terrainFeatures) {
+              const screenX = (feature.x + map.width / 2) * scale;
+              const screenZ = (feature.z + map.height / 2) * scale;
+              const radius = Math.max(feature.params.radius * scale, 3);
+
+              ctx.save();
+              ctx.translate(screenX, screenZ);
+
+              if (feature.type === 'mountain') {
+                // Draw mountain symbol (triangle)
+                // Shadow/outline
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.beginPath();
+                ctx.moveTo(0, -radius - 1);
+                ctx.lineTo(-radius * 0.7 - 1, radius * 0.5 + 1);
+                ctx.lineTo(radius * 0.7 + 1, radius * 0.5 + 1);
+                ctx.closePath();
+                ctx.fill();
+
+                // Mountain peak (white/light gray)
+                ctx.fillStyle = '#e0e0e0';
+                ctx.beginPath();
+                ctx.moveTo(0, -radius);
+                ctx.lineTo(-radius * 0.7, radius * 0.5);
+                ctx.lineTo(radius * 0.7, radius * 0.5);
+                ctx.closePath();
+                ctx.fill();
+
+                // Outline
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+              } else if (feature.type === 'plateau') {
+                // Draw plateau symbol (flat-topped trapezoid)
+                const width = radius * 1.5;
+                const height = radius * 0.8;
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.fillRect(-width / 2 + 1, -height / 2 + 1, width, height);
+
+                // Plateau top (earthy brown/red for mesa)
+                ctx.fillStyle = '#b06d45';
+                ctx.fillRect(-width / 2, -height / 2, width, height);
+
+                // Dark top edge for depth
+                ctx.fillStyle = '#8a5635';
+                ctx.fillRect(-width / 2, -height / 2, width, 2);
+
+                // Outline
+                ctx.strokeStyle = '#3d2618';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(-width / 2, -height / 2, width, height);
+              } else if (feature.type === 'hill' || feature.type === 'ridge') {
+                // Draw hill/ridge symbol (small curves)
+                const size = radius * 0.6;
+                ctx.strokeStyle = '#5a5a5a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(0, size, size, Math.PI * 1.2, Math.PI * 1.8);
+                ctx.stroke();
+              }
+
+              ctx.restore();
+            }
+          }
+
+          // Draw water bodies with smooth curves
+          // Rivers are drawn as stroked lines, lakes as filled polygons
+          for (const waterBody of map.waterBodies) {
+            ctx.fillStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+            ctx.strokeStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
+
+            const points = waterBody.points;
+            if (points.length < 2) continue;
+
+            const isRiver = waterBody.type === 'river';
+
+            if (isRiver) {
+              // Draw river as a thick stroked line
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              // Scale width but clamp to reasonable minimum/maximum for readability
+              const riverWidth = Math.max(2, Math.min(8, (waterBody.width ?? 10) * scale));
+              ctx.lineWidth = riverWidth;
+              ctx.beginPath();
+            } else {
+              // Lake: prepare for fill
+              ctx.beginPath();
             }
 
-            ctx.fillStyle = color;
-            ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
-          }
-        }
+            // Start at first point
+            const p0 = points[0]!;
+            const s0x = (p0.x + map.width / 2) * scale;
+            const s0z = (p0.z + map.height / 2) * scale;
+            ctx.moveTo(s0x, s0z);
 
-        // Draw water bodies with bright outline
-        for (const waterBody of map.waterBodies) {
-          ctx.fillStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-          ctx.strokeStyle = hexToCSS(biomeConfig.waterColor ?? 0x3a6a8a);
-          ctx.lineWidth = 2;
+            // Draw smooth curve using points as control points
+            for (let i = 1; i < points.length - 1; i++) {
+              const pCurrent = points[i]!;
+              const pNext = points[i + 1]!;
+
+              const scx = (pCurrent.x + map.width / 2) * scale;
+              const scz = (pCurrent.z + map.height / 2) * scale;
+
+              const snx = (pNext.x + map.width / 2) * scale;
+              const snz = (pNext.z + map.height / 2) * scale;
+
+              // Use midpoint between current and next as the end point of the curve
+              // The current point acts as the control point
+              const midX = (scx + snx) / 2;
+              const midZ = (scz + snz) / 2;
+
+              ctx.quadraticCurveTo(scx, scz, midX, midZ);
+            }
+
+            // Connect to last point
+            const last = points[points.length - 1]!;
+            const slx = (last.x + map.width / 2) * scale;
+            const slz = (last.z + map.height / 2) * scale;
+
+            // For the last segment, just draw a straight line or curve to it (using last point as end)
+            // But since we used midpoints, we need to bridge the gap from last midpoint
+            // The loop handles up to n-1. 
+            // Actually, properly: 
+            // curve from prev_mid to new_mid using current as control.
+
+            // Let's use a simpler quadratic approach that hits points? No, "Chaikin's algorithms" or just midpoint smoothing is best.
+            // My loop above: curve from (prev_cursor) to (midpoint between current and next) using (current) as control.
+            // This leaves a gap from the last midpoint to the actual last point.
+
+            // Note: index i=points.length-1 is the last point. Loop goes to points.length-2 (second to last).
+            // So pNext is the last point.
+            // midX/midZ is midpoint between second-to-last and last.
+            // So we just need to lineTo or quadraticTo the last point.
+
+            ctx.lineTo(slx, slz);
+
+            if (isRiver) {
+              ctx.fillStyle = 'transparent'; // Explicitly prevent filling for rivers
+              ctx.stroke();
+            } else {
+              ctx.closePath();
+              ctx.fill();
+              // Optional: stroke lakes too for cleaner edges
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+
+          // Draw roads with better visibility
+          ctx.strokeStyle = '#888888';
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
+          for (const road of map.roads) {
+            ctx.beginPath();
+            for (let i = 0; i < road.points.length; i++) {
+              const p = road.points[i]!;
+              const screenX = (p.x + map.width / 2) * scale;
+              const screenZ = (p.z + map.height / 2) * scale;
+              if (i === 0) {
+                ctx.moveTo(screenX, screenZ);
+              } else {
+                ctx.lineTo(screenX, screenZ);
+              }
+            }
+            ctx.stroke();
+          }
 
-          ctx.beginPath();
-          for (let i = 0; i < waterBody.points.length; i++) {
-            const p = waterBody.points[i]!;
-            const screenX = (p.x + map.width / 2) * scale;
-            const screenZ = (p.z + map.height / 2) * scale;
-            if (i === 0) {
-              ctx.moveTo(screenX, screenZ);
-            } else {
-              ctx.lineTo(screenX, screenZ);
+          // Draw buildings with outlines for better visibility
+          for (const building of map.buildings) {
+            const screenX = (building.x + map.width / 2) * scale;
+            const screenZ = (building.z + map.height / 2) * scale;
+
+            // Ensure buildings are visible even on large maps (min 2px)
+            const w = Math.max(building.width * scale, 2);
+            const d = Math.max(building.depth * scale, 2);
+
+            // Fill (use high contrast color for urban biome or general building color)
+            ctx.fillStyle = map.biome === 'cities' ? '#a0a0a0' : '#d4c4a8';
+            ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
+
+            // Outline (only draw if large enough to matter, otherwise it just clutters)
+            if (w > 3) {
+              ctx.strokeStyle = '#404040';
+              ctx.lineWidth = 0.5;
+              ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
             }
           }
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        }
 
-        // Draw roads with better visibility
-        ctx.strokeStyle = '#888888';
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        for (const road of map.roads) {
-          ctx.beginPath();
-          for (let i = 0; i < road.points.length; i++) {
-            const p = road.points[i]!;
-            const screenX = (p.x + map.width / 2) * scale;
-            const screenZ = (p.z + map.height / 2) * scale;
-            if (i === 0) {
-              ctx.moveTo(screenX, screenZ);
-            } else {
-              ctx.lineTo(screenX, screenZ);
-            }
+          // Draw capture zones with better contrast
+          for (const zone of map.captureZones) {
+            const screenX = (zone.x + map.width / 2) * scale;
+            const screenZ = (zone.z + map.height / 2) * scale;
+            const w = Math.max(zone.width * scale, 4); // Ensure minimum visible size
+            const h = Math.max(zone.height * scale, 4);
+
+            // Outer glow
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+            ctx.fillRect(screenX - w / 2 - 1, screenZ - h / 2 - 1, w + 2, h + 2);
+
+            // Main rect
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
+            ctx.fillRect(screenX - w / 2, screenZ - h / 2, w, h);
+
+            // Bold outline
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(screenX - w / 2, screenZ - h / 2, w, h);
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(screenX, screenZ, 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffff00';
+            ctx.fill();
           }
-          ctx.stroke();
-        }
 
-        // Draw buildings with outlines for better visibility
-        for (const building of map.buildings) {
-          const screenX = (building.x + map.width / 2) * scale;
-          const screenZ = (building.z + map.height / 2) * scale;
+          // Draw deployment zones with better contrast
+          for (const zone of map.deploymentZones) {
+            const x1 = (zone.minX + map.width / 2) * scale;
+            const x2 = (zone.maxX + map.width / 2) * scale;
+            const z1 = (zone.minZ + map.height / 2) * scale;
+            const z2 = (zone.maxZ + map.height / 2) * scale;
 
-          // Ensure buildings are visible even on large maps (min 2px)
-          const w = Math.max(building.width * scale, 2);
-          const d = Math.max(building.depth * scale, 2);
+            const isPlayer = zone.team === 'player';
+            const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
+            const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
 
-          // Fill (use high contrast color for urban biome or general building color)
-          ctx.fillStyle = map.biome === 'cities' ? '#a0a0a0' : '#d4c4a8';
-          ctx.fillRect(screenX - w / 2, screenZ - d / 2, w, d);
+            // Fill
+            ctx.fillStyle = fillColor;
+            ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
 
-          // Outline (only draw if large enough to matter, otherwise it just clutters)
-          if (w > 3) {
-            ctx.strokeStyle = '#404040';
-            ctx.lineWidth = 0.5;
-            ctx.strokeRect(screenX - w / 2, screenZ - d / 2, w, d);
+            // Bold outline
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
           }
+
+          // Draw resupply points as directional arrows at map edges
+          for (const point of map.resupplyPoints) {
+            const screenX = (point.x + map.width / 2) * scale;
+            const screenY = (point.z + map.height / 2) * scale;
+            const r = point.radius * scale;
+
+            const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
+
+            // Arrow dimensions
+            const arrowLength = r * 2.5;
+            const arrowWidth = r * 1.0;
+            const arrowHeadWidth = r * 1.5;
+            const arrowHeadLength = r * 0.8;
+
+            // Offset arrow base outside the map edge
+            const outsideOffset = r * 0.5;
+            const baseY = point.team === 'player'
+              ? screenY - outsideOffset  // Player: offset up (outside top edge)
+              : screenY + outsideOffset; // Enemy: offset down (outside bottom edge)
+
+            // Save context and position at arrow base
+            ctx.save();
+            ctx.translate(screenX, baseY);
+
+            // Rotation: arrow shape points UP (-Y), flip based on team
+            // Player arrows point DOWN into battlefield, enemy arrows point UP
+            ctx.rotate(Math.PI - point.direction);
+
+            // Draw arrow shape (points UP in local space)
+            ctx.beginPath();
+            ctx.moveTo(-arrowWidth / 2, 0);
+            ctx.lineTo(-arrowWidth / 2, -arrowLength + arrowHeadLength);
+            ctx.lineTo(-arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+            ctx.lineTo(0, -arrowLength); // Arrow tip
+            ctx.lineTo(arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
+            ctx.lineTo(arrowWidth / 2, -arrowLength + arrowHeadLength);
+            ctx.lineTo(arrowWidth / 2, 0);
+            ctx.closePath();
+
+            ctx.fillStyle = color + 'A0'; // Semi-transparent
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Draw circle at base (spawn point)
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            ctx.restore();
+          }
+
+          // Draw biome info at bottom of preview
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 190, 200, 10);
+          ctx.fillStyle = '#fff';
+          ctx.font = '10px monospace';
+          ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
+
+        } catch (error) {
+          console.error('Map generation failed:', error);
+          ctx.fillStyle = '#ff4444';
+          ctx.fillRect(0, 0, 200, 200);
+          ctx.fillStyle = '#fff';
+          ctx.font = '12px monospace';
+          ctx.fillText('Generation Error', 50, 100);
+        } finally {
+          // Always hide loading state and re-enable button
+          if (loadingOverlay) loadingOverlay.classList.add('hidden');
+          isGeneratingMap = false;
+          updateStartButton();
         }
-
-        // Draw capture zones with better contrast
-        for (const zone of map.captureZones) {
-          const screenX = (zone.x + map.width / 2) * scale;
-          const screenZ = (zone.z + map.height / 2) * scale;
-          const w = Math.max(zone.width * scale, 4); // Ensure minimum visible size
-          const h = Math.max(zone.height * scale, 4);
-
-          // Outer glow
-          ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
-          ctx.fillRect(screenX - w / 2 - 1, screenZ - h / 2 - 1, w + 2, h + 2);
-
-          // Main rect
-          ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
-          ctx.fillRect(screenX - w / 2, screenZ - h / 2, w, h);
-
-          // Bold outline
-          ctx.strokeStyle = '#ffff00';
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(screenX - w / 2, screenZ - h / 2, w, h);
-
-          // Center dot
-          ctx.beginPath();
-          ctx.arc(screenX, screenZ, 1.5, 0, Math.PI * 2);
-          ctx.fillStyle = '#ffff00';
-          ctx.fill();
-        }
-
-        // Draw deployment zones with better contrast
-        for (const zone of map.deploymentZones) {
-          const x1 = (zone.minX + map.width / 2) * scale;
-          const x2 = (zone.maxX + map.width / 2) * scale;
-          const z1 = (zone.minZ + map.height / 2) * scale;
-          const z2 = (zone.maxZ + map.height / 2) * scale;
-
-          const isPlayer = zone.team === 'player';
-          const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
-          const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
-
-          // Fill
-          ctx.fillStyle = fillColor;
-          ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
-
-          // Bold outline
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(x1, z1, x2 - x1, z2 - z1);
-        }
-
-        // Draw resupply points as directional arrows at map edges
-        for (const point of map.resupplyPoints) {
-          const screenX = (point.x + map.width / 2) * scale;
-          const screenY = (point.z + map.height / 2) * scale;
-          const r = point.radius * scale;
-
-          const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
-
-          // Arrow dimensions
-          const arrowLength = r * 2.5;
-          const arrowWidth = r * 1.0;
-          const arrowHeadWidth = r * 1.5;
-          const arrowHeadLength = r * 0.8;
-
-          // Offset arrow base outside the map edge
-          const outsideOffset = r * 0.5;
-          const baseY = point.team === 'player'
-            ? screenY - outsideOffset  // Player: offset up (outside top edge)
-            : screenY + outsideOffset; // Enemy: offset down (outside bottom edge)
-
-          // Save context and position at arrow base
-          ctx.save();
-          ctx.translate(screenX, baseY);
-
-          // Rotation: arrow shape points UP (-Y), flip based on team
-          // Player arrows point DOWN into battlefield, enemy arrows point UP
-          ctx.rotate(Math.PI - point.direction);
-
-          // Draw arrow shape (points UP in local space)
-          ctx.beginPath();
-          ctx.moveTo(-arrowWidth / 2, 0);
-          ctx.lineTo(-arrowWidth / 2, -arrowLength + arrowHeadLength);
-          ctx.lineTo(-arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
-          ctx.lineTo(0, -arrowLength); // Arrow tip
-          ctx.lineTo(arrowHeadWidth / 2, -arrowLength + arrowHeadLength);
-          ctx.lineTo(arrowWidth / 2, -arrowLength + arrowHeadLength);
-          ctx.lineTo(arrowWidth / 2, 0);
-          ctx.closePath();
-
-          ctx.fillStyle = color + 'A0'; // Semi-transparent
-          ctx.fill();
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-
-          // Draw circle at base (spawn point)
-          ctx.beginPath();
-          ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.fill();
-
-          ctx.restore();
-        }
-
-        // Draw biome info at bottom of preview
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 190, 200, 10);
-        ctx.fillStyle = '#fff';
-        ctx.font = '10px monospace';
-        ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
-      } catch (error) {
-        console.error('Map generation failed:', error);
-        ctx.fillStyle = '#ff4444';
-        ctx.fillRect(0, 0, 200, 200);
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px monospace';
-        ctx.fillText('Generation Error', 50, 100);
-      }
-    }).catch(error => {
-      console.error('Failed to load MapGenerator:', error);
-    });
+      }).catch(error => {
+        console.error('Failed to load MapGenerator:', error);
+        if (loadingOverlay) loadingOverlay.classList.add('hidden'); // Also hide here just in case
+        isGeneratingMap = false;
+        updateStartButton();
+      });
+    }, 50); // Small delay to let UI render the loading state
   }
 
   function updateStartButton(): void {
     const btn = element.querySelector('#skirmish-start-btn') as HTMLButtonElement;
-    btn.disabled = !selectedDeck;
+    btn.disabled = !selectedDeck || isGeneratingMap;
+    // Show loading state on button if generating
+    if (isGeneratingMap) {
+      btn.textContent = 'GENERATING MAP...';
+      btn.style.opacity = '0.7';
+    } else {
+      btn.textContent = 'START BATTLE';
+      btn.style.opacity = '1';
+    }
   }
 
   const onEnter = () => {
@@ -1057,15 +1281,45 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     });
 
     element.querySelector('#skirmish-start-btn')?.addEventListener('click', () => {
-      if (selectedDeck) {
-        callbacks.onStartBattle({
-          deck: selectedDeck,
-          mapSize,
-          mapSeed,
-          ...(selectedBiome !== undefined && { biome: selectedBiome }),
-          team1,
-          team2,
-        });
+      if (selectedDeck && !isGeneratingMap && generatedMap) {
+        // Show global loading screen for immediate feedback
+        const loadingScreen = document.getElementById('loading-screen');
+        const loadingText = document.getElementById('loading-text');
+
+        if (loadingScreen && loadingText) {
+          loadingScreen.classList.remove('hidden');
+          loadingText.textContent = 'Preparing Battlefield...';
+
+          // Small delay to allow loading screen to render before hanging the UI with scene construction
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (selectedDeck) {
+                callbacks.onStartBattle({
+                  deck: selectedDeck,
+                  mapSize,
+                  mapSeed,
+                  ...(selectedBiome !== undefined && { biome: selectedBiome }),
+                  existingMap: generatedMap!, // Use the map we already generated
+                  team1,
+                  team2,
+                });
+
+                // Note: The global loading screen will be hidden by the game logic once ready
+              }
+            });
+          });
+        } else {
+          // Fallback if loading screen not found
+          callbacks.onStartBattle({
+            deck: selectedDeck,
+            mapSize,
+            mapSeed,
+            ...(selectedBiome !== undefined && { biome: selectedBiome }),
+            existingMap: generatedMap, // Use the map we already generated
+            team1,
+            team2,
+          });
+        }
       }
     });
 

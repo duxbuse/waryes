@@ -153,7 +153,7 @@ export type TerrainType = 'road' | 'field' | 'forest' | 'building' | 'river' | '
 export type CoverType = 'none' | 'light' | 'heavy' | 'full';
 
 // Biome types for map generation
-export type BiomeType = 'rainforest' | 'tundra' | 'mesa' | 'mountains' | 'plains' | 'farmland' | 'cities';
+export type BiomeType = 'rainforest' | 'tundra' | 'mesa' | 'mountains' | 'plains' | 'cities';
 
 export type ObjectiveType =
   | 'radio_tower' | 'supply_cache' | 'bunker' | 'hq_bunker' | 'radar_station' | 'supply_depot' | 'vehicle_park' | 'comms_array' // Generic

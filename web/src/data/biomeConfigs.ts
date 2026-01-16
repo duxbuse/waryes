@@ -198,11 +198,12 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
       hill: 0.1,
     },
 
-    // Elevation: Plains dominant, some hills
+    // Elevation: Plains dominant, some hills, occasional low plateaus
     elevationFeatureWeights: {
       plains: 0.6,
       hill: 0.3,
-      valley: 0.1,
+      valley: 0.05,
+      plateau: 0.05,  // Low weight for occasional variety (0-2 per map)
     },
 
     // Settlements: High density
@@ -218,47 +219,6 @@ export const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
     coverRatio: 0.2,
   },
 
-  farmland: {
-    id: 'farmland',
-    name: 'Farmland',
-    description: 'Cultivated agricultural land with processing facilities',
-
-    // Visual: Yellow-green, cultivated appearance
-    groundColor: 0x8a9955,  // Yellow-green
-    forestColor: 0x6a7945,  // Olive green
-    waterColor: 0x5a8aa0,   // Pond blue
-
-    // Vegetation: Sparse-light forests (field borders)
-    forestDensity: { min: 0.5, max: 1.0 },
-    forestSizeScale: 0.7,
-    treeType: 'oak',
-
-    // Terrain: Heavily cultivated, mostly open
-    terrainWeights: {
-      field: 0.8,
-      forest: 0.1,
-      hill: 0.1,
-    },
-
-    // Elevation: Flat plains, gentle hills
-    elevationFeatureWeights: {
-      plains: 0.7,
-      hill: 0.2,
-      valley: 0.1,
-    },
-
-    // Settlements: Very high density
-    settlementDensity: 1.2,
-    settlementTypes: ['hamlet', 'village', 'town'],
-
-    // Strategic objectives: Processing and infrastructure + settlements
-    objectiveTypes: ['processing_plant', 'irrigation_station', 'market_town', 'hamlet', 'village', 'town'],
-    objectiveCount: { min: 4, max: 5 },
-
-    // Balance: Very open, minimal cover
-    openSpaceRatio: 0.7,
-    coverRatio: 0.15,
-  },
 
   cities: {
     id: 'cities',
@@ -317,7 +277,6 @@ export function selectBiomeFromSeed(seed: number): BiomeType {
     mesa: 1.2,
     mountains: 1.5,  // Slightly favor mountains for gameplay variety
     plains: 1.5,     // and plains for open combat
-    farmland: 1.3,
     cities: 0.8,     // Less common (intense urban combat)
   };
 

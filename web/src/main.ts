@@ -76,7 +76,24 @@ async function main(): Promise<void> {
       },
       onStartBattle: (config: SkirmishConfig) => {
         if (config.deck) {
-          game.startSkirmish(config.deck, config.mapSize, config.mapSeed, config.team1, config.team2, config.biome);
+          game.startSkirmish(
+            config.deck,
+            config.mapSize,
+            config.mapSeed,
+            config.team1,
+            config.team2,
+            config.biome,
+            config.existingMap
+          );
+
+          // Hide global loading screen if it was shown
+          // Use setTimeout to ensure DOM updates and allow any pending frames
+          setTimeout(() => {
+            const globalLoadingScreen = document.getElementById('loading-screen');
+            if (globalLoadingScreen) {
+              globalLoadingScreen.classList.add('hidden');
+            }
+          }, 500);
         }
       },
       onHostOnline: async (config: SkirmishConfig) => {

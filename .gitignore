@@ -1,5 +1,6 @@
 # Claude Code local state files
 .claude/*.local.md
+claudecwd*
 
 # Node.js / Web project
 web/node_modules/

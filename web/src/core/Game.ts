@@ -635,7 +635,7 @@ export class Game {
   /**
    * Start a skirmish battle with the given configuration
    */
-  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[], biome?: BiomeType): void {
+  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[], biome?: BiomeType, existingMap?: GameMap): void {
     // Save configuration for rematch
     this.lastDeck = deck;
     this.lastMapSize = mapSize;
@@ -646,9 +646,13 @@ export class Game {
     // Reset stats for new game
     this.resetStats();
 
-    // Generate map
-    const generator = new MapGenerator(mapSeed, mapSize, biome);
-    this.currentMap = generator.generate();
+    // Use existing map if provided, otherwise generate new one
+    if (existingMap) {
+      this.currentMap = existingMap;
+    } else {
+      const generator = new MapGenerator(mapSeed, mapSize, biome);
+      this.currentMap = generator.generate();
+    }
 
     // Recreate MapRenderer with biome colors
     if (this.mapRenderer) {
