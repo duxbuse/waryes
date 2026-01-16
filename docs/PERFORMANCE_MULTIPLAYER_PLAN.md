@@ -913,7 +913,7 @@ export function setGameSeed(seed: number): void {
 ---
 
 ### Task 4.4: Replace Math.random() in AIManager
-- [ ] **Status: Not Started**
+- [x] **Status: Completed (no Math.random() calls found)**
 
 **Goal:** Make AI deterministic
 
@@ -933,7 +933,7 @@ export function setGameSeed(seed: number): void {
 ---
 
 ### Task 4.5: Create Command Protocol
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Define serializable command structure for multiplayer
 
