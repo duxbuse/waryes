@@ -630,7 +630,7 @@ Do the same for `findNearestEnemyInRange()` if it exists.
 ## Phase 3: Geometry Sharing & FOW Optimization
 
 ### Task 3.1: Create Shared Geometry Cache
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Share geometries across all units of same type
 
