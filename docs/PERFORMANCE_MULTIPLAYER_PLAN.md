@@ -243,7 +243,7 @@ export class PooledProjectile implements IPoolable {
 ---
 
 ### Task 1.5: Integrate Projectile Pool into CombatManager
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Replace per-shot mesh creation with pooled projectiles
 

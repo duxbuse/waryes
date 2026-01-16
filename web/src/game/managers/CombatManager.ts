@@ -8,6 +8,8 @@ import type { Unit } from '../units/Unit';
 import { getWeaponById } from '../../data/factions';
 import { GAME_CONSTANTS, type WeaponData } from '../../data/types';
 import { MapGenerator } from '../map/MapGenerator';
+import { ObjectPool } from '../utils/ObjectPool';
+import { PooledProjectile } from '../combat/PooledProjectile';
 
 export interface DamageResult {
   damage: number;
@@ -34,7 +36,7 @@ export interface Projectile {
 
 export class CombatManager {
   private readonly game: Game;
-  private projectiles: Map<string, Projectile> = new Map();
+  private projectiles: Map<string, PooledProjectile> = new Map();
   private nextProjectileId = 0;
 
   // Projectile materials
@@ -45,6 +47,9 @@ export class CombatManager {
 
   // Shared geometry
   private projectileGeometry: THREE.SphereGeometry;
+
+  // Object pool for projectiles
+  private projectilePool!: ObjectPool<PooledProjectile>;
 
   constructor(game: Game) {
     this.game = game;
@@ -59,7 +64,21 @@ export class CombatManager {
   }
 
   initialize(): void {
-    // Nothing to initialize currently
+    // Initialize projectile pool
+    this.projectilePool = new ObjectPool<PooledProjectile>(
+      () => new PooledProjectile(this.projectileGeometry, this.projectileMaterials.player),
+      100,  // initial size
+      500   // max size
+    );
+
+    // Pre-warm pool and add all meshes to scene
+    for (let i = 0; i < 100; i++) {
+      const proj = this.projectilePool.acquire();
+      if (proj) {
+        this.game.scene.add(proj.mesh);
+        this.projectilePool.release(proj);
+      }
+    }
   }
 
   /**
@@ -142,13 +161,9 @@ export class CombatManager {
       targetPos.z += (Math.random() - 0.5) * 5;
     }
 
-    // Create mesh
-    const mesh = new THREE.Mesh(
-      this.projectileGeometry,
-      attacker.team === 'player' ? this.projectileMaterials.player : this.projectileMaterials.enemy
-    );
-    mesh.position.copy(start);
-    this.game.scene.add(mesh);
+    // Acquire pooled projectile
+    const pooledProj = this.projectilePool.acquire();
+    if (!pooledProj) return; // Pool exhausted
 
     const distance = start.distanceTo(targetPos);
     const speed = 100; // meters per second
@@ -162,23 +177,28 @@ export class CombatManager {
     // Penetration also increases at close range
     const scaledPenetration = weaponData.penetration * kineticScale;
 
-    const projectile: Projectile = {
+    // Get appropriate material
+    const material = attacker.team === 'player'
+      ? this.projectileMaterials.player
+      : this.projectileMaterials.enemy;
+
+    // Activate the pooled projectile
+    pooledProj.activate(
       id,
-      mesh,
       start,
-      target: targetPos,
+      targetPos,
       speed,
-      damage: scaledDamage,
-      penetration: scaledPenetration,
-      suppression: willHit ? weaponData.suppression : weaponData.suppression * 0.5,
-      sourceTeam: attacker.team,
-      targetUnit: willHit ? target : undefined,
-      timeAlive: 0,
+      scaledDamage,
+      scaledPenetration,
+      willHit ? weaponData.suppression : weaponData.suppression * 0.5,
+      attacker.team,
+      willHit ? target : undefined,
       maxTime,
       weaponData,
-    };
+      material
+    );
 
-    this.projectiles.set(id, projectile);
+    this.projectiles.set(id, pooledProj);
   }
 
   update(dt: number): void {
@@ -202,17 +222,17 @@ export class CombatManager {
       }
     }
 
-    // Remove finished projectiles
+    // Remove finished projectiles and release back to pool
     for (const id of toRemove) {
       const proj = this.projectiles.get(id);
       if (proj) {
-        this.game.scene.remove(proj.mesh);
+        this.projectilePool.release(proj);
         this.projectiles.delete(id);
       }
     }
   }
 
-  private onProjectileHit(proj: Projectile): void {
+  private onProjectileHit(proj: PooledProjectile): void {
     if (!proj.targetUnit) return;
 
     // Calculate damage based on armor
@@ -262,7 +282,7 @@ export class CombatManager {
     }
   }
 
-  private calculateDamage(proj: Projectile, target: Unit): DamageResult {
+  private calculateDamage(proj: PooledProjectile, target: Unit): DamageResult {
     // Get armor facing
     const armor = this.getTargetArmor(proj, target);
 
@@ -296,7 +316,7 @@ export class CombatManager {
     };
   }
 
-  private getTargetArmor(proj: Projectile, target: Unit): number {
+  private getTargetArmor(proj: PooledProjectile, target: Unit): number {
     // Calculate hit direction
     const toTarget = target.position.clone().sub(proj.start);
     const targetForward = new THREE.Vector3(0, 0, 1).applyQuaternion(target.mesh.quaternion);
