@@ -95,7 +95,7 @@ export class ObjectPool<T extends IPoolable> {
 ---
 
 ### Task 1.2: Create Vector3 Pool
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Pool for reusing THREE.Vector3 instances within a frame
 
