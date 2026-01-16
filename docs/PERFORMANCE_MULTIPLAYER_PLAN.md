@@ -471,7 +471,7 @@ export class SpatialHashGrid<T extends { position: THREE.Vector3; id: string }> 
 ---
 
 ### Task 2.2: Integrate Spatial Grid into UnitManager
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Add spatial indexing to UnitManager
 

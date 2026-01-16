@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import { GamePhase } from '../../core/Game';
 import { Unit, type UnitConfig } from '../units/Unit';
+import { SpatialHashGrid } from '../utils/SpatialHashGrid';
 
 export interface SpawnConfig {
   position: THREE.Vector3;
@@ -29,8 +30,20 @@ export class UnitManager {
   // Track last attacker for kill attribution
   private lastAttackers: Map<string, Unit> = new Map();
 
+  // Spatial partitioning for efficient proximity queries
+  private spatialGrid: SpatialHashGrid<Unit>;
+
+  // Cached unit arrays by team (rebuilt on add/remove)
+  private unitsByTeam: {
+    player: Unit[];
+    enemy: Unit[];
+    ally: Unit[];
+    all: Unit[];
+  } = { player: [], enemy: [], ally: [], all: [] };
+
   constructor(game: Game) {
     this.game = game;
+    this.spatialGrid = new SpatialHashGrid<Unit>(50); // 50m cells
   }
 
   initialize(): void {
@@ -57,6 +70,8 @@ export class UnitManager {
 
     const unit = new Unit(unitConfig, this.game);
     this.units.set(id, unit);
+    this.spatialGrid.insert(unit);
+    this.rebuildTeamArrays();
 
     // If game is already in battle phase, unfreeze immediately
     if (this.game.phase === GamePhase.Battle) {
@@ -102,6 +117,8 @@ export class UnitManager {
 
     // Remove from tracking
     this.units.delete(unit.id);
+    this.spatialGrid.remove(unit);
+    this.rebuildTeamArrays();
 
     // Cleanup
     unit.dispose();
@@ -116,13 +133,32 @@ export class UnitManager {
 
   /**
    * Get all units (optionally filtered by team)
+   * Returns cached array for performance - do not modify!
    */
-  getAllUnits(team?: 'player' | 'enemy'): Unit[] {
-    const units = Array.from(this.units.values());
+  getAllUnits(team?: 'player' | 'enemy' | 'ally'): readonly Unit[] {
+    if (team) return this.unitsByTeam[team];
+    return this.unitsByTeam.all;
+  }
+
+  /**
+   * Get units within a radius (uses spatial hash for O(1) lookup)
+   */
+  getUnitsInRadius(center: THREE.Vector3, radius: number, team?: 'player' | 'enemy' | 'ally'): Unit[] {
+    const units = this.spatialGrid.queryRadius(center, radius);
     if (team) {
       return units.filter(u => u.team === team);
     }
     return units;
+  }
+
+  /**
+   * Rebuild cached team arrays (called after add/remove)
+   */
+  private rebuildTeamArrays(): void {
+    this.unitsByTeam.all = Array.from(this.units.values());
+    this.unitsByTeam.player = this.unitsByTeam.all.filter(u => u.team === 'player');
+    this.unitsByTeam.enemy = this.unitsByTeam.all.filter(u => u.team === 'enemy');
+    this.unitsByTeam.ally = this.unitsByTeam.all.filter(u => u.team === 'ally');
   }
 
   /**
@@ -318,6 +354,8 @@ export class UnitManager {
    */
   fixedUpdate(dt: number): void {
     for (const unit of this.units.values()) {
+      // Update spatial grid position for this unit
+      this.spatialGrid.update(unit);
       unit.fixedUpdate(dt);
     }
   }
