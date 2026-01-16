@@ -39,6 +39,10 @@ export class FogOfWarManager {
   private timeSinceLastUpdate = 0;
   private updateInterval = 0.1; // 10Hz updates
 
+  // Position tracking for incremental updates
+  private lastUnitPositions = new Map<string, THREE.Vector3>();
+  private readonly MOVE_THRESHOLD_SQ = 25; // 5 meters squared - units must move this much to trigger update
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -49,6 +53,7 @@ export class FogOfWarManager {
   initialize(): void {
     this.currentVision.clear();
     this.exploredGrid.clear();
+    this.lastUnitPositions.clear();
     this.blockingGrid = null;
     this.mapRevision = -1;
   }
@@ -71,11 +76,51 @@ export class FogOfWarManager {
     }
     this.timeSinceLastUpdate = 0;
 
-    // Clear current vision
-    this.currentVision.clear();
-
     // Get all units
     const allUnits = this.game.unitManager.getAllUnits();
+
+    // Track which units moved significantly for incremental optimization
+    let anyUnitMoved = false;
+    const currentUnitIds = new Set<string>();
+
+    for (const unit of allUnits) {
+      if (unit.health <= 0) continue;
+      currentUnitIds.add(unit.id);
+
+      const lastPos = this.lastUnitPositions.get(unit.id);
+      if (!lastPos) {
+        // New unit - track position and mark as moved
+        this.lastUnitPositions.set(unit.id, unit.position.clone());
+        anyUnitMoved = true;
+      } else {
+        // Check if unit moved significantly
+        const distSq = lastPos.distanceToSquared(unit.position);
+        if (distSq > this.MOVE_THRESHOLD_SQ) {
+          // Unit moved - update tracked position
+          lastPos.copy(unit.position);
+          anyUnitMoved = true;
+        }
+      }
+    }
+
+    // Clean up dead/removed units from position tracking
+    for (const trackedId of this.lastUnitPositions.keys()) {
+      if (!currentUnitIds.has(trackedId)) {
+        this.lastUnitPositions.delete(trackedId);
+        anyUnitMoved = true; // Need to recalculate since a unit is gone
+      }
+    }
+
+    // Skip full vision recalculation if no units moved
+    // This provides significant optimization when units are stationary
+    if (!anyUnitMoved) {
+      // Still need to update enemy visibility in case smoke changed
+      this.updateEnemyVisibility();
+      return;
+    }
+
+    // Clear current vision and rebuild (full update when any unit moved)
+    this.currentVision.clear();
 
     // Update vision for each unit's team
     for (const unit of allUnits) {

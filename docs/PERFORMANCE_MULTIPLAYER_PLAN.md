@@ -736,7 +736,7 @@ dispose(): void {
 ---
 
 ### Task 3.3: FOW Incremental Update - Add Position Tracking
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Track unit positions to enable incremental FOW updates
 
