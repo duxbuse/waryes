@@ -318,7 +318,7 @@ pooledProj.activate(
 ---
 
 ### Task 1.6: Use VectorPool in CombatManager
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Replace Vector3 allocations with pooled vectors
 

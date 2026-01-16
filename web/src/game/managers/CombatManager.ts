@@ -10,6 +10,7 @@ import { GAME_CONSTANTS, type WeaponData } from '../../data/types';
 import { MapGenerator } from '../map/MapGenerator';
 import { ObjectPool } from '../utils/ObjectPool';
 import { PooledProjectile } from '../combat/PooledProjectile';
+import { VectorPool } from '../utils/VectorPool';
 
 export interface DamageResult {
   damage: number;
@@ -94,7 +95,7 @@ export class CombatManager {
 
     // Calculate hit chance based on distance, accuracy, cover
     const attackerPos = attacker.isGarrisoned && attacker.garrisonedBuilding
-      ? new THREE.Vector3(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
+      ? VectorPool.acquire().set(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
       : attacker.position;
 
     const distance = attackerPos.distanceTo(target.position);
@@ -123,7 +124,7 @@ export class CombatManager {
       // Miss - create tracer anyway for visual
       this.createProjectile(attacker, target, weapon, false, distance);
       // Create muzzle flash and sound
-      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
+      const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
       this.game.audioManager.playSound('weapon_fire');
       return;
@@ -132,7 +133,7 @@ export class CombatManager {
     // Hit - create projectile with kinetic scaling
     this.createProjectile(attacker, target, weapon, true, distance);
     // Create muzzle flash and sound
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
+    const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
     this.game.audioManager.playSound('weapon_fire');
   }
@@ -147,12 +148,12 @@ export class CombatManager {
     const id = `proj_${this.nextProjectileId++}`;
 
     // Calculate muzzle position (front of attacker)
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
-    const start = attacker.position.clone().add(forward.multiplyScalar(2));
+    const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
+    const start = VectorPool.acquire().copy(attacker.position).add(forward.multiplyScalar(2));
     start.y += 1;
 
     // Calculate target position (with some randomness for misses)
-    const targetPos = target.position.clone();
+    const targetPos = VectorPool.acquire().copy(target.position);
     targetPos.y += 1;
 
     if (!willHit) {
@@ -208,7 +209,7 @@ export class CombatManager {
       proj.timeAlive += dt;
 
       // Move projectile
-      const direction = proj.target.clone().sub(proj.start).normalize();
+      const direction = VectorPool.acquire().copy(proj.target).sub(proj.start).normalize();
       const totalDistance = proj.start.distanceTo(proj.target);
       const currentDistance = proj.speed * proj.timeAlive;
 
@@ -276,8 +277,8 @@ export class CombatManager {
     proj.targetUnit.suppressMorale(result.suppression);
 
     // Deploy smoke if weapon has smoke effect
-    if (proj.weaponData.smokeEffect) {
-      const smokePos = proj.targetUnit.position.clone();
+    if (proj.weaponData?.smokeEffect) {
+      const smokePos = VectorPool.acquire().copy(proj.targetUnit.position);
       this.game.smokeManager.deploySmoke(smokePos, 'grenade');
     }
   }
@@ -318,8 +319,8 @@ export class CombatManager {
 
   private getTargetArmor(proj: PooledProjectile, target: Unit): number {
     // Calculate hit direction
-    const toTarget = target.position.clone().sub(proj.start);
-    const targetForward = new THREE.Vector3(0, 0, 1).applyQuaternion(target.mesh.quaternion);
+    const toTarget = VectorPool.acquire().copy(target.position).sub(proj.start);
+    const targetForward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(target.mesh.quaternion);
 
     // Dot product to determine facing
     const dot = toTarget.normalize().dot(targetForward);
@@ -452,18 +453,19 @@ export class CombatManager {
     if (from.isGarrisoned && from.garrisonedBuilding) {
       const b = from.garrisonedBuilding;
       const points = [
-        new THREE.Vector3(b.x, 2, b.z), // Center
-        new THREE.Vector3(b.x - b.width / 2, 2, b.z - b.depth / 2), // Corners
-        new THREE.Vector3(b.x + b.width / 2, 2, b.z - b.depth / 2),
-        new THREE.Vector3(b.x - b.width / 2, 2, b.z + b.depth / 2),
-        new THREE.Vector3(b.x + b.width / 2, 2, b.z + b.depth / 2),
+        VectorPool.acquire().set(b.x, 2, b.z), // Center
+        VectorPool.acquire().set(b.x - b.width / 2, 2, b.z - b.depth / 2), // Corners
+        VectorPool.acquire().set(b.x + b.width / 2, 2, b.z - b.depth / 2),
+        VectorPool.acquire().set(b.x - b.width / 2, 2, b.z + b.depth / 2),
+        VectorPool.acquire().set(b.x + b.width / 2, 2, b.z + b.depth / 2),
       ];
 
-      return points.some(p => this.checkLOSPath(p, to.position.clone().add(new THREE.Vector3(0, 2, 0))));
+      const targetEndPos = VectorPool.acquire().copy(to.position).add(VectorPool.acquire().set(0, 2, 0));
+      return points.some(p => this.checkLOSPath(p, targetEndPos));
     }
 
-    const startPos = from.position.clone().add(new THREE.Vector3(0, 2, 0));
-    const endPos = to.position.clone().add(new THREE.Vector3(0, 2, 0));
+    const startPos = VectorPool.acquire().copy(from.position).add(VectorPool.acquire().set(0, 2, 0));
+    const endPos = VectorPool.acquire().copy(to.position).add(VectorPool.acquire().set(0, 2, 0));
 
     return this.checkLOSPath(startPos, endPos);
   }
@@ -472,14 +474,14 @@ export class CombatManager {
     const map = this.game.currentMap;
     if (!map) return true;
 
-    const direction = new THREE.Vector3().subVectors(endPos, startPos);
+    const direction = VectorPool.acquire().subVectors(endPos, startPos);
     const distance = direction.length();
 
     // Sample points along the line (every 10m - optimization)
     const steps = Math.ceil(distance / 10);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      const point = new THREE.Vector3().lerpVectors(startPos, endPos, t);
+      const point = VectorPool.acquire().lerpVectors(startPos, endPos, t);
 
       // 1. Check terrain elevation blocking
       const terrainHeight = this.game.getElevationAt(point.x, point.z);
