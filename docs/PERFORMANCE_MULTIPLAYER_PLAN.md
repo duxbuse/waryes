@@ -564,7 +564,7 @@ fixedUpdate(dt: number): void {
 ---
 
 ### Task 2.3: Optimize Commander Aura with Spatial Queries
-- [ ] **Status: Not Started**
+- [x] **Status: Completed**
 
 **Goal:** Reduce O(n²) commander aura to O(k) using spatial queries
 

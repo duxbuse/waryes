@@ -326,10 +326,15 @@ export class Unit {
 
     if (!this.unitData) return;
 
-    // Get all friendly units
-    const friendlyUnits = this.game.unitManager.getAllUnits(this.team);
+    // Use spatial query for efficiency - max commander aura radius is ~100m
+    const MAX_AURA_RADIUS = 100;
+    const nearbyUnits = this.game.unitManager.getUnitsInRadius(
+      this.position,
+      MAX_AURA_RADIUS,
+      this.team
+    );
 
-    for (const unit of friendlyUnits) {
+    for (const unit of nearbyUnits) {
       // Skip self, units without data, and non-commanders
       if (unit === this || !unit.unitData || !unit.unitData.isCommander) continue;
 
