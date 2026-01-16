@@ -971,6 +971,10 @@ export class Unit {
       case UnitCommand.Mount:
         this.processMount(dt);
         break;
+      case UnitCommand.None:
+        // Apply separation even when stationary to prevent units from being pushed into each other
+        this.applyStationarySeparation(dt);
+        break;
     }
   }
 
@@ -1169,7 +1173,10 @@ export class Unit {
     direction.y = 0;
     const distance = direction.length();
 
-    if (distance < 0.5) {
+    // Use collision radius for stopping distance
+    const stoppingDistance = this.getCollisionRadius() * 0.8;
+
+    if (distance < stoppingDistance) {
       this.mesh.position.copy(this.targetPosition);
       this.targetPosition = null;
       this.completeCommand();
@@ -1182,6 +1189,14 @@ export class Unit {
 
     // Keep facing original direction while moving backwards
     this.velocity.copy(direction).multiplyScalar(moveSpeed);
+
+    // Apply separation force to avoid unit overlap
+    const separationForce = this.applySeparation();
+    if (separationForce.length() > 0) {
+      const separationStrength = 0.6; // Match forward movement (was 0.3)
+      separationForce.normalize().multiplyScalar(moveSpeed * separationStrength);
+      this.velocity.add(separationForce);
+    }
 
     // Slope validation (BEFORE movement)
     if (this.shouldCheckTerrain()) {
@@ -1246,6 +1261,82 @@ export class Unit {
     }
   }
 
+  /**
+   * Get collision radius for this unit based on category
+   */
+  private getCollisionRadius(): number {
+    const category = this.unitData?.category ?? 'INF';
+    // Increased radii to give more spacing and prevent overlap
+    if (category === 'TNK') return 3.5; // Tanks are larger (was 2.5)
+    if (category === 'VHC' || category === 'REC') return 3.0; // Vehicles (was 2.0)
+    if (category === 'ART' || category === 'LOG') return 3.5; // Artillery and logistics (was 2.5)
+    return 2.5; // Infantry and others (was 1.5)
+  }
+
+  /**
+   * Apply separation force to avoid overlapping with nearby units
+   */
+  private applySeparation(): THREE.Vector3 {
+    const separationForce = new THREE.Vector3();
+    const collisionRadius = this.getCollisionRadius();
+    const checkRadius = collisionRadius * 4; // Check within 4x radius (was 3x)
+
+    // Get nearby same-team units
+    const nearbyUnits = this.game.unitManager.getUnitsInRadius(
+      this.position,
+      checkRadius,
+      this.team
+    );
+
+    for (const other of nearbyUnits) {
+      if (other.id === this.id) continue;
+      if (other.health <= 0) continue;
+
+      const toOther = new THREE.Vector3().subVectors(this.position, other.position);
+      toOther.y = 0; // Only horizontal separation
+      const dist = toOther.length();
+
+      const otherRadius = other.getCollisionRadius();
+      // Add 1m spacing buffer to prevent units from touching
+      const minDist = collisionRadius + otherRadius + 1.0;
+
+      // If too close, push away
+      if (dist < minDist && dist > 0.01) {
+        toOther.normalize();
+        // More aggressive push - squared falloff for stronger near-field
+        const pushStrength = Math.pow((minDist - dist) / minDist, 2);
+        separationForce.add(toOther.multiplyScalar(pushStrength * 2.0)); // 2x multiplier
+      }
+    }
+
+    return separationForce;
+  }
+
+  /**
+   * Apply separation for stationary units to prevent overlap
+   */
+  private applyStationarySeparation(dt: number): void {
+    const separationForce = this.applySeparation();
+    if (separationForce.length() > 0.01) {
+      // Move slowly to separate (slower than during active movement)
+      const separationSpeed = this.speed * 0.3 * dt; // 30% of normal speed
+      separationForce.normalize().multiplyScalar(separationSpeed);
+
+      this.mesh.position.add(separationForce);
+
+      // Clamp to terrain height
+      const terrainHeight = this.game.getElevationAt(this.mesh.position.x, this.mesh.position.z);
+      const category = this.unitData?.category ?? 'INF';
+      const isAircraft = category === 'HEL' || category === 'AIR';
+
+      if (isAircraft) {
+        this.mesh.position.y = terrainHeight + 20;
+      } else {
+        this.mesh.position.y = terrainHeight;
+      }
+    }
+  }
+
   private processMovement(dt: number): void {
     if (!this.targetPosition) {
       this.completeCommand();
@@ -1279,7 +1370,10 @@ export class Unit {
     direction.y = 0; // Keep on ground plane
     const distance = direction.length();
 
-    if (distance < 2.0) {
+    // Use collision radius for stopping distance to maintain proper spacing
+    const stoppingDistance = this.getCollisionRadius() * 0.8; // Stop at 80% of collision radius
+
+    if (distance < stoppingDistance) {
       // Reached current waypoint, move to next
       if (this.waypoints.length > 0 && this.currentWaypointIndex < this.waypoints.length - 1) {
         this.currentWaypointIndex++;
@@ -1314,6 +1408,15 @@ export class Unit {
 
     // Move
     this.velocity.copy(direction).multiplyScalar(moveDistance);
+
+    // Apply separation force to avoid unit overlap
+    const separationForce = this.applySeparation();
+    if (separationForce.length() > 0) {
+      // Strong separation to prevent overlap - can override movement direction significantly
+      const separationStrength = 0.6; // 60% of movement can be separation (was 30%)
+      separationForce.normalize().multiplyScalar(moveDistance * separationStrength);
+      this.velocity.add(separationForce);
+    }
 
     // Slope validation (BEFORE movement) - now just slows down instead of stopping
     if (this.shouldCheckTerrain()) {

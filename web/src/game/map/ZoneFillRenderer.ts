@@ -59,8 +59,8 @@ export class ZoneFillRenderer {
   private readonly FILL_SPEED = 15;
   // Rebalance speed (ratio change per second)
   private readonly REBALANCE_SPEED = 0.1;
-  // Height offset above terrain
-  private readonly HEIGHT_OFFSET = 0.5;
+  // Height offset above terrain (higher to avoid clipping through hills)
+  private readonly HEIGHT_OFFSET = 1.0;
 
   constructor(mapGroup: THREE.Group, getElevationAt?: (x: number, z: number) => number) {
     this.mapGroup = mapGroup;
@@ -93,23 +93,46 @@ export class ZoneFillRenderer {
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
 
-    // Create mesh for the fill visualization
+    // Use simple flat overlay at max elevation + offset
+    // This avoids texture stretching/distortion issues from terrain conforming geometry
     const geometry = new THREE.PlaneGeometry(width, height);
     geometry.rotateX(-Math.PI / 2);
+
+    // Sample terrain densely to find max elevation (don't miss peaks/hills)
+    // Sample every 5 meters to ensure we catch terrain features
+    let maxElevation = 0;
+    if (this.getElevationAt) {
+      const sampleSpacing = 5; // meters between samples
+      const samplesX = Math.max(3, Math.ceil(width / sampleSpacing));
+      const samplesZ = Math.max(3, Math.ceil(height / sampleSpacing));
+
+      for (let sz = 0; sz < samplesZ; sz++) {
+        for (let sx = 0; sx < samplesX; sx++) {
+          const sampleX = centerX - width / 2 + (sx / (samplesX - 1)) * width;
+          const sampleZ = centerZ - height / 2 + (sz / (samplesZ - 1)) * height;
+          const elevation = this.getElevationAt(sampleX, sampleZ);
+          maxElevation = Math.max(maxElevation, elevation);
+        }
+      }
+    }
 
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.6, // Slightly more transparent to blend better
       side: THREE.DoubleSide,
       depthWrite: false,
+      depthTest: true, // Enable depth test so terrain occludes when needed
+      polygonOffset: true, // Prevent z-fighting
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    // Sample terrain elevation at zone center and offset above it
-    const terrainHeight = this.getElevationAt ? this.getElevationAt(centerX, centerZ) : 0;
-    mesh.position.set(centerX, terrainHeight + this.HEIGHT_OFFSET, centerZ);
+    // Position at max elevation + offset to float above terrain
+    mesh.position.set(centerX, maxElevation + this.HEIGHT_OFFSET, centerZ);
     mesh.renderOrder = 91;
+    mesh.frustumCulled = true; // Enable frustum culling for off-screen zones
 
     this.mapGroup.add(mesh);
 
@@ -340,7 +363,7 @@ export class ZoneFillRenderer {
         // Rectangular logic implies all pixels in texture are valid part of zone
         // But we might want edge softening
 
-        // Distance from edge for softening
+        // Distance from edge for softening - larger fade to blend better with terrain
         // u, v are 0..1
         const u = px / resolution;
         const v = py / resolution;
@@ -350,28 +373,30 @@ export class ZoneFillRenderer {
         const dEdgeV = 0.5 - Math.abs(v - 0.5);
         const minEdgeDist = Math.min(dEdgeU * width, dEdgeV * height); // in world units approx
 
-        const edgeAlpha = Math.min(1, minEdgeDist / 2.0); // 2 unit soften edge
+        // Larger fade distance for smoother blending (5 meters instead of 2)
+        const fadeDistance = 5.0;
+        const edgeAlpha = Math.min(1, minEdgeDist / fadeDistance);
 
         const fillValue = fillGrid[i]!;
 
         if (fillValue === 1) {
-          // Player fill
+          // Player fill - brighter colors for better visibility
           data[pixelIndex] = this.PLAYER_COLOR.r;
           data[pixelIndex + 1] = this.PLAYER_COLOR.g;
           data[pixelIndex + 2] = this.PLAYER_COLOR.b;
-          data[pixelIndex + 3] = Math.floor(180 * edgeAlpha);
+          data[pixelIndex + 3] = Math.floor(200 * edgeAlpha); // Increased from 180 for better visibility
         } else if (fillValue === 2) {
           // Enemy fill
           data[pixelIndex] = this.ENEMY_COLOR.r;
           data[pixelIndex + 1] = this.ENEMY_COLOR.g;
           data[pixelIndex + 2] = this.ENEMY_COLOR.b;
-          data[pixelIndex + 3] = Math.floor(180 * edgeAlpha);
+          data[pixelIndex + 3] = Math.floor(200 * edgeAlpha); // Increased from 180 for better visibility
         } else {
-          // Empty - dark transparent
+          // Empty - make it more transparent so terrain shows through better
           data[pixelIndex] = this.EMPTY_COLOR.r;
           data[pixelIndex + 1] = this.EMPTY_COLOR.g;
           data[pixelIndex + 2] = this.EMPTY_COLOR.b;
-          data[pixelIndex + 3] = Math.floor(this.EMPTY_COLOR.a * edgeAlpha);
+          data[pixelIndex + 3] = Math.floor(80 * edgeAlpha); // Reduced from 120 for subtler appearance
         }
       }
     }

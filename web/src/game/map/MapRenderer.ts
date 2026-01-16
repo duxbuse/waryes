@@ -268,127 +268,151 @@ export class MapRenderer {
     const cols = map.terrain[0]?.length ?? 0;
     const rows = map.terrain.length;
 
-    // Adaptive terrain resolution - cap segments for large maps
-    // Max ~500x500 segments (250k vertices) for performance
-    const maxSegments = 500;
-    const segmentCols = Math.min(cols, maxSegments);
-    const segmentRows = Math.min(rows, maxSegments);
+    // Chunked terrain for frustum culling
+    // Divide terrain into tiles so off-screen chunks can be culled
+    const CHUNK_SIZE = 64; // Segments per chunk (64x64 = 8k triangles per chunk)
+    // Limit to 150 segments total (150/64 ≈ 2-3 chunks per side = ~73k triangles vs 500k)
+    const numChunksX = Math.ceil(Math.min(cols, 150) / CHUNK_SIZE);
+    const numChunksZ = Math.ceil(Math.min(rows, 150) / CHUNK_SIZE);
 
-    // Create a single merged geometry for performance
-    const groundGeometry = new THREE.PlaneGeometry(
-      map.width,
-      map.height,
-      segmentCols,
-      segmentRows
-    );
-    groundGeometry.rotateX(-Math.PI / 2);
+    const chunkWidth = map.width / numChunksX;
+    const chunkHeight = map.height / numChunksZ;
 
-    // Apply elevation to vertices (sample from terrain grid)
-    const positionAttr = groundGeometry.attributes['position']!;
-    for (let i = 0; i < positionAttr.count; i++) {
-      const x = Math.floor(((positionAttr.getX(i) + map.width / 2) / map.width) * cols);
-      const z = Math.floor(((positionAttr.getZ(i) + map.height / 2) / map.height) * rows);
+    // Create each terrain chunk as a separate mesh for culling
+    for (let chunkZ = 0; chunkZ < numChunksZ; chunkZ++) {
+      for (let chunkX = 0; chunkX < numChunksX; chunkX++) {
+        const segmentsX = CHUNK_SIZE;
+        const segmentsZ = CHUNK_SIZE;
 
-      const cell = map.terrain[Math.min(z, rows - 1)]?.[Math.min(x, cols - 1)];
-      if (cell) {
-        positionAttr.setY(i, cell.elevation);
-      }
-    }
+        const groundGeometry = new THREE.PlaneGeometry(
+          chunkWidth,
+          chunkHeight,
+          segmentsX,
+          segmentsZ
+        );
+        groundGeometry.rotateX(-Math.PI / 2);
 
-    groundGeometry.computeVertexNormals();
+        // Calculate chunk position offset
+        const chunkOffsetX = (chunkX - numChunksX / 2 + 0.5) * chunkWidth;
+        const chunkOffsetZ = (chunkZ - numChunksZ / 2 + 0.5) * chunkHeight;
 
-    // Apply vertex colors based on slope (cliffs = rock color, flat = grass color)
-    const normalAttr = groundGeometry.attributes['normal']!;
-    const colors = new Float32Array(positionAttr.count * 3);
+        // Apply elevation to vertices (sample from terrain grid)
+        const positionAttr = groundGeometry.attributes['position']!;
+        for (let i = 0; i < positionAttr.count; i++) {
+          // Account for chunk offset when sampling terrain
+          const worldX = positionAttr.getX(i) + chunkOffsetX;
+          const worldZ = positionAttr.getZ(i) + chunkOffsetZ;
+          const x = Math.floor(((worldX + map.width / 2) / map.width) * cols);
+          const z = Math.floor(((worldZ + map.height / 2) / map.height) * rows);
 
-    // Color definitions - use biome ground color for grass
-    const grassColor = new THREE.Color(this.biomeGroundColor); // Biome-specific ground color
-    const cliffColor = new THREE.Color(0x6b6355); // Gray-brown rock
-    const snowColor = new THREE.Color(0xf0f0f0); // Snow white
-    const tempColor = new THREE.Color();
-
-    // Field variant colors (Green, Wheat, Pasture, Dirt)
-    const fieldColors = [
-      new THREE.Color(0x4a6b3e), // Dark Green (Crops)
-      new THREE.Color(this.biome === 'tundra' ? 0x8c7c4e : 0xdec98a), // Wheat/Straw (adjust for biome)
-      new THREE.Color(0x7a8c5e), // Light Green (Pasture)
-      new THREE.Color(0x6b5c45), // Dirt (Plowed)
-    ];
-
-    // Calculate snow line - snow appears on upper 30% of elevation range
-    const elevationRange = map.maxElevation - map.baseElevation;
-    const snowLineStart = map.baseElevation + elevationRange * 0.70; // Start snow transition
-    const snowLineFull = map.baseElevation + elevationRange * 0.85; // Full snow coverage
-
-    for (let i = 0; i < positionAttr.count; i++) {
-      // Get normal Y component (1.0 = flat, 0.0 = vertical)
-      const normalY = normalAttr.getY(i);
-      const elevation = positionAttr.getY(i);
-
-      // Determine base ground color (grass or field variant)
-      let baseColor = grassColor;
-
-      const x = Math.floor(((positionAttr.getX(i) + map.width / 2) / map.width) * cols);
-      const z = Math.floor(((positionAttr.getZ(i) + map.height / 2) / map.height) * rows);
-      const cell = map.terrain[Math.min(z, rows - 1)]?.[Math.min(x, cols - 1)];
-
-      if (cell && cell.type === 'field' && cell.variant !== undefined) {
-        baseColor = fieldColors[cell.variant] || grassColor;
-      }
-
-      // Apply subtle slope darkening for depth perception
-      // Darken as slope increases (normalY decreases)
-      // Range: 1.0 at flat (normalY=1) down to ~0.7 at steep
-      const slopeDarkening = 0.7 + (0.3 * normalY);
-
-      // Clone base color to avoid mutating shared instances (like grassColor)
-      // and apply the darkening
-      const darkenedBase = baseColor.clone().multiplyScalar(slopeDarkening);
-
-      // Calculate slope factor: 0 = vertical cliff, 1 = flat ground
-      // Cliffs start appearing at ~18 degree slopes (normalY < 0.95) to make hills visible
-      // Full cliff color at ~50+ degree slopes (normalY < 0.643)
-      const cliffThresholdStart = 0.95; // ~18 degrees (makes gentle slopes visible)
-      const cliffThresholdFull = 0.643;  // ~50 degrees
-
-      let slopeFactor: number;
-      if (normalY >= cliffThresholdStart) {
-        slopeFactor = 1.0; // Full base color
-      } else if (normalY <= cliffThresholdFull) {
-        slopeFactor = 0.0; // Full cliff
-      } else {
-        // Blend between base color and cliff
-        slopeFactor = (normalY - cliffThresholdFull) / (cliffThresholdStart - cliffThresholdFull);
-      }
-
-      // Interpolate between cliff and base color
-      tempColor.copy(cliffColor).lerp(darkenedBase, slopeFactor);
-
-      // Apply snow cap for high elevations
-      if (elevation > snowLineStart) {
-        let snowFactor: number;
-        if (elevation >= snowLineFull) {
-          snowFactor = 1.0; // Full snow
-        } else {
-          // Gradual transition from terrain to snow
-          snowFactor = (elevation - snowLineStart) / (snowLineFull - snowLineStart);
+          const cell = map.terrain[Math.min(z, rows - 1)]?.[Math.min(x, cols - 1)];
+          if (cell) {
+            positionAttr.setY(i, cell.elevation);
+          }
         }
-        // Blend current color with snow
-        tempColor.lerp(snowColor, snowFactor);
+
+        groundGeometry.computeVertexNormals();
+
+        // Apply vertex colors based on slope (cliffs = rock color, flat = grass color)
+        const normalAttr = groundGeometry.attributes['normal']!;
+        const colors = new Float32Array(positionAttr.count * 3);
+
+        // Color definitions - use biome ground color for grass
+        const grassColor = new THREE.Color(this.biomeGroundColor); // Biome-specific ground color
+        const cliffColor = new THREE.Color(0x6b6355); // Gray-brown rock
+        const snowColor = new THREE.Color(0xf0f0f0); // Snow white
+        const tempColor = new THREE.Color();
+
+        // Field variant colors (Green, Wheat, Pasture, Dirt)
+        const fieldColors = [
+          new THREE.Color(0x4a6b3e), // Dark Green (Crops)
+          new THREE.Color(this.biome === 'tundra' ? 0x8c7c4e : 0xdec98a), // Wheat/Straw (adjust for biome)
+          new THREE.Color(0x7a8c5e), // Light Green (Pasture)
+          new THREE.Color(0x6b5c45), // Dirt (Plowed)
+        ];
+
+        // Calculate snow line - snow appears on upper 30% of elevation range
+        const elevationRange = map.maxElevation - map.baseElevation;
+        const snowLineStart = map.baseElevation + elevationRange * 0.70; // Start snow transition
+        const snowLineFull = map.baseElevation + elevationRange * 0.85; // Full snow coverage
+
+        for (let i = 0; i < positionAttr.count; i++) {
+          // Get normal Y component (1.0 = flat, 0.0 = vertical)
+          const normalY = normalAttr.getY(i);
+          const elevation = positionAttr.getY(i);
+
+          // Determine base ground color (grass or field variant)
+          let baseColor = grassColor;
+
+          // Account for chunk offset when sampling terrain cell
+          const worldX = positionAttr.getX(i) + chunkOffsetX;
+          const worldZ = positionAttr.getZ(i) + chunkOffsetZ;
+          const x = Math.floor(((worldX + map.width / 2) / map.width) * cols);
+          const z = Math.floor(((worldZ + map.height / 2) / map.height) * rows);
+          const cell = map.terrain[Math.min(z, rows - 1)]?.[Math.min(x, cols - 1)];
+
+          if (cell && cell.type === 'field' && cell.variant !== undefined) {
+            baseColor = fieldColors[cell.variant] || grassColor;
+          }
+
+          // Apply subtle slope darkening for depth perception
+          // Darken as slope increases (normalY decreases)
+          // Range: 1.0 at flat (normalY=1) down to ~0.7 at steep
+          const slopeDarkening = 0.7 + (0.3 * normalY);
+
+          // Clone base color to avoid mutating shared instances (like grassColor)
+          // and apply the darkening
+          const darkenedBase = baseColor.clone().multiplyScalar(slopeDarkening);
+
+          // Calculate slope factor: 0 = vertical cliff, 1 = flat ground
+          // Cliffs start appearing at ~18 degree slopes (normalY < 0.95) to make hills visible
+          // Full cliff color at ~50+ degree slopes (normalY < 0.643)
+          const cliffThresholdStart = 0.95; // ~18 degrees (makes gentle slopes visible)
+          const cliffThresholdFull = 0.643;  // ~50 degrees
+
+          let slopeFactor: number;
+          if (normalY >= cliffThresholdStart) {
+            slopeFactor = 1.0; // Full base color
+          } else if (normalY <= cliffThresholdFull) {
+            slopeFactor = 0.0; // Full cliff
+          } else {
+            // Blend between base color and cliff
+            slopeFactor = (normalY - cliffThresholdFull) / (cliffThresholdStart - cliffThresholdFull);
+          }
+
+          // Interpolate between cliff and base color
+          tempColor.copy(cliffColor).lerp(darkenedBase, slopeFactor);
+
+          // Apply snow cap for high elevations
+          if (elevation > snowLineStart) {
+            let snowFactor: number;
+            if (elevation >= snowLineFull) {
+              snowFactor = 1.0; // Full snow
+            } else {
+              // Gradual transition from terrain to snow
+              snowFactor = (elevation - snowLineStart) / (snowLineFull - snowLineStart);
+            }
+            // Blend current color with snow
+            tempColor.lerp(snowColor, snowFactor);
+          }
+
+          // Set vertex color
+          colors[i * 3] = tempColor.r;
+          colors[i * 3 + 1] = tempColor.g;
+          colors[i * 3 + 2] = tempColor.b;
+        }
+
+        groundGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // Create mesh for this chunk
+        const groundMesh = new THREE.Mesh(groundGeometry, this.materials.ground);
+        groundMesh.receiveShadow = true;
+        groundMesh.position.set(chunkOffsetX, 0, chunkOffsetZ);
+        groundMesh.name = `terrain-chunk-${chunkX}-${chunkZ}`;
+        groundMesh.frustumCulled = true; // Enable frustum culling (default, but explicit)
+        this.mapGroup.add(groundMesh);
       }
-
-      // Set vertex color
-      colors[i * 3] = tempColor.r;
-      colors[i * 3 + 1] = tempColor.g;
-      colors[i * 3 + 2] = tempColor.b;
     }
-
-    groundGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const groundMesh = new THREE.Mesh(groundGeometry, this.materials.ground);
-    groundMesh.receiveShadow = true;
-    groundMesh.name = 'terrain-ground';
-    this.mapGroup.add(groundMesh);
 
     // Render terrain overlays for different types
     this.renderTerrainOverlays(map);
@@ -638,7 +662,7 @@ export class MapRenderer {
 
     // 2. Subdivide long segments
     const densePoints: { x: number; z: number }[] = [];
-    const maxSegmentLength = 5;
+    const maxSegmentLength = 10; // Increased from 5 to reduce triangle count (50% fewer triangles)
 
     for (let i = 0; i < smoothedPoints.length - 1; i++) {
       const p1 = smoothedPoints[i]!;
@@ -1012,7 +1036,7 @@ export class MapRenderer {
     const halfWidth = road.width / 2;
     const allGeometries: THREE.BufferGeometry[] = [];
     const roadHeightOffset = 0.45; // Height above terrain to prevent z-fighting
-    const maxSegmentLength = 5; // Maximum distance between sample points (meters)
+    const maxSegmentLength = 10; // Increased from 5 to reduce triangle count (50% fewer triangles)
 
     // Helper to safely calculate perpendicular direction
     const getPerp = (dx: number, dz: number): { x: number; z: number } => {
@@ -1555,6 +1579,11 @@ export class MapRenderer {
       return segments;
     };
 
+    // Phase 4 Optimization: Collect geometries for merging
+    const centerlineGeometries: THREE.BufferGeometry[] = [];
+    const leftEdgeGeometries: THREE.BufferGeometry[] = [];
+    const rightEdgeGeometries: THREE.BufferGeometry[] = [];
+
     for (const road of roads) {
       // Skip dirt roads (no markings)
       if (road.type === 'dirt' || road.points.length < 2) continue;
@@ -1575,7 +1604,7 @@ export class MapRenderer {
       }
 
       for (const segmentPoints of segments) {
-        // Create centerline geometry
+        // Create centerline geometry (collect, don't create mesh yet)
         const centerlineGeometry = this.createLineStripGeometry(
           segmentPoints,
           0, // offset = 0 for center
@@ -1586,12 +1615,10 @@ export class MapRenderer {
           getSkipperForMarkings()
         );
         if (centerlineGeometry) {
-          const centerlineMesh = new THREE.Mesh(centerlineGeometry, centerlineMaterial);
-          centerlineMesh.renderOrder = 10; // High render order to ensure visibility over roads
-          markingsGroup.add(centerlineMesh);
+          centerlineGeometries.push(centerlineGeometry);
         }
 
-        // Create left edge line
+        // Create left edge line (collect, don't create mesh yet)
         const leftEdgeGeometry = this.createLineStripGeometry(
           segmentPoints,
           -(halfWidth - lineWidth / 2 - 0.1), // offset to left edge
@@ -1602,12 +1629,10 @@ export class MapRenderer {
           getSkipperForMarkings()
         );
         if (leftEdgeGeometry) {
-          const leftEdgeMesh = new THREE.Mesh(leftEdgeGeometry, edgeLineMaterial);
-          leftEdgeMesh.renderOrder = 10; // High render order to ensure visibility over roads
-          markingsGroup.add(leftEdgeMesh);
+          leftEdgeGeometries.push(leftEdgeGeometry);
         }
 
-        // Create right edge line
+        // Create right edge line (collect, don't create mesh yet)
         const rightEdgeGeometry = this.createLineStripGeometry(
           segmentPoints,
           halfWidth - lineWidth / 2 - 0.1, // offset to right edge
@@ -1618,10 +1643,50 @@ export class MapRenderer {
           getSkipperForMarkings()
         );
         if (rightEdgeGeometry) {
-          const rightEdgeMesh = new THREE.Mesh(rightEdgeGeometry, edgeLineMaterial);
-          rightEdgeMesh.renderOrder = 10; // High render order to ensure visibility over roads
-          markingsGroup.add(rightEdgeMesh);
+          rightEdgeGeometries.push(rightEdgeGeometry);
         }
+      }
+    }
+
+    // Phase 4: Merge all centerline geometries into one mesh
+    if (centerlineGeometries.length > 0) {
+      const mergedCenterlines = mergeGeometries(centerlineGeometries, false);
+      if (mergedCenterlines) {
+        const mesh = new THREE.Mesh(mergedCenterlines, centerlineMaterial);
+        mesh.name = 'merged-centerlines';
+        mesh.renderOrder = 10; // High render order to ensure visibility over roads
+        markingsGroup.add(mesh);
+
+        // Dispose individual geometries after merging
+        centerlineGeometries.forEach(g => g.dispose());
+      }
+    }
+
+    // Phase 4: Merge all left edge geometries into one mesh
+    if (leftEdgeGeometries.length > 0) {
+      const mergedLeftEdges = mergeGeometries(leftEdgeGeometries, false);
+      if (mergedLeftEdges) {
+        const mesh = new THREE.Mesh(mergedLeftEdges, edgeLineMaterial);
+        mesh.name = 'merged-left-edges';
+        mesh.renderOrder = 10;
+        markingsGroup.add(mesh);
+
+        // Dispose individual geometries after merging
+        leftEdgeGeometries.forEach(g => g.dispose());
+      }
+    }
+
+    // Phase 4: Merge all right edge geometries into one mesh
+    if (rightEdgeGeometries.length > 0) {
+      const mergedRightEdges = mergeGeometries(rightEdgeGeometries, false);
+      if (mergedRightEdges) {
+        const mesh = new THREE.Mesh(mergedRightEdges, edgeLineMaterial);
+        mesh.name = 'merged-right-edges';
+        mesh.renderOrder = 10;
+        markingsGroup.add(mesh);
+
+        // Dispose individual geometries after merging
+        rightEdgeGeometries.forEach(g => g.dispose());
       }
     }
 
@@ -1798,6 +1863,15 @@ export class MapRenderer {
       return map.terrain[clampedZ]?.[clampedX]?.elevation ?? 0;
     };
 
+    // Phase 4 Optimization: Collect geometries for merging
+    const deckGeometries: THREE.BufferGeometry[] = [];
+    const railingGeometries: THREE.BufferGeometry[] = [];
+    const railingMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7a6858,
+      roughness: 0.9,
+      metalness: 0.05,
+    });
+
     for (const bridge of bridges) {
       // Calculate bridge endpoints
       const halfLength = bridge.length / 2;
@@ -1846,24 +1920,11 @@ export class MapRenderer {
         }
       }
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      geometry.setIndex(indices);
-      geometry.computeVertexNormals();
-
-      const mesh = new THREE.Mesh(geometry, bridgeMaterial);
-      mesh.receiveShadow = true;
-      mesh.castShadow = true;
-      mesh.renderOrder = 7; // Render above roads
-
-      bridgeGroup.add(mesh);
-
-      // Add simple railings on both sides
-      const railingMaterial = new THREE.MeshStandardMaterial({
-        color: 0x7a6858,
-        roughness: 0.9,
-        metalness: 0.05,
-      });
+      const deckGeometry = new THREE.BufferGeometry();
+      deckGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      deckGeometry.setIndex(indices);
+      deckGeometry.computeVertexNormals();
+      deckGeometries.push(deckGeometry);
 
       // Create railing geometry following bridge curve
       const railingHeight = 0.8;
@@ -1914,10 +1975,37 @@ export class MapRenderer {
         railingGeometry.setAttribute('position', new THREE.Float32BufferAttribute(railingVertices, 3));
         railingGeometry.setIndex(railingIndices);
         railingGeometry.computeVertexNormals();
+        railingGeometries.push(railingGeometry);
+      }
+    }
 
-        const railing = new THREE.Mesh(railingGeometry, railingMaterial);
-        railing.castShadow = true;
-        bridgeGroup.add(railing);
+    // Phase 4: Merge all deck geometries into one mesh
+    if (deckGeometries.length > 0) {
+      const mergedDeck = mergeGeometries(deckGeometries, false);
+      if (mergedDeck) {
+        const deckMesh = new THREE.Mesh(mergedDeck, bridgeMaterial);
+        deckMesh.name = 'merged-bridge-decks';
+        deckMesh.receiveShadow = true;
+        deckMesh.castShadow = true;
+        deckMesh.renderOrder = 7; // Render above roads
+        bridgeGroup.add(deckMesh);
+
+        // Dispose individual geometries after merging
+        deckGeometries.forEach(g => g.dispose());
+      }
+    }
+
+    // Phase 4: Merge all railing geometries into one mesh
+    if (railingGeometries.length > 0) {
+      const mergedRailings = mergeGeometries(railingGeometries, false);
+      if (mergedRailings) {
+        const railingMesh = new THREE.Mesh(mergedRailings, railingMaterial);
+        railingMesh.name = 'merged-bridge-railings';
+        railingMesh.castShadow = true;
+        bridgeGroup.add(railingMesh);
+
+        // Dispose individual geometries after merging
+        railingGeometries.forEach(g => g.dispose());
       }
     }
 
@@ -2211,61 +2299,71 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;
     };
 
+    // Update materials for flat overlay rendering
+    if (this.materials.deploymentPlayer.side !== THREE.DoubleSide) {
+      this.materials.deploymentPlayer.side = THREE.DoubleSide;
+      this.materials.deploymentPlayer.depthTest = true;
+      this.materials.deploymentPlayer.depthWrite = false;
+      this.materials.deploymentPlayer.polygonOffset = true;
+      this.materials.deploymentPlayer.polygonOffsetFactor = -1;
+      this.materials.deploymentPlayer.polygonOffsetUnits = -1;
+    }
+    if (this.materials.deploymentEnemy.side !== THREE.DoubleSide) {
+      this.materials.deploymentEnemy.side = THREE.DoubleSide;
+      this.materials.deploymentEnemy.depthTest = true;
+      this.materials.deploymentEnemy.depthWrite = false;
+      this.materials.deploymentEnemy.polygonOffset = true;
+      this.materials.deploymentEnemy.polygonOffsetFactor = -1;
+      this.materials.deploymentEnemy.polygonOffsetUnits = -1;
+    }
+
+    // Phase 4 Optimization: Collect geometries for merging
+    const playerGeometries: THREE.BufferGeometry[] = [];
+    const enemyGeometries: THREE.BufferGeometry[] = [];
+    const playerBorderPoints: THREE.Vector3[] = [];
+    const enemyBorderPoints: THREE.Vector3[] = [];
+
     for (const zone of zones) {
       const width = zone.maxX - zone.minX;
       const depth = zone.maxZ - zone.minZ;
       const centerX = (zone.minX + zone.maxX) / 2;
       const centerZ = (zone.minZ + zone.maxZ) / 2;
 
-      const terrainElevation = getElevationAt(centerX, centerZ);
+      // Sample terrain densely to find max elevation (don't miss peaks/hills)
+      // Sample every 5 meters to ensure we catch terrain features
+      let maxElevation = 0;
+      const sampleSpacing = 5; // meters between samples
+      const samplesX = Math.max(3, Math.ceil(width / sampleSpacing));
+      const samplesZ = Math.max(3, Math.ceil(depth / sampleSpacing));
 
-      // Use a segmented plane that conforms to the terrain
-      const segmentsX = Math.max(2, Math.floor(width / 4)); // Grid every ~4m
-      const segmentsZ = Math.max(2, Math.floor(depth / 4));
+      for (let sz = 0; sz < samplesZ; sz++) {
+        for (let sx = 0; sx < samplesX; sx++) {
+          const sampleX = zone.minX + (sx / (samplesX - 1)) * width;
+          const sampleZ = zone.minZ + (sz / (samplesZ - 1)) * depth;
+          const elevation = getElevationAt(sampleX, sampleZ);
+          maxElevation = Math.max(maxElevation, elevation);
+        }
+      }
 
-      const geometry = new THREE.PlaneGeometry(width, depth, segmentsX, segmentsZ);
+      // Use simple flat plane positioned above max elevation
+      const geometry = new THREE.PlaneGeometry(width, depth);
       geometry.rotateX(-Math.PI / 2);
 
-      // Adjust each vertex Y to match terrain height
-      const positions = geometry.attributes.position!;
-      for (let i = 0; i < positions.count; i++) {
-        // Local position (relative to center)
-        const lx = positions.getX(i);
-        const lz = positions.getZ(i);
+      // Translate geometry to world position (for merging)
+      // Position 1.0m above the highest point in the zone
+      geometry.translate(centerX, maxElevation + 1.0, centerZ);
 
-        // World position
-        const wx = centerX + lx;
-        const wz = centerZ + lz;
-
-        // Sample elevation
-        const y = getElevationAt(wx, wz);
-
-        // Update Y with offset - elevated to ensure visibility
-        positions.setY(i, y - terrainElevation + 0.5); // +0.5m above ground for visibility
+      // Collect by team
+      if (zone.team === 'player') {
+        playerGeometries.push(geometry);
+      } else {
+        enemyGeometries.push(geometry);
       }
 
-      geometry.computeVertexNormals();
-
-      const material = zone.team === 'player'
-        ? this.materials.deploymentPlayer
-        : this.materials.deploymentEnemy;
-
-      // Update material to be visible from both sides for safety on steep slopes
-      if (material.side !== THREE.DoubleSide) {
-        material.side = THREE.DoubleSide;
-        material.depthTest = true; // Ensure depth testing is ON
-        material.depthWrite = false; // Transparent
-      }
-
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(centerX, terrainElevation, centerZ);
-      mesh.renderOrder = 99;
-
-      zoneGroup.add(mesh);
-
-      // Create a custom perimeter border that follows terrain but has no internal lines
+      // Create border points (in world space) at the same height as the zone overlay
       const borderPoints: THREE.Vector3[] = [];
-      const steps = 20; // Number of steps per side for terrain conformance
+      const steps = 20; // Number of steps per side for smooth lines
+      const borderHeight = maxElevation + 1.5; // Slightly above the overlay for visibility
 
       // Helper to add segments along a line
       const addEdge = (x1: number, z1: number, x2: number, z2: number) => {
@@ -2273,8 +2371,7 @@ export class MapRenderer {
           const t = i / steps;
           const px = x1 + (x2 - x1) * t;
           const pz = z1 + (z2 - z1) * t;
-          const py = getElevationAt(px, pz);
-          borderPoints.push(new THREE.Vector3(px, py + 1.5, pz)); // +1.5m to be slightly above the mesh
+          borderPoints.push(new THREE.Vector3(px, borderHeight, pz));
         }
       };
 
@@ -2284,32 +2381,67 @@ export class MapRenderer {
       addEdge(zone.maxX, zone.maxZ, zone.minX, zone.maxZ);
       addEdge(zone.minX, zone.maxZ, zone.minX, zone.minZ);
 
-      const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+      // Collect border points by team
+      if (zone.team === 'player') {
+        playerBorderPoints.push(...borderPoints);
+      } else {
+        enemyBorderPoints.push(...borderPoints);
+      }
+    }
+
+    // Phase 4: Merge player zone geometries
+    if (playerGeometries.length > 0) {
+      const merged = mergeGeometries(playerGeometries, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, this.materials.deploymentPlayer);
+        mesh.name = 'merged-deployment-player';
+        mesh.renderOrder = 99;
+        zoneGroup.add(mesh);
+
+        // Dispose individual geometries after merging
+        playerGeometries.forEach(g => g.dispose());
+      }
+    }
+
+    // Phase 4: Merge enemy zone geometries
+    if (enemyGeometries.length > 0) {
+      const merged = mergeGeometries(enemyGeometries, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, this.materials.deploymentEnemy);
+        mesh.name = 'merged-deployment-enemy';
+        mesh.renderOrder = 99;
+        zoneGroup.add(mesh);
+
+        // Dispose individual geometries after merging
+        enemyGeometries.forEach(g => g.dispose());
+      }
+    }
+
+    // Phase 4: Create merged border lines
+    if (playerBorderPoints.length > 0) {
+      const borderGeometry = new THREE.BufferGeometry().setFromPoints(playerBorderPoints);
       const borderMaterial = new THREE.LineBasicMaterial({
-        color: zone.team === 'player' ? 0x4a9eff : 0xff4a4a,
+        color: 0x4a9eff,
         depthWrite: false,
-        depthTest: false, // Always visible
+        depthTest: false,
         linewidth: 2,
       });
+      const border = new THREE.LineSegments(borderGeometry, borderMaterial); // Use LineSegments instead of LineLoop
+      border.name = 'merged-border-player';
+      border.renderOrder = 100;
+      zoneGroup.add(border);
+    }
 
-      const border = new THREE.LineLoop(borderGeometry, borderMaterial);
-      // No position offset needed as points are in world space, except we need to reset the group offset implication if any?
-      // Wait, mesh.position is (centerX, terrainElevation, centerZ) but points are world space?
-      // Ah, the mesh geometry was generated relative to center, but we manually offset vertices?
-      // No, `PlaneGeometry` is centered at 0,0.
-      // And we did: `positions.setY(i, y - terrainElevation + 1.0)`
-      // The mesh itself is at `mesh.position.set(centerX, terrainElevation, centerZ)`
-
-      // So if we use world coordinates for the border lines, we should put the border at (0,0,0) or subtract the group offset.
-      // The `zoneGroup` is at (0,0,0) usually? 
-      // `zoneGroup` is added to `mapGroup`. `mapGroup` is usually at (0,0,0).
-      // `zoneGroup` has no position set, so it's at (0,0,0).
-
-      // The mesh was added to `zoneGroup`.
-      // The mesh has position (centerX, terrainElevation, centerZ).
-
-      // If I make the border points in world space, I should add the border to `zoneGroup` directly and NOT set its position (leave at 0,0,0).
-
+    if (enemyBorderPoints.length > 0) {
+      const borderGeometry = new THREE.BufferGeometry().setFromPoints(enemyBorderPoints);
+      const borderMaterial = new THREE.LineBasicMaterial({
+        color: 0xff4a4a,
+        depthWrite: false,
+        depthTest: false,
+        linewidth: 2,
+      });
+      const border = new THREE.LineSegments(borderGeometry, borderMaterial); // Use LineSegments instead of LineLoop
+      border.name = 'merged-border-enemy';
       border.renderOrder = 100;
       zoneGroup.add(border);
     }
@@ -2925,47 +3057,13 @@ export class MapRenderer {
         const towerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
         const bladeMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
 
-        // Helper to create a single mill mesh
-        const createMill = (scale: number) => {
-          const millGroup = new THREE.Group();
-
-          const h = 20 * scale;
-          const towerGeo = new THREE.CylinderGeometry(0.6 * scale, 1.8 * scale, h, 8);
-          const tower = new THREE.Mesh(towerGeo, towerMat);
-          tower.position.y = h / 2;
-          millGroup.add(tower);
-
-          // Nacelle
-          const nacelleGeo = new THREE.BoxGeometry(2 * scale, 1.5 * scale, 3 * scale);
-          const nacelle = new THREE.Mesh(nacelleGeo, towerMat);
-          nacelle.position.set(0, h, 0); // At top
-          millGroup.add(nacelle);
-
-          // Blades
-          const blades = new THREE.Group();
-          blades.position.set(0, h, 1.5 * scale); // Front of nacelle
-
-          for (let i = 0; i < 3; i++) {
-            const bladeP = new THREE.Group();
-            bladeP.rotation.z = i * (Math.PI * 2 / 3);
-
-            const bGeo = new THREE.BoxGeometry(0.5 * scale, 12 * scale, 0.2 * scale);
-            // Offset so it rotates around end
-            bGeo.translate(0, 6 * scale, 0);
-            const b = new THREE.Mesh(bGeo, bladeMat);
-            bladeP.add(b);
-            blades.add(bladeP);
-          }
-
-          // Random initial rotation for variety
-          blades.rotation.z = Math.random() * Math.PI * 2;
-          millGroup.add(blades);
-
-          return millGroup;
-        };
+        // Phase 4 Optimization: Collect geometries for merging
+        const towerGeometries: THREE.BufferGeometry[] = [];
+        const nacelleGeometries: THREE.BufferGeometry[] = [];
+        const bladeGeometries: THREE.BufferGeometry[] = [];
 
         // Distribute mills with collision avoidance
-        const placedMills: Array<{ x: number, z: number, r: number }> = [];
+        const placedMills: Array<{ x: number, z: number, r: number, scale: number, rotation: number }> = [];
         const range = 45; // Spread area
         const buffer = 15; // Minimum distance between mills (prevent blade collision)
 
@@ -3001,20 +3099,92 @@ export class MapRenderer {
             }
           }
 
-          // Place if valid
+          // Store placement data
           if (valid) {
-            placedMills.push({ x: bestX, z: bestZ, r: buffer });
-
             const scale = 0.8 + Math.random() * 0.4;
-            const mill = createMill(scale);
-            mill.position.set(bestX, 0, bestZ);
+            const rotation = (Math.random() - 0.5) * 0.5;
+            placedMills.push({ x: bestX, z: bestZ, r: buffer, scale, rotation });
+          }
+        }
 
-            // Random yaw rotation for the whole tower? No, usually face wind.
-            // But let's vary them slightly for realism (wind variation)
-            mill.rotation.y = (Math.random() - 0.5) * 0.5;
+        // Phase 4: Create and transform geometries for each mill
+        for (const mill of placedMills) {
+          const h = 20 * mill.scale;
 
-            mill.castShadow = true;
-            group.add(mill);
+          // Tower geometry (transformed to world position)
+          const towerGeo = new THREE.CylinderGeometry(0.6 * mill.scale, 1.8 * mill.scale, h, 8);
+          towerGeo.translate(0, h / 2, 0); // Position at base
+          towerGeo.rotateY(mill.rotation); // Apply mill rotation
+          towerGeo.translate(mill.x, 0, mill.z); // World position
+          towerGeometries.push(towerGeo);
+
+          // Nacelle geometry (at top of tower)
+          const nacelleGeo = new THREE.BoxGeometry(2 * mill.scale, 1.5 * mill.scale, 3 * mill.scale);
+          nacelleGeo.rotateY(mill.rotation); // Apply mill rotation
+          nacelleGeo.translate(mill.x, h, mill.z); // World position at top
+          nacelleGeometries.push(nacelleGeo);
+
+          // Blade geometries (3 blades per mill with random rotation)
+          const bladeRotation = Math.random() * Math.PI * 2;
+          const bladeX = mill.x;
+          const bladeY = h;
+          const bladeZ = mill.z + 1.5 * mill.scale; // Front of nacelle (local z offset)
+
+          for (let i = 0; i < 3; i++) {
+            const bGeo = new THREE.BoxGeometry(0.5 * mill.scale, 12 * mill.scale, 0.2 * mill.scale);
+            bGeo.translate(0, 6 * mill.scale, 0); // Offset for rotation anchor
+
+            // Apply blade rotation (each blade at 120 degrees)
+            const bladeAngle = bladeRotation + i * (Math.PI * 2 / 3);
+            bGeo.rotateZ(bladeAngle);
+
+            // Transform to world space (mill rotation + position)
+            // First rotate by mill yaw
+            const cosY = Math.cos(mill.rotation);
+            const sinY = Math.sin(mill.rotation);
+            const localZ = 1.5 * mill.scale;
+            const worldOffsetX = -sinY * localZ;
+            const worldOffsetZ = cosY * localZ;
+
+            bGeo.rotateY(mill.rotation); // Apply mill rotation
+            bGeo.translate(bladeX + worldOffsetX, bladeY, bladeZ - localZ + worldOffsetZ); // World position
+            bladeGeometries.push(bGeo);
+          }
+        }
+
+        // Phase 4: Merge all tower geometries into one mesh
+        if (towerGeometries.length > 0) {
+          const mergedTowers = mergeGeometries(towerGeometries, false);
+          if (mergedTowers) {
+            const towerMesh = new THREE.Mesh(mergedTowers, towerMat);
+            towerMesh.name = 'merged-windmill-towers';
+            towerMesh.castShadow = true;
+            group.add(towerMesh);
+            towerGeometries.forEach(g => g.dispose());
+          }
+        }
+
+        // Phase 4: Merge all nacelle geometries into one mesh
+        if (nacelleGeometries.length > 0) {
+          const mergedNacelles = mergeGeometries(nacelleGeometries, false);
+          if (mergedNacelles) {
+            const nacelleMesh = new THREE.Mesh(mergedNacelles, towerMat);
+            nacelleMesh.name = 'merged-windmill-nacelles';
+            nacelleMesh.castShadow = true;
+            group.add(nacelleMesh);
+            nacelleGeometries.forEach(g => g.dispose());
+          }
+        }
+
+        // Phase 4: Merge all blade geometries into one mesh
+        if (bladeGeometries.length > 0) {
+          const mergedBlades = mergeGeometries(bladeGeometries, false);
+          if (mergedBlades) {
+            const bladeMesh = new THREE.Mesh(mergedBlades, bladeMat);
+            bladeMesh.name = 'merged-windmill-blades';
+            bladeMesh.castShadow = true;
+            group.add(bladeMesh);
+            bladeGeometries.forEach(g => g.dispose());
           }
         }
         break;
@@ -3390,6 +3560,10 @@ export class MapRenderer {
         const buildMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
         const windowMat = new THREE.MeshBasicMaterial({ color: 0x88ccff });
 
+        // Phase 4 Optimization: Collect geometries for merging
+        const buildingGeometries: THREE.BufferGeometry[] = [];
+        const windowGeometries: THREE.BufferGeometry[] = [];
+
         for (let i = 0; i < 3; i++) {
           for (let j = 0; j < 3; j++) {
             // Varied heights
@@ -3397,18 +3571,40 @@ export class MapRenderer {
             const w = 3 + Math.random();
             const d = 3 + Math.random();
 
+            // Building body geometry (transformed to world position)
             const bGeo = new THREE.BoxGeometry(w, h, d);
-            const b = new THREE.Mesh(bGeo, buildMat);
-            b.position.set((i - 1) * 5, h / 2, (j - 1) * 5);
-            b.castShadow = true;
-            group.add(b);
+            bGeo.translate((i - 1) * 5, h / 2, (j - 1) * 5);
+            buildingGeometries.push(bGeo);
 
-            // Simple window strip
-            const winGeo = new THREE.BoxGeometry(w + 0.1, h * 0.5, d + 0.1);
-            const win = new THREE.Mesh(winGeo, windowMat);
-            win.position.y = h * 0.6;
-            win.visible = Math.random() > 0.5; // Randomly lit
-            group.add(win);
+            // Window strip geometry (only if visible - randomly lit)
+            if (Math.random() > 0.5) {
+              const winGeo = new THREE.BoxGeometry(w + 0.1, h * 0.5, d + 0.1);
+              winGeo.translate((i - 1) * 5, h * 0.6, (j - 1) * 5);
+              windowGeometries.push(winGeo);
+            }
+          }
+        }
+
+        // Phase 4: Merge all building body geometries into one mesh
+        if (buildingGeometries.length > 0) {
+          const mergedBuildings = mergeGeometries(buildingGeometries, false);
+          if (mergedBuildings) {
+            const buildingMesh = new THREE.Mesh(mergedBuildings, buildMat);
+            buildingMesh.name = 'merged-city-buildings';
+            buildingMesh.castShadow = true;
+            group.add(buildingMesh);
+            buildingGeometries.forEach(g => g.dispose());
+          }
+        }
+
+        // Phase 4: Merge all window geometries into one mesh
+        if (windowGeometries.length > 0) {
+          const mergedWindows = mergeGeometries(windowGeometries, false);
+          if (mergedWindows) {
+            const windowMesh = new THREE.Mesh(mergedWindows, windowMat);
+            windowMesh.name = 'merged-city-windows';
+            group.add(windowMesh);
+            windowGeometries.forEach(g => g.dispose());
           }
         }
         // Small park in center? No, just buildings for now
@@ -3855,39 +4051,65 @@ export class MapRenderer {
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3520 });
     const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x2a5a2a });
 
-    // Create instanced meshes
-    const trunkInstanced = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, treePositions.length);
-    const foliageInstanced = new THREE.InstancedMesh(foliageGeometry, foliageMaterial, treePositions.length);
+    // Chunk trees for frustum culling
+    // Divide map into regions so off-screen trees can be culled
+    const TREE_CHUNK_SIZE = map.width / 8; // 8x8 grid of tree chunks
+    const numChunks = 8;
 
-    trunkInstanced.castShadow = true;
-    foliageInstanced.castShadow = true;
+    // Group trees by chunk
+    const treeChunks: Map<string, typeof treePositions> = new Map();
+    for (const tree of treePositions) {
+      const chunkX = Math.floor((tree.x + map.width / 2) / TREE_CHUNK_SIZE);
+      const chunkZ = Math.floor((tree.z + map.height / 2) / TREE_CHUNK_SIZE);
+      const chunkKey = `${chunkX}_${chunkZ}`;
 
+      if (!treeChunks.has(chunkKey)) {
+        treeChunks.set(chunkKey, []);
+      }
+      treeChunks.get(chunkKey)!.push(tree);
+    }
+
+    // Create instanced meshes per chunk
     const matrix = new THREE.Matrix4();
     const position = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
 
-    for (let i = 0; i < treePositions.length; i++) {
-      const tree = treePositions[i]!;
+    for (const [chunkKey, chunkTrees] of treeChunks.entries()) {
+      if (chunkTrees.length === 0) continue;
 
-      // Trunk transform
-      position.set(tree.x, tree.elevation + 1.5 * tree.scale, tree.z);
-      quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), tree.rotation);
-      scale.setScalar(tree.scale);
-      matrix.compose(position, quaternion, scale);
-      trunkInstanced.setMatrixAt(i, matrix);
+      // Create instanced meshes for this chunk
+      const trunkInstanced = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, chunkTrees.length);
+      const foliageInstanced = new THREE.InstancedMesh(foliageGeometry, foliageMaterial, chunkTrees.length);
 
-      // Foliage transform
-      position.set(tree.x, tree.elevation + 5.5 * tree.scale, tree.z);
-      matrix.compose(position, quaternion, scale);
-      foliageInstanced.setMatrixAt(i, matrix);
+      trunkInstanced.castShadow = true;
+      foliageInstanced.castShadow = true;
+      trunkInstanced.frustumCulled = true;
+      foliageInstanced.frustumCulled = true;
+
+      for (let i = 0; i < chunkTrees.length; i++) {
+        const tree = chunkTrees[i]!;
+
+        // Trunk transform
+        position.set(tree.x, tree.elevation + 1.5 * tree.scale, tree.z);
+        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), tree.rotation);
+        scale.setScalar(tree.scale);
+        matrix.compose(position, quaternion, scale);
+        trunkInstanced.setMatrixAt(i, matrix);
+
+        // Foliage transform
+        position.set(tree.x, tree.elevation + 5.5 * tree.scale, tree.z);
+        matrix.compose(position, quaternion, scale);
+        foliageInstanced.setMatrixAt(i, matrix);
+      }
+
+      trunkInstanced.instanceMatrix.needsUpdate = true;
+      foliageInstanced.instanceMatrix.needsUpdate = true;
+
+      treeGroup.add(trunkInstanced);
+      treeGroup.add(foliageInstanced);
     }
 
-    trunkInstanced.instanceMatrix.needsUpdate = true;
-    foliageInstanced.instanceMatrix.needsUpdate = true;
-
-    treeGroup.add(trunkInstanced);
-    treeGroup.add(foliageInstanced);
     this.mapGroup.add(treeGroup);
   }
 
