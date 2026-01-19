@@ -222,8 +222,7 @@ export class Unit {
     this.mesh.add(this.selectionRing);
 
     // Create UI (health bars, morale bars)
-    // Use batched renderer for better performance
-    this.unitUI = new UnitUI(this, game, { useBatchedRenderer: true });
+    this.unitUI = new UnitUI(this, game);
 
     // Initialize scan timer with random offset to stagger updates across units (deterministic)
     this.targetScanTimer = gameRNG.next() * 1.0;
@@ -536,7 +535,7 @@ export class Unit {
     // Recreate UI to show new veterancy stars
     if (this.unitUI) {
       this.unitUI.destroy();
-      this.unitUI = new UnitUI(this, this.game, { useBatchedRenderer: true });
+      this.unitUI = new UnitUI(this, this.game);
     }
 
     const rankName = this.veterancy === 1 ? 'Hardened' : 'Elite';
