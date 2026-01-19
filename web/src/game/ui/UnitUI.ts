@@ -127,6 +127,7 @@ export class UnitUI {
     });
     this.healthBarBg = new THREE.Mesh(bgGeometry, bgMaterial);
     this.healthBarBg.renderOrder = 1000;
+    this.healthBarBg.visible = true; // Explicitly visible
     this.container.add(this.healthBarBg);
 
     // Foreground (colored based on health %)
@@ -141,6 +142,7 @@ export class UnitUI {
     this.healthBarFg = new THREE.Mesh(fgGeometry, fgMaterial);
     this.healthBarFg.position.z = 0.01; // Slightly in front
     this.healthBarFg.renderOrder = 1001;
+    this.healthBarFg.visible = true; // Explicitly visible
     this.container.add(this.healthBarFg);
   }
 
@@ -159,6 +161,7 @@ export class UnitUI {
     this.moraleBarBg = new THREE.Mesh(bgGeometry, bgMaterial);
     this.moraleBarBg.position.y = yOffset;
     this.moraleBarBg.renderOrder = 1000;
+    this.moraleBarBg.visible = true; // Explicitly visible
     this.container.add(this.moraleBarBg);
 
     // Foreground (blue)
@@ -174,6 +177,7 @@ export class UnitUI {
     this.moraleBarFg.position.y = yOffset;
     this.moraleBarFg.position.z = 0.01; // Slightly in front
     this.moraleBarFg.renderOrder = 1001;
+    this.moraleBarFg.visible = true; // Explicitly visible
     this.container.add(this.moraleBarFg);
   }
 
@@ -705,7 +709,11 @@ export class UnitUI {
     canvas.height = 128;
     const context = canvas.getContext('2d');
 
-    if (!context) return;
+    if (!context) {
+      console.warn('UnitUI: Failed to get 2D canvas context for category icon');
+      this.categoryIcon = null;
+      return;
+    }
 
     // Background circle with team/owner color
     const colorHex = this.unit.getUnitColor();
@@ -797,33 +805,35 @@ export class UnitUI {
     // Update ground ring indicators
     this.updateGroundRingIndicators();
 
-    // Update category icon visibility based on tactical view
-    if (this.categoryIcon) {
-      const isTacticalView = this.game.cameraController.isTacticalView;
-      this.categoryIcon.visible = isTacticalView;
+    // Update tactical view visibility (independent of categoryIcon existence)
+    const isTacticalView = this.game.cameraController?.isTacticalView ?? false;
 
-      // Hide detailed UI elements in tactical view
-      if (isTacticalView) {
-        if (this.healthBarBg) this.healthBarBg.visible = false;
-        if (this.healthBarFg) this.healthBarFg.visible = false;
-        if (this.moraleBarBg) this.moraleBarBg.visible = false;
-        if (this.moraleBarFg) this.moraleBarFg.visible = false;
-        this.statusIcons.visible = false;
-        this.orderIconsGroup.visible = false;
-        if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
-        for (const star of this.veterancyStars) {
-          star.visible = false;
-        }
-      } else {
-        if (this.healthBarBg) this.healthBarBg.visible = true;
-        if (this.healthBarFg) this.healthBarFg.visible = true;
-        if (this.moraleBarBg) this.moraleBarBg.visible = true;
-        if (this.moraleBarFg) this.moraleBarFg.visible = true;
-        this.statusIcons.visible = true;
-        this.orderIconsGroup.visible = true;
-        if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
-        // Other indicators remain dynamically controlled
+    // Update category icon visibility
+    if (this.categoryIcon) {
+      this.categoryIcon.visible = isTacticalView;
+    }
+
+    // Hide detailed UI elements in tactical view, show in normal view
+    if (isTacticalView) {
+      if (this.healthBarBg) this.healthBarBg.visible = false;
+      if (this.healthBarFg) this.healthBarFg.visible = false;
+      if (this.moraleBarBg) this.moraleBarBg.visible = false;
+      if (this.moraleBarFg) this.moraleBarFg.visible = false;
+      this.statusIcons.visible = false;
+      this.orderIconsGroup.visible = false;
+      if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
+      for (const star of this.veterancyStars) {
+        star.visible = false;
       }
+    } else {
+      if (this.healthBarBg) this.healthBarBg.visible = true;
+      if (this.healthBarFg) this.healthBarFg.visible = true;
+      if (this.moraleBarBg) this.moraleBarBg.visible = true;
+      if (this.moraleBarFg) this.moraleBarFg.visible = true;
+      this.statusIcons.visible = true;
+      this.orderIconsGroup.visible = true;
+      if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
+      // Other indicators remain dynamically controlled
     }
 
     // Billboard effect - always face camera (independent of unit rotation)
