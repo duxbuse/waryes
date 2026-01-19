@@ -522,24 +522,11 @@ export class AIManager {
 
       if (unitsNeeded <= 0) continue;
 
-      // Find nearest available units
-      // OPTIMIZATION: Use VectorPool and cache distances to avoid recalculating in sort
-      const zoneY = this.game.getElevationAt(assessment.zone.x, assessment.zone.z);
-      const zonePos = VectorPool.acquire().set(assessment.zone.x, zoneY, assessment.zone.z);
+      // Select combined arms group instead of just nearest units
+      const selectedUnits = this.selectCombinedArmsGroup(availableUnits, assessment, unitsNeeded);
 
-      // Cache distances to avoid recalculating during sort
-      const unitDistances = availableUnits.map(u => ({
-        unit: u,
-        distSq: u.position.distanceToSquared(zonePos)
-      }));
-
-      // Sort by cached squared distance (faster than distanceTo in sort comparator)
-      unitDistances.sort((a, b) => a.distSq - b.distSq);
-      const sortedUnits = unitDistances.map(ud => ud.unit);
-
-      for (let i = 0; i < Math.min(unitsNeeded, sortedUnits.length); i++) {
-        const unit = sortedUnits[i];
-        if (!unit) continue;
+      // Assign selected units to this objective
+      for (const unit of selectedUnits) {
         const state = this.aiStates.get(unit.id);
         if (state) {
           state.assignedObjective = assessment.zone.id;
@@ -559,6 +546,129 @@ export class AIManager {
         state.assignedObjective = 'roam';
       }
     }
+  }
+
+  /**
+   * Select a balanced combined arms group for an objective
+   * Prefers mixed unit types over homogeneous groups for better tactical effectiveness
+   *
+   * Priority for assignment:
+   * 1. LOG units (if capturing - needed to capture zones)
+   * 2. INF units (screening, urban combat) - ~40-50% of force
+   * 3. TNK units (heavy firepower and armor) - ~25-30% of force
+   * 4. Support units (ART, AA, REC) - remaining slots
+   *
+   * Units within each category are selected by distance (closest preferred)
+   *
+   * @param availableUnits - Pool of available units to select from
+   * @param assessment - Zone assessment for the objective
+   * @param unitsNeeded - Number of units to assign to this objective
+   * @returns Array of selected units forming a balanced combined arms group
+   */
+  private selectCombinedArmsGroup(
+    availableUnits: Unit[],
+    assessment: ZoneAssessment,
+    unitsNeeded: number
+  ): Unit[] {
+    const selectedUnits: Unit[] = [];
+
+    // Early exit if no units available
+    if (availableUnits.length === 0 || unitsNeeded <= 0) {
+      return selectedUnits;
+    }
+
+    // OPTIMIZATION: Use VectorPool for zone position
+    const zoneY = this.game.getElevationAt(assessment.zone.x, assessment.zone.z);
+    const zonePos = VectorPool.acquire().set(assessment.zone.x, zoneY, assessment.zone.z);
+
+    // Group units by category
+    const unitsByCategory: Record<string, Unit[]> = {};
+
+    for (const unit of availableUnits) {
+      const category = unit.unitData.category;
+      if (!unitsByCategory[category]) {
+        unitsByCategory[category] = [];
+      }
+      unitsByCategory[category]!.push(unit);
+    }
+
+    // Sort each category by distance to objective (closest first)
+    for (const category in unitsByCategory) {
+      const units = unitsByCategory[category];
+      if (!units) continue;
+
+      units.sort((a, b) => {
+        const aDist = a.position.distanceToSquared(zonePos);
+        const bDist = b.position.distanceToSquared(zonePos);
+        return aDist - bDist;
+      });
+    }
+
+    // Build combined arms group based on objective type and available units
+    // Priority order for balanced group composition:
+
+    // 1. LOG units (if capturing - needed to capture zones)
+    if (assessment.needsCapture) {
+      const logUnits = unitsByCategory['LOG'] ?? [];
+      const logNeeded = Math.min(1, logUnits.length, unitsNeeded - selectedUnits.length);
+      for (let i = 0; i < logNeeded; i++) {
+        const unit = logUnits[i];
+        if (unit) selectedUnits.push(unit);
+      }
+    }
+
+    // 2. Infantry units (screening, versatile)
+    // Allocate ~40-50% of remaining slots to infantry
+    const infUnits = unitsByCategory['INF'] ?? [];
+    const remainingSlots = unitsNeeded - selectedUnits.length;
+    const infNeeded = Math.min(
+      Math.ceil(remainingSlots * 0.5),
+      infUnits.length
+    );
+    for (let i = 0; i < infNeeded; i++) {
+      const unit = infUnits[i];
+      if (unit) selectedUnits.push(unit);
+    }
+
+    // 3. Armor units (heavy firepower)
+    // Allocate ~25-30% of remaining slots to tanks
+    const tnkUnits = unitsByCategory['TNK'] ?? [];
+    const slotsAfterInf = unitsNeeded - selectedUnits.length;
+    const tnkNeeded = Math.min(
+      Math.ceil(slotsAfterInf * 0.4),
+      tnkUnits.length
+    );
+    for (let i = 0; i < tnkNeeded; i++) {
+      const unit = tnkUnits[i];
+      if (unit) selectedUnits.push(unit);
+    }
+
+    // 4. Support units (ART, AA, REC) - fill remaining slots
+    const supportCategories = ['ART', 'AA', 'REC', 'HEL'];
+
+    for (const category of supportCategories) {
+      if (selectedUnits.length >= unitsNeeded) break;
+
+      const units = unitsByCategory[category] ?? [];
+      for (const unit of units) {
+        if (selectedUnits.length >= unitsNeeded) break;
+        selectedUnits.push(unit);
+      }
+    }
+
+    // 5. If we still need more units, fill with whatever is available
+    // (This handles cases where we don't have balanced forces)
+    if (selectedUnits.length < unitsNeeded) {
+      for (const unit of availableUnits) {
+        if (selectedUnits.length >= unitsNeeded) break;
+        if (!selectedUnits.includes(unit)) {
+          selectedUnits.push(unit);
+        }
+      }
+    }
+
+    VectorPool.release(zonePos);
+    return selectedUnits;
   }
 
   /**
