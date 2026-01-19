@@ -1643,7 +1643,7 @@ export class Unit {
 
     // Move towards target if out of range
     const distance = this.mesh.position.distanceTo(target.position);
-    const attackRange = 20; // TODO: Get from weapon data
+    const attackRange = this.getMaxWeaponRange();
 
     if (distance > attackRange) {
       // Move closer
