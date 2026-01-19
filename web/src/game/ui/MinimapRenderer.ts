@@ -38,6 +38,7 @@ export class MinimapRenderer {
   private combatIndicators: Map<string, CombatIndicator> = new Map();
   private nextIndicatorId = 0;
   private lastRenderTime = 0;
+  private readonly MAX_INDICATORS = 50;
 
   // Colors - dynamic based on biome
   private COLORS = {
@@ -141,6 +142,11 @@ export class MinimapRenderer {
    * Create a combat indicator at a world position
    */
   createCombatIndicator(position: THREE.Vector3, team: 'player' | 'enemy'): void {
+    // Enforce max limit to prevent performance degradation
+    if (this.combatIndicators.size >= this.MAX_INDICATORS) {
+      return; // Skip creation if at maximum capacity
+    }
+
     const id = `combat_${this.nextIndicatorId++}`;
 
     const indicator: CombatIndicator = {

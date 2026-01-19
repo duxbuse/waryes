@@ -550,9 +550,6 @@ export class Game {
       t16 = performance.now();
 
       this.visualEffectsManager.update(dt);
-
-      // Update minimap combat indicators
-      this.minimapRenderer?.update(dt);
     }
 
     const beforeScreen = performance.now();
