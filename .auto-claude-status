@@ -3,7 +3,7 @@
   "spec": "002-functional-minimap",
   "state": "building",
   "subtasks": {
-    "completed": 4,
+    "completed": 5,
     "total": 6,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
+    "number": 3,
     "started_at": "2026-01-20T10:15:42.192328"
   },
-  "last_update": "2026-01-20T10:20:51.441851"
+  "last_update": "2026-01-20T10:23:52.625002"
 }
