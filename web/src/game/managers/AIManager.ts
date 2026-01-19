@@ -42,6 +42,20 @@ interface ZoneAssessment {
   isContested: boolean;
 }
 
+interface FlankingOpportunity {
+  id: string; // Unique identifier for this flanking opportunity
+  cluster: Unit[];
+  flankPositions: {
+    left: THREE.Vector3;
+    right: THREE.Vector3;
+    center: THREE.Vector3;
+    frontLine: THREE.Vector3;
+  };
+  availableFlankers: Unit[];
+  priority: number;
+  assignedUnits: Set<string>; // Unit IDs assigned to this flank
+}
+
 interface ThreatAssessment {
   totalEnemyStrength: number;
   totalFriendlyStrength: number;
@@ -86,11 +100,14 @@ export class AIManager {
   private readonly smokeCooldown = 15; // seconds between smoke deployments
   private readonly damageThresholdForSmoke = 0.15; // 15% health lost triggers smoke
   private readonly suppressionThresholdForRetreat = 70; // High suppression triggers retreat
+  private readonly flankingSpeed = 15; // Minimum speed required for flanking maneuvers
+  private readonly flankWaypointDistance = 60; // Distance of waypoint from unit's start position (for curved path)
 
   // Strategic state
   private lastStrategicUpdate = 0;
   private readonly strategicUpdateInterval = 4.0; // Update strategy every 4 seconds (was 2)
   private zoneAssessments: ZoneAssessment[] = [];
+  private flankingOpportunities: FlankingOpportunity[] = [];
 
   // OPTIMIZATION: Stagger AI updates across frames
   private updateFrameCounter = 0;
@@ -372,6 +389,9 @@ export class AIManager {
 
     // Sort by priority (highest first)
     this.zoneAssessments.sort((a, b) => b.priority - a.priority);
+
+    // Identify flanking opportunities for fast units
+    this.updateFlankingOpportunities(referenceUnit.team);
   }
 
   private assessThreat(friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[], referenceUnit: Unit): ThreatAssessment {
@@ -394,6 +414,34 @@ export class AIManager {
       isWinning,
       shouldBeAggressive,
     };
+  }
+
+  /**
+   * Update flanking opportunities for fast units
+   * Identifies enemy clusters that can be flanked and assigns fast units to flank them
+   */
+  private updateFlankingOpportunities(aiTeam: number): void {
+    // Clear previous assignments
+    this.flankingOpportunities = [];
+
+    // Get flanking opportunities using existing method from subtask 4-1
+    const opportunities = this.identifyFlankingOpportunities(aiTeam);
+
+    // Convert to FlankingOpportunity with unique IDs and assignment tracking
+    let opportunityIndex = 0;
+    for (const opp of opportunities) {
+      const flankingOpp: FlankingOpportunity = {
+        id: `flank-${opportunityIndex}`,
+        cluster: opp.cluster,
+        flankPositions: opp.flankPositions,
+        availableFlankers: opp.availableFlankers,
+        priority: opp.priority,
+        assignedUnits: new Set<string>(),
+      };
+
+      this.flankingOpportunities.push(flankingOpp);
+      opportunityIndex++;
+    }
   }
 
   private assessZone(zone: CaptureZone, referenceUnit: Unit): ZoneAssessment {
@@ -539,11 +587,61 @@ export class AIManager {
       }
     }
 
+    // Allocate fast units to flanking maneuvers (before roaming assignment)
+    this.allocateFlankers(availableUnits);
+
     // Remaining units become roaming attackers
     for (const unit of availableUnits) {
       const state = this.aiStates.get(unit.id);
       if (state) {
         state.assignedObjective = 'roam';
+      }
+    }
+  }
+
+  /**
+   * Allocate fast units to flanking maneuvers
+   * Removes assigned flankers from the availableUnits array
+   */
+  private allocateFlankers(availableUnits: Unit[]): void {
+    // Only proceed if we have flanking opportunities
+    if (this.flankingOpportunities.length === 0) return;
+
+    // Get fast units from available units (speed > 15, REC or HEL categories)
+    const fastUnits = availableUnits.filter(u =>
+      (u.unitData.category === 'REC' || u.unitData.category === 'HEL') &&
+      u.unitData.speed > this.flankingSpeed
+    );
+
+    if (fastUnits.length === 0) return;
+
+    // Assign fast units to flanking opportunities (highest priority first)
+    for (const opportunity of this.flankingOpportunities) {
+      if (fastUnits.length === 0) break;
+
+      // Assign 1-2 fast units per flanking opportunity
+      const unitsToAssign = Math.min(2, fastUnits.length);
+
+      for (let i = 0; i < unitsToAssign; i++) {
+        const unit = fastUnits[i];
+        if (!unit) continue;
+
+        const state = this.aiStates.get(unit.id);
+        if (state) {
+          // Assign to flanking objective
+          state.assignedObjective = opportunity.id;
+          state.targetZone = null; // Flanking maneuvers don't target zones directly
+
+          // Track assignment
+          opportunity.assignedUnits.add(unit.id);
+
+          // Remove from available pools
+          const availableIdx = availableUnits.indexOf(unit);
+          if (availableIdx > -1) availableUnits.splice(availableIdx, 1);
+
+          const fastIdx = fastUnits.indexOf(unit);
+          if (fastIdx > -1) fastUnits.splice(fastIdx, 1);
+        }
       }
     }
   }
@@ -767,6 +865,13 @@ export class AIManager {
 
     // Priority 2: Handle assigned objective
     if (state.assignedObjective && state.assignedObjective !== 'roam') {
+      // Check if this is a flanking objective
+      if (state.assignedObjective.startsWith('flank-')) {
+        this.executeFlanking(unit, state);
+        return;
+      }
+
+      // Handle zone objectives
       const zone = this.zoneAssessments.find(z => z.zone.id === state.assignedObjective);
 
       if (zone) {
@@ -1116,6 +1221,113 @@ export class AIManager {
     }
 
     return null;
+  }
+
+  /**
+   * Execute flanking maneuver for a fast unit
+   * Fast units move in a curved path around enemy flanks instead of direct approach
+   */
+  private executeFlanking(unit: Unit, state: AIUnitState): void {
+    // Find the flanking opportunity this unit is assigned to
+    const opportunity = this.flankingOpportunities.find(opp => opp.id === state.assignedObjective);
+
+    if (!opportunity) {
+      // Flanking opportunity no longer exists, revert to roaming
+      state.assignedObjective = 'roam';
+      state.behavior = 'idle';
+      return;
+    }
+
+    // Check if enemy cluster still exists (units still alive)
+    const aliveEnemies = opportunity.cluster.filter(u => u.health > 0);
+    if (aliveEnemies.length === 0) {
+      // Cluster destroyed, clear objective
+      state.assignedObjective = null;
+      state.behavior = 'idle';
+      return;
+    }
+
+    // Determine which flank position to use (left or right)
+    // Choose the flank closest to the unit's current position
+    const distToLeft = unit.position.distanceTo(opportunity.flankPositions.left);
+    const distToRight = unit.position.distanceTo(opportunity.flankPositions.right);
+    const targetFlankPos = distToLeft < distToRight
+      ? opportunity.flankPositions.left
+      : opportunity.flankPositions.right;
+
+    // Check if we're already at the flank position
+    const distToFlank = unit.position.distanceTo(targetFlankPos);
+
+    if (distToFlank < 10) {
+      // At flank position - engage enemies
+      const bestTarget = this.selectBestTarget(unit, this.engageRange);
+
+      if (bestTarget) {
+        this.orderAttack(unit, state, bestTarget);
+      } else {
+        // No targets in range, advance toward cluster center
+        const clusterCenter = opportunity.flankPositions.center;
+        this.orderMove(unit, state, clusterCenter);
+      }
+    } else {
+      // Not at flank yet - move with curved path
+      const curvedPath = this.calculateCurvedFlankPath(unit, targetFlankPos, opportunity.flankPositions.center);
+      this.orderMove(unit, state, curvedPath);
+    }
+  }
+
+  /**
+   * Calculate curved path for flanking maneuver
+   * Creates a waypoint that curves around enemy position instead of direct line
+   */
+  private calculateCurvedFlankPath(
+    unit: Unit,
+    flankPosition: THREE.Vector3,
+    enemyCenter: THREE.Vector3
+  ): THREE.Vector3 {
+    const currentPos = unit.position;
+    const distToFlank = currentPos.distanceTo(flankPosition);
+
+    // If close to flank position, move directly to it
+    if (distToFlank < 30) {
+      return flankPosition.clone();
+    }
+
+    // Calculate waypoint that curves around enemy position
+    // The waypoint is perpendicular to the line between current position and enemy center
+    const toEnemy = VectorPool.acquire();
+    toEnemy.copy(enemyCenter).sub(currentPos).normalize();
+
+    // Create perpendicular vector (rotate 90 degrees in XZ plane)
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-toEnemy.z, toEnemy.y, toEnemy.x);
+
+    // Determine which direction to curve (toward the flank position)
+    const toFlank = VectorPool.acquire();
+    toFlank.copy(flankPosition).sub(currentPos);
+
+    // Check if perpendicular points toward flank or away from it
+    const dot = perpendicular.dot(toFlank);
+    if (dot < 0) {
+      // Perpendicular points away, flip it
+      perpendicular.multiplyScalar(-1);
+    }
+
+    // Create waypoint at perpendicular offset from current position
+    const waypoint = VectorPool.acquire();
+    waypoint.copy(currentPos).add(perpendicular.multiplyScalar(this.flankWaypointDistance));
+
+    // Clamp to terrain height
+    const waypointY = this.game.getElevationAt(waypoint.x, waypoint.z);
+    const result = new THREE.Vector3(waypoint.x, waypointY, waypoint.z);
+
+    // Release pooled vectors
+    VectorPool.release(toEnemy);
+    VectorPool.release(perpendicular);
+    VectorPool.release(toFlank);
+    VectorPool.release(waypoint);
+
+    return result;
   }
 
   private orderAttack(unit: Unit, state: AIUnitState, target: Unit): void {
