@@ -8,6 +8,10 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     // Use single threaded mode for compatibility with bun
     fileParallelism: false,
+    // Verbose reporter for clear test output
+    reporters: ['verbose'],
+    // Test timeout (10 seconds - no individual test should exceed this)
+    testTimeout: 10000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
