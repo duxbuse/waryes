@@ -80,22 +80,53 @@ export class PathRenderer {
 
   /**
    * Create a solid ribbon segment
+   * Samples terrain height along the path to ensure the ribbon follows terrain contours
    */
   private createSolidRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Mesh {
     const pathWidth = 0.3;
-    const direction = VectorPool.acquire();
-    direction.subVectors(endPos, startPos).normalize();
-    const perpendicular = VectorPool.acquire();
-    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+    const totalDistance = startPos.distanceTo(endPos);
 
-    const ribbonVertices = new Float32Array([
-      startPos.x - perpendicular.x, startPos.y, startPos.z - perpendicular.z,
-      startPos.x + perpendicular.x, startPos.y, startPos.z + perpendicular.z,
-      endPos.x - perpendicular.x, endPos.y, endPos.z - perpendicular.z,
-      endPos.x + perpendicular.x, endPos.y, endPos.z + perpendicular.z,
-    ]);
+    // Sample terrain at regular intervals (every 2 meters, minimum 2 samples)
+    const sampleInterval = 2.0;
+    const numSamples = Math.max(2, Math.ceil(totalDistance / sampleInterval) + 1);
 
-    const ribbonIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+    // Build vertices by sampling terrain along the path
+    const vertices: number[] = [];
+    const indices: number[] = [];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / (numSamples - 1);
+      const samplePos = VectorPool.acquire();
+      samplePos.lerpVectors(startPos, endPos, t);
+
+      // Sample terrain height at this point
+      const terrainHeight = this.game.getElevationAt(samplePos.x, samplePos.z);
+      samplePos.y = terrainHeight + this.PATH_HEIGHT_OFFSET;
+
+      // Calculate perpendicular direction for ribbon width
+      const direction = VectorPool.acquire();
+      direction.subVectors(endPos, startPos).normalize();
+      const perpendicular = VectorPool.acquire();
+      perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+
+      // Add two vertices (left and right edges of ribbon)
+      vertices.push(
+        samplePos.x - perpendicular.x, samplePos.y, samplePos.z - perpendicular.z,
+        samplePos.x + perpendicular.x, samplePos.y, samplePos.z + perpendicular.z
+      );
+
+      // Create triangle indices for this segment (except for the last sample)
+      if (i < numSamples - 1) {
+        const baseIndex = i * 2;
+        indices.push(
+          baseIndex, baseIndex + 1, baseIndex + 2,
+          baseIndex + 1, baseIndex + 3, baseIndex + 2
+        );
+      }
+    }
+
+    const ribbonVertices = new Float32Array(vertices);
+    const ribbonIndices = new Uint16Array(indices);
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(ribbonVertices, 3));
@@ -117,6 +148,7 @@ export class PathRenderer {
   /**
    * Create a dashed ribbon segment
    * More subtle than pre-order dashes (shorter dash/gap)
+   * Samples terrain height along each dash to follow terrain contours
    */
   private createDashedRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Group {
     const pathWidth = 0.3;
@@ -142,6 +174,12 @@ export class PathRenderer {
       p1.lerpVectors(startPos, endPos, t1);
       const p2 = VectorPool.acquire();
       p2.lerpVectors(startPos, endPos, t2);
+
+      // Sample terrain height at start and end of this dash
+      const terrainHeight1 = this.game.getElevationAt(p1.x, p1.z);
+      const terrainHeight2 = this.game.getElevationAt(p2.x, p2.z);
+      p1.y = terrainHeight1 + this.PATH_HEIGHT_OFFSET;
+      p2.y = terrainHeight2 + this.PATH_HEIGHT_OFFSET;
 
       const segmentVertices = new Float32Array([
         p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
@@ -175,6 +213,7 @@ export class PathRenderer {
   /**
    * Update path visualization for a unit
    * Only shows paths for player-owned units (not enemies or AI allies)
+   * For single commands (non-queued), only shows the path line without waypoint markers
    */
   updatePath(unit: Unit, targetPosition: THREE.Vector3 | null, commandType: string = 'move'): void {
     // Remove existing path
@@ -210,8 +249,8 @@ export class PathRenderer {
       initialOpacity: this.INITIAL_OPACITY,
     }]);
 
-    // Create waypoint marker at destination
-    this.createWaypoint(unit.id, targetPosition, color);
+    // Note: No waypoint marker for single commands (per spec: "Waypoint markers shown at each queued destination")
+    // Waypoint markers are only shown for multi-waypoint queued commands (updatePathQueue)
   }
 
   /**
