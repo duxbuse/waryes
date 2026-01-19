@@ -210,10 +210,21 @@ export class AIManager {
 
   /**
    * Get enemy units from the perspective of the given unit
+   * Only returns units that are visible according to fog of war
    */
   private getEnemyUnits(unit: Unit): readonly Unit[] {
     const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
-    return this.game.unitManager.getAllUnits(enemyTeam);
+    const allEnemyUnits = this.game.unitManager.getAllUnits(enemyTeam);
+
+    // Filter by visibility - AI can only see units revealed by fog of war
+    if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+      return allEnemyUnits.filter(enemyUnit =>
+        this.game.fogOfWarManager.isUnitVisibleToTeam(enemyUnit, unit.team)
+      );
+    }
+
+    // If fog of war is disabled, return all enemy units
+    return allEnemyUnits;
   }
 
   /**
