@@ -73,7 +73,8 @@ export class Unit {
   // Combat
   private weapons: WeaponSlot[] = [];
   private weaponAmmo: number[] = []; // Current ammo per weapon slot (index matches weapons array)
-  private fireCooldown: number = 0;
+  private weaponCooldowns: number[] = []; // Current cooldown per weapon slot (index matches weapons array)
+  private weaponDamageDealt: number[] = []; // Total damage dealt per weapon slot (index matches weapons array)
   private fireRate: number = 1; // shots per second base (mutable for veterancy)
 
   // Kill tracking
@@ -175,6 +176,8 @@ export class Unit {
 
     // Initialize weapon ammo from weapon slots
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
+    this.weaponDamageDealt = this.weapons.map(() => 0);
 
     // Apply veterancy bonuses
     this.applyVeterancyBonuses();
@@ -448,6 +451,7 @@ export class Unit {
    */
   resupplyAllWeapons(): void {
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
   }
 
   /**
