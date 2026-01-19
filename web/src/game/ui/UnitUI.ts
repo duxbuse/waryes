@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import type { Unit } from '../units/Unit';
 import type { Game } from '../../core/Game';
+import { getWeaponById } from '../../data/factions';
 
 export class UnitUI {
   private readonly game: Game;
@@ -425,9 +426,6 @@ export class UnitUI {
   private updateGroundRingIndicators(): void {
     // Get unit's current command
     const currentCommand = (this.unit as any).currentCommand;
-    const fireCooldown = (this.unit as any).fireCooldown || 0;
-    const fireRate = (this.unit as any).fireRate || 1;
-    const maxCooldown = 1 / fireRate;
 
     // Update aim ring - show when attacking or attack-moving with a target
     if (this.aimRing) {
@@ -462,22 +460,25 @@ export class UnitUI {
 
     // Update weapon reload rings
     const weapons = this.unit.getWeapons();
-    const isReloading = fireCooldown > 0 && maxCooldown > 0;
 
     for (let i = 0; i < this.weaponReloadRings.length; i++) {
       const bgRing = this.weaponReloadBgRings[i];
       const fgRing = this.weaponReloadRings[i];
 
-      if (bgRing && fgRing) {
-        if (isReloading && i < weapons.length) {
+      if (bgRing && fgRing && i < weapons.length) {
+        // Get per-weapon cooldown and weapon data
+        const cooldown = this.unit.getWeaponCooldown(i);
+        const weapon = getWeaponById(weapons[i]!.weaponId);
+        const maxCooldown = weapon ? 60 / weapon.rateOfFire : 1;
+        const isReloading = cooldown > 0 && maxCooldown > 0;
+
+        if (isReloading) {
           // Show reload progress
           bgRing.visible = true;
           fgRing.visible = true;
 
           // Calculate reload progress (0 = just fired, 1 = ready to fire)
-          // For now, all weapons share the same cooldown
-          // TODO: Per-weapon cooldown tracking
-          const progress = 1 - (fireCooldown / maxCooldown);
+          const progress = 1 - (cooldown / maxCooldown);
           this.updateWeaponReloadRing(i, progress);
         } else {
           // Hide when ready to fire

@@ -3,23 +3,23 @@
   "spec": "004-per-weapon-cooldown-and-damage-tracking",
   "state": "building",
   "subtasks": {
-    "completed": 4,
+    "completed": 6,
     "total": 11,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Combat Manager Integration",
+    "current": "UI Weapon Reload Visualization",
     "id": null,
-    "total": 3
+    "total": 1
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 5,
+    "number": 7,
     "started_at": "2026-01-20T00:25:54.735706"
   },
-  "last_update": "2026-01-20T00:38:50.303524"
+  "last_update": "2026-01-20T00:44:15.294489"
 }
