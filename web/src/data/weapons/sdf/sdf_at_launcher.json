@@ -1,0 +1,18 @@
+{
+  "name": "AT Launcher",
+  "range": 800,
+  "penetration": 12,
+  "damage": 10,
+  "suppression": 25,
+  "rateOfFire": 4,
+  "accuracy": 0.45,
+  "aimTime": 1.5,
+  "reloadTime": 5,
+  "salvoLength": 1,
+  "supplyCost": 5,
+  "isGuided": false,
+  "projectileSpeed": 150,
+  "id": "sdf_at_launcher",
+  "isAntiAir": false,
+  "canTargetGround": true
+}

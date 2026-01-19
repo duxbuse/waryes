@@ -1,117 +1,142 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Weapon Stats Schema",
-    "type": "object",
-    "properties": {
-        "name": {
-            "type": "string",
-            "description": "Designation of the weapon."
-        },
-        "icon": {
-            "type": "string",
-            "description": "Path to the weapon icon."
-        },
-        "range": {
-            "type": "object",
-            "properties": {
-                "ground": {
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "air": {
-                    "type": [
-                        "integer",
-                        "null"
-                    ],
-                    "minimum": 0
-                }
-            },
-            "required": [
-                "ground"
-            ],
-            "description": "Max effective range in meters."
-        },
-        "penetration": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Armor Penetration value in mm RHAe."
-        },
-        "damage": {
-            "type": "string",
-            "description": "Damage value and type (e.g., '40 HE')."
-        },
-        "suppression": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Morale damage applied around impact."
-        },
-        "rate_of_fire": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Theoretical rounds per minute."
-        },
-        "accuracy": {
-            "type": "object",
-            "properties": {
-                "static": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100
-                },
-                "moving": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100
-                }
-            },
-            "required": [
-                "static",
-                "moving"
-            ],
-            "description": "Hit probability percentage."
-        },
-        "aim_time": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Time in seconds to align and fire first shot."
-        },
-        "reload_time": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Time in seconds to reload magazine or shell per salvo."
-        },
-        "salvo_length": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Shots fired in quick succession per trigger pull."
-        },
-        "supply_cost": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Logistics supply consumed per salvo."
-        },
-        "is_guided": {
-            "type": "boolean",
-            "default": false,
-            "description": "Whether the projectile tracks targets."
-        },
-        "projectile_speed": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Speed of the projectile in m/s."
-        }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Weapon Stats Schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the weapon."
     },
-    "required": [
-        "name",
-        "range",
-        "penetration",
-        "damage",
-        "suppression",
-        "rate_of_fire",
-        "accuracy",
-        "aim_time",
-        "reload_time",
-        "salvo_length",
-        "supply_cost"
-    ]
+    "name": {
+      "type": "string",
+      "description": "Designation of the weapon."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Path to the weapon icon."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keywords like 'heavy', 'setup', etc."
+    },
+    "range": {
+      "type": "object",
+      "properties": {
+        "ground": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "air": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "ground"
+      ],
+      "description": "Max effective range in meters."
+    },
+    "penetration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Armor Penetration value in mm RHAe."
+    },
+    "damage": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Damage value per hit."
+    },
+    "suppression": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Morale damage applied around impact."
+    },
+    "rateOfFire": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Theoretical rounds per minute."
+    },
+    "accuracy": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Hit probability (0-1)."
+    },
+    "aimTime": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Time in seconds to align and fire first shot."
+    },
+    "reloadTime": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Time in seconds to reload magazine or shell per salvo."
+    },
+    "salvoLength": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Shots fired in quick succession per trigger pull."
+    },
+    "supplyCost": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Logistics supply consumed per salvo."
+    },
+    "isAntiAir": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the weapon can target air units."
+    },
+    "canTargetGround": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the weapon can target ground units."
+    },
+    "isGuided": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the projectile tracks targets."
+    },
+    "projectileSpeed": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Speed of the projectile in m/s."
+    },
+    "smokeEffect": {
+      "type": "object",
+      "properties": {
+        "radius": {
+          "type": "number",
+          "description": "Smoke cloud radius in meters."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duration in seconds."
+        },
+        "opacityReduction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much it blocks vision (0-1)."
+        }
+      },
+      "description": "Smoke effect properties if weapon produces smoke."
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "range",
+    "penetration",
+    "damage",
+    "suppression",
+    "rateOfFire",
+    "accuracy"
+  ]
 }

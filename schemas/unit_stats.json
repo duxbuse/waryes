@@ -32,18 +32,18 @@
           "type": "integer",
           "minimum": 0
         },
-        "off_road": {
+        "offRoad": {
           "type": "integer",
           "minimum": 0
         },
-        "rotation_speed": {
+        "rotation": {
           "type": "integer",
           "minimum": 0
         }
       },
       "required": [
         "road",
-        "off_road"
+        "offRoad"
       ],
       "description": "Maximum speed in km/h."
     },
@@ -93,7 +93,7 @@
           "type": "integer",
           "minimum": 0
         },
-        "off_road": {
+        "offRoad": {
           "type": "integer",
           "minimum": 0
         }
@@ -122,7 +122,7 @@
       ],
       "description": "Visibility reduction tier."
     },
-    "forward_deploy": {
+    "forwardDeploy": {
       "type": "integer",
       "minimum": 0,
       "default": 0,
@@ -132,10 +132,46 @@
       "type": "string",
       "description": "Unit category (TNK, INF, HEL, etc)."
     },
-    "is_commander": {
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags describing unit characteristics."
+    },
+    "isCommander": {
       "type": "boolean",
       "default": false,
       "description": "Whether this unit functions as a commander."
+    },
+    "commanderAuraRadius": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Radius in meters for commander aura effect."
+    },
+    "transportCapacity": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Number of units this vehicle can transport."
+    },
+    "canBeTransported": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this unit can be loaded into a transport."
+    },
+    "transportSize": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "description": "How much transport capacity this unit uses."
+    },
+    "veterancyBonus": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0.1,
+      "description": "Bonus multiplier per veterancy level."
     },
     "weapons": {
       "type": "array",
@@ -143,7 +179,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "weapon_id": {
+          "weaponId": {
             "type": "string",
             "description": "Unique identifier of the weapon."
           },
@@ -153,25 +189,33 @@
             "default": 1,
             "description": "Number of instances of this weapon."
           },
-          "max_ammo": {
+          "maxAmmo": {
             "type": "integer",
             "minimum": 0,
             "description": "Maximum ammunition capacity for this weapon."
+          },
+          "turretMounted": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether weapon is mounted on a turret."
           }
         },
         "required": [
-          "weapon_id",
-          "max_ammo"
+          "weaponId",
+          "maxAmmo"
         ]
       }
     }
   },
   "required": [
+    "id",
+    "name",
     "cost",
     "health",
     "speed",
     "armor",
     "optics",
-    "stealth"
+    "stealth",
+    "category"
   ]
 }

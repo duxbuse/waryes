@@ -1,19 +1,19 @@
 {
-    "name": "Hellgun (Hot-shot Laser Rifle)",
-    "range": {
-        "ground": 400,
-        "air": null
-    },
-    "penetration": 15,
-    "damage": "10 HE",
-    "suppression": 25,
-    "rate_of_fire": 600,
-    "accuracy": {
-        "static": 55,
-        "moving": 35
-    },
-    "aim_time": 0.5,
-    "reload_time": 2.0,
-    "salvo_length": 10,
-    "supply_cost": 5
+  "name": "Hellgun (Hot-shot Laser Rifle)",
+  "range": 400,
+  "penetration": 15,
+  "damage": 10,
+  "suppression": 25,
+  "rateOfFire": 600,
+  "accuracy": 0.55,
+  "aimTime": 0.5,
+  "reloadTime": 2,
+  "salvoLength": 10,
+  "supplyCost": 5,
+  "id": "sdf_heavy_laser_rifle",
+  "isAntiAir": false,
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

@@ -1,0 +1,45 @@
+{
+  "id": "sdf_mortar_team",
+  "name": "Mortar Team",
+  "cost": 30,
+  "icon": "assets/icons/units/sdf/sdf_mortar_team.png",
+  "health": 5,
+  "speed": {
+    "road": 10,
+    "offRoad": 8,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Good",
+  "stealth": "Good",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_siege_mortar",
+      "count": 1,
+      "maxAmmo": 12,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_laser_rifle",
+      "count": 2,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": ["indirect_fire"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

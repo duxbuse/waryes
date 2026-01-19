@@ -1,0 +1,178 @@
+{
+  "id": "vanguard_8th_assault",
+  "name": "8th Assault Company (Fast Attack)",
+  "factionId": "vanguard",
+  "icon": "assets/icons/divisions/vanguard_8th_assault.png",
+  "description": "Shock troops, fast attack, and close quarters combat. Hit and run, melee aggression.",
+  "playstyle": "Closing the distance quickly is key.",
+  "slotCosts": {
+    "LOG": [
+      1,
+      2,
+      3
+    ],
+    "INF": [
+      1,
+      1,
+      1,
+      2,
+      2,
+      3
+    ],
+    "TNK": [
+      1,
+      2,
+      2,
+      3
+    ],
+    "REC": [
+      1,
+      2,
+      3
+    ],
+    "AA": [
+      1,
+      2,
+      3
+    ],
+    "ART": [
+      3,
+      4
+    ],
+    "AIR": [
+      1,
+      1,
+      2,
+      2,
+      3
+    ],
+    "HEL": [
+      1,
+      1,
+      2,
+      2,
+      3
+    ]
+  },
+  "roster": [
+    {
+      "unitId": "vanguard_jetpack_squad",
+      "maxCards": 6,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_auto",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_outrider",
+      "maxCards": 4,
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_swift_skimmer_fusion",
+      "maxCards": 4,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_recon_bike",
+      "maxCards": 3,
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_raven_dropship",
+      "maxCards": 4,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_star_fighter",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_hunter_tank_laser",
+      "maxCards": 2,
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_missile_tank",
+      "maxCards": 2,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    }
+  ]
+}

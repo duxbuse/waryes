@@ -1,0 +1,42 @@
+{
+  "id": "sdf_vortex_missile",
+  "name": "Vortex Missile Launcher",
+  "cost": 120,
+  "icon": "assets/icons/units/sdf/sdf_vortex_missile.png",
+  "health": 6,
+  "speed": {
+    "road": 60,
+    "offRoad": 40,
+    "rotation": 6
+  },
+  "armor": {
+    "front": 25,
+    "side": 15,
+    "rear": 10,
+    "top": 10
+  },
+  "fuel": 350,
+  "autonomy": {
+    "road": 350,
+    "offRoad": 200
+  },
+  "optics": "Normal",
+  "stealth": "None",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_vortex_missile_launcher",
+      "count": 1,
+      "maxAmmo": 4,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": ["missile", "heavy_artillery"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 3,
+  "veterancyBonus": 0.1
+}

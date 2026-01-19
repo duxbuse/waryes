@@ -1,0 +1,16 @@
+{
+  "id": "sdf_sniper_rifle",
+  "name": "Sniper Rifle",
+  "range": 2500,
+  "penetration": 40,
+  "damage": 30,
+  "suppression": 80,
+  "rateOfFire": 6,
+  "accuracy": 0.95,
+  "aimTime": 3,
+  "reloadTime": 5,
+  "salvoLength": 1,
+  "supplyCost": 5,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

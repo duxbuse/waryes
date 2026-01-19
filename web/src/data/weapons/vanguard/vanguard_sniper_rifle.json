@@ -1,0 +1,16 @@
+{
+  "id": "vanguard_sniper_rifle",
+  "name": "Vanguard Sniper Rifle",
+  "range": 2800,
+  "penetration": 50,
+  "damage": 35,
+  "suppression": 90,
+  "rateOfFire": 8,
+  "accuracy": 0.95,
+  "aimTime": 2.5,
+  "reloadTime": 4,
+  "salvoLength": 1,
+  "supplyCost": 5,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

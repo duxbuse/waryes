@@ -1,19 +1,19 @@
 {
-    "name": "Heavy Kinetic Rifle (Tripod)",
-    "range": {
-        "ground": 1000,
-        "air": null
-    },
-    "penetration": 5,
-    "damage": "0.5 HE",
-    "suppression": 50,
-    "rate_of_fire": 450,
-    "accuracy": {
-        "static": 55,
-        "moving": 10
-    },
-    "aim_time": 1.0,
-    "reload_time": 3.0,
-    "salvo_length": 25,
-    "supply_cost": 8
+  "name": "Heavy Kinetic Rifle (Tripod)",
+  "range": 1000,
+  "penetration": 5,
+  "damage": 0.5,
+  "suppression": 50,
+  "rateOfFire": 450,
+  "accuracy": 0.55,
+  "aimTime": 1,
+  "reloadTime": 3,
+  "salvoLength": 25,
+  "supplyCost": 8,
+  "id": "sdf_heavy_auto_cannon_tripod",
+  "isAntiAir": false,
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

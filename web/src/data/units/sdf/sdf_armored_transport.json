@@ -1,0 +1,35 @@
+{
+  "id": "sdf_armored_transport",
+  "name": "Armored Transport",
+  "cost": 20,
+  "icon": "assets/icons/categories/apc.png",
+  "health": 5,
+  "speed": {
+    "road": 80,
+    "offRoad": 55,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 5,
+    "side": 5,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": 300,
+  "autonomy": {
+    "road": 600,
+    "offRoad": 400
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [],
+  "category": "LOG",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

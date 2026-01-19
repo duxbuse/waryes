@@ -1,0 +1,39 @@
+{
+  "id": "sdf_orbital_lance_strike",
+  "name": "Orbital Lance Strike",
+  "cost": 200,
+  "icon": "assets/icons/units/sdf/sdf_orbital_lance_strike.png",
+  "health": 1,
+  "speed": {
+    "road": 0,
+    "offRoad": 0,
+    "rotation": 0
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Poor",
+  "stealth": "None",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_orbital_lance",
+      "count": 1,
+      "maxAmmo": 1,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": ["off_map", "orbital", "single_use"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 0,
+  "veterancyBonus": 0
+}

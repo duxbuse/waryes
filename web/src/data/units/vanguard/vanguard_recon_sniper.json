@@ -1,0 +1,45 @@
+{
+  "id": "vanguard_recon_sniper",
+  "name": "Recon Sniper",
+  "cost": 50,
+  "icon": "assets/icons/units/vanguard/vanguard_recon_sniper.png",
+  "health": 4,
+  "speed": {
+    "road": 16,
+    "offRoad": 14,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 10,
+    "side": 10,
+    "rear": 10,
+    "top": 10
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Exceptional",
+  "stealth": "Exceptional",
+  "forwardDeploy": 800,
+  "weapons": [
+    {
+      "weaponId": "vanguard_sniper_rifle",
+      "count": 2,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "vanguard_kinetic_pistol",
+      "count": 2,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "REC",
+  "tags": ["sniper", "stealth"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.15
+}

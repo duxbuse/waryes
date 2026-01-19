@@ -1,0 +1,48 @@
+{
+  "id": "vanguard_hunter_tank",
+  "name": "Hunter Tank",
+  "cost": 90,
+  "icon": "assets/icons/units/vanguard/vanguard_hunter_tank.png",
+  "health": 8,
+  "speed": {
+    "road": 80,
+    "offRoad": 60,
+    "rotation": 6
+  },
+  "armor": {
+    "front": 80,
+    "side": 50,
+    "rear": 30,
+    "top": 20
+  },
+  "fuel": 500,
+  "autonomy": {
+    "road": 400,
+    "offRoad": 280
+  },
+  "optics": "Good",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_hunter_kinetic_cannon",
+      "count": 1,
+      "maxAmmo": 20,
+      "turretMounted": true
+    },
+    {
+      "weaponId": "vanguard_heavy_bolter_pintle",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": true
+    }
+  ],
+  "category": "TNK",
+  "tags": ["medium_tank"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 3,
+  "veterancyBonus": 0.1
+}

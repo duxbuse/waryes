@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stellar Siege - Planetary Conflict</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a0a;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: #e0e0e0;
+      }
+
+      #game-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+      }
+
+      #game-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* UI Overlay Layer */
+      #ui-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      #ui-overlay > * {
+        pointer-events: auto;
+      }
+
+      /* Screen Container */
+      #screen-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      #screen-container > * {
+        pointer-events: auto;
+      }
+
+      .screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .screen.hidden {
+        display: none !important;
+      }
+
+      /* Top Bar - Resources */
+      #top-bar {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 20px;
+        padding: 10px 20px;
+        background: rgba(0, 0, 0, 0.7);
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+      }
+
+      .resource {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+
+      .resource-value {
+        font-weight: bold;
+        color: #ffd700;
+      }
+
+      /* Score Display */
+      #score-display {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 10px 15px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+      }
+
+      .score-team {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin: 5px 0;
+      }
+
+      .team-blue { color: #4a9eff; }
+      .team-red { color: #ff4a4a; }
+
+      /* Selection Panel - Bottom Left */
+      #selection-panel {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        min-width: 200px;
+        max-width: 350px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        padding: 10px;
+        display: none;
+      }
+
+      #selection-panel.visible {
+        display: block;
+      }
+
+      .selection-header {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 8px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #333;
+      }
+
+      .selection-stats {
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      /* Deployment Panel - Right Side */
+      #deployment-panel {
+        position: absolute;
+        top: 60px;
+        right: 10px;
+        width: 250px;
+        max-height: calc(100% - 120px);
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        padding: 10px;
+        overflow-y: auto;
+        display: none;
+      }
+
+      #deployment-panel.visible {
+        display: block;
+      }
+
+      .unit-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        margin: 5px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .unit-card:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .unit-card.selected {
+        background: rgba(74, 158, 255, 0.3);
+        border: 1px solid #4a9eff;
+      }
+
+      .unit-icon {
+        width: 40px;
+        height: 40px;
+        background: #333;
+        border-radius: 4px;
+      }
+
+      .unit-info {
+        flex: 1;
+      }
+
+      .unit-name {
+        font-size: 12px;
+        font-weight: bold;
+      }
+
+      .unit-cost {
+        font-size: 11px;
+        color: #ffd700;
+      }
+
+      .unit-count {
+        font-size: 11px;
+        color: #888;
+      }
+
+      /* Minimap - Bottom Right */
+      #minimap {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 200px;
+        height: 200px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        border: 2px solid #333;
+      }
+
+      /* Phase Indicator */
+      #phase-indicator {
+        position: absolute;
+        top: 90px;
+        left: 10px;
+        padding: 8px 15px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      #phase-indicator.hidden {
+        display: none;
+      }
+
+      .phase-setup { color: #ffd700; }
+      .phase-battle { color: #4aff4a; }
+
+      /* Start Battle Button */
+      #start-battle-btn {
+        position: absolute;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 12px 30px;
+        font-size: 16px;
+        font-weight: bold;
+        background: linear-gradient(135deg, #4a9eff, #2070cc);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        display: none;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      #start-battle-btn:hover {
+        transform: translateX(-50%) scale(1.05);
+        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+      }
+
+      #start-battle-btn.visible {
+        display: block;
+      }
+
+      /* Pause Menu */
+      #pause-menu {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 200;
+      }
+
+      #pause-menu.visible {
+        display: flex;
+      }
+
+      .pause-container {
+        background: rgba(20, 20, 40, 0.95);
+        border: 2px solid #4a9eff;
+        border-radius: 12px;
+        padding: 30px 50px;
+        text-align: center;
+      }
+
+      .pause-container h2 {
+        color: #4a9eff;
+        margin: 0 0 25px 0;
+        font-size: 28px;
+        letter-spacing: 3px;
+      }
+
+      .pause-btn {
+        display: block;
+        width: 200px;
+        margin: 10px auto;
+        padding: 12px 20px;
+        font-size: 16px;
+        font-weight: bold;
+        background: rgba(74, 158, 255, 0.2);
+        border: 1px solid rgba(74, 158, 255, 0.5);
+        color: #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .pause-btn:hover {
+        background: rgba(74, 158, 255, 0.4);
+        border-color: #4a9eff;
+        transform: scale(1.02);
+      }
+
+      .pause-btn.danger {
+        background: rgba(255, 74, 74, 0.2);
+        border-color: rgba(255, 74, 74, 0.5);
+      }
+
+      .pause-btn.danger:hover {
+        background: rgba(255, 74, 74, 0.4);
+        border-color: #ff4a4a;
+      }
+
+      .pause-players-section {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 20px;
+        margin-bottom: 25px;
+        padding: 15px;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
+      }
+
+      .pause-team {
+        flex: 1;
+        min-width: 180px;
+        max-width: 220px;
+      }
+
+      .pause-team-header {
+        font-size: 14px;
+        font-weight: bold;
+        padding: 6px 12px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        text-align: center;
+      }
+
+      .pause-team-header.team-blue {
+        background: rgba(74, 158, 255, 0.3);
+        color: #4a9eff;
+        border: 1px solid rgba(74, 158, 255, 0.5);
+      }
+
+      .pause-team-header.team-red {
+        background: rgba(255, 74, 74, 0.3);
+        color: #ff4a4a;
+        border: 1px solid rgba(255, 74, 74, 0.5);
+      }
+
+      .pause-vs {
+        font-size: 18px;
+        font-weight: bold;
+        color: #666;
+        padding-top: 30px;
+      }
+
+      .pause-player-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .pause-player-card {
+        background: rgba(30, 30, 50, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 8px 12px;
+      }
+
+      .pause-player-card.is-you {
+        border-color: rgba(74, 158, 255, 0.5);
+        background: rgba(74, 158, 255, 0.1);
+      }
+
+      .pause-player-name {
+        font-size: 13px;
+        font-weight: bold;
+        color: #fff;
+        margin-bottom: 4px;
+      }
+
+      .pause-player-name .you-badge {
+        font-size: 10px;
+        background: #4a9eff;
+        color: #000;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 6px;
+        font-weight: normal;
+      }
+
+      .pause-player-deck {
+        font-size: 11px;
+        color: #888;
+      }
+
+      .pause-player-deck .deck-name {
+        color: #aaa;
+      }
+
+      .pause-buttons {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 20px;
+      }
+
+      /* Victory Screen */
+      #victory-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+
+      #victory-screen.visible {
+        display: flex;
+      }
+
+      .victory-text {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
+      .victory-blue { color: #4a9eff; }
+      .victory-red { color: #ff4a4a; }
+
+      .victory-subtitle {
+        font-size: 18px;
+        color: #888;
+        margin-bottom: 30px;
+        font-style: italic;
+      }
+
+      .victory-stats {
+        background: rgba(30, 30, 50, 0.9);
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 20px 40px;
+        margin-bottom: 30px;
+        min-width: 400px;
+      }
+
+      .victory-stats h3 {
+        color: #4a9eff;
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 10px;
+      }
+
+      .victory-score {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .victory-score-value {
+        font-size: 28px;
+        font-weight: bold;
+      }
+
+      .victory-score-label {
+        font-size: 12px;
+        color: #888;
+      }
+
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 14px;
+      }
+
+      .stat-row .stat-label {
+        color: #aaa;
+      }
+
+      .stat-row .stat-value {
+        color: #fff;
+        font-weight: bold;
+      }
+
+      .victory-highlights {
+        display: flex;
+        gap: 15px;
+        margin: 15px 0;
+      }
+
+      .highlight-card {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+      }
+
+      .hero-card {
+        border: 1px solid rgba(255, 215, 0, 0.5);
+      }
+
+      .efficient-card {
+        border: 1px solid rgba(74, 255, 74, 0.5);
+      }
+
+      .highlight-title {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+      }
+
+      .highlight-unit {
+        font-size: 14px;
+        font-weight: bold;
+        color: #e0e0e0;
+        margin-bottom: 3px;
+      }
+
+      .highlight-stat {
+        font-size: 12px;
+        color: #ffd700;
+      }
+
+      .top-killers-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .killer-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 10px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+        font-size: 13px;
+      }
+
+      .killer-rank {
+        color: #888;
+        width: 20px;
+      }
+
+      .killer-name {
+        flex: 1;
+        color: #e0e0e0;
+      }
+
+      .killer-kills {
+        color: #ffd700;
+      }
+
+      .victory-buttons {
+        display: flex;
+        gap: 15px;
+      }
+
+      .victory-btn {
+        padding: 12px 30px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+
+      .victory-btn-primary {
+        background: linear-gradient(135deg, #4a9eff, #2070cc);
+        color: white;
+        border: none;
+      }
+
+      .victory-btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+      }
+
+      .victory-btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e0e0e0;
+        border: 1px solid #555;
+      }
+
+      .victory-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: #888;
+      }
+
+      /* Loading Screen */
+      #loading-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0a0a0a;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        z-index: 1000;
+      }
+
+      #loading-screen.hidden {
+        display: none;
+      }
+
+      .loading-title {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        color: #4a9eff;
+      }
+
+      .loading-bar {
+        width: 300px;
+        height: 4px;
+        background: #333;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .loading-progress {
+        height: 100%;
+        background: #4a9eff;
+        width: 0%;
+        transition: width 0.3s;
+      }
+
+      /* Unit Bar - Horizontal strip for unit deployment (left of credits bar) */
+      #battle-unit-bar {
+        position: absolute;
+        top: 0;
+        left: 10px;
+        right: calc(50% + 100px);
+        display: none;
+        background: rgba(0, 0, 0, 0.85);
+        border-radius: 0 0 8px 8px;
+        padding: 8px 12px;
+        z-index: 10;
+      }
+
+      #battle-unit-bar.visible {
+        display: block;
+      }
+
+      #battle-unit-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .battle-tab {
+        padding: 4px 8px;
+        font-size: 10px;
+        font-weight: bold;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        color: #888;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .battle-tab:hover {
+        background: rgba(74, 158, 255, 0.15);
+        color: #e0e0e0;
+      }
+
+      .battle-tab.active {
+        background: rgba(74, 158, 255, 0.3);
+        border-color: #4a9eff;
+        color: #4a9eff;
+      }
+
+      .battle-tab .tab-count {
+        margin-left: 3px;
+        opacity: 0.7;
+      }
+
+      .battle-tab.empty {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .battle-tab.empty:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #666;
+      }
+
+      #battle-unit-cards {
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        align-items: center;
+      }
+
+      #battle-unit-bar::-webkit-scrollbar {
+        height: 6px;
+      }
+
+      #battle-unit-bar::-webkit-scrollbar-track {
+        background: #1a1a2a;
+        border-radius: 3px;
+      }
+
+      #battle-unit-bar::-webkit-scrollbar-thumb {
+        background: #4a9eff;
+        border-radius: 3px;
+      }
+
+      .battle-unit-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 70px;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s;
+        position: relative;
+      }
+
+      .battle-unit-card:hover {
+        background: rgba(74, 158, 255, 0.2);
+        border-color: rgba(74, 158, 255, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .battle-unit-card.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .battle-unit-card.disabled:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        transform: none;
+      }
+
+      .battle-unit-card.selected {
+        background: rgba(74, 158, 255, 0.3);
+        border-color: #4a9eff;
+        box-shadow: 0 0 8px rgba(74, 158, 255, 0.5);
+      }
+
+      .battle-unit-card.too-expensive {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .battle-unit-card.too-expensive:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        transform: none;
+      }
+
+      .battle-unit-card.all-deployed {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .battle-unit-card.all-deployed:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        transform: none;
+      }
+
+      .battle-unit-card .unit-count-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: #4a9eff;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 4px;
+      }
+
+      .battle-unit-card .unit-count-badge.empty {
+        background: #666;
+      }
+
+      .battle-unit-card .unit-name {
+        font-size: 11px;
+        font-weight: bold;
+        color: #e0e0e0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 65px;
+        text-align: center;
+      }
+
+      .battle-unit-card .unit-cost {
+        font-size: 10px;
+        color: #ffd700;
+        margin-top: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="ui-overlay">
+        <!-- Screen Container for menus -->
+        <div id="screen-container"></div>
+
+        <!-- Top Resource Bar -->
+        <div id="top-bar">
+          <div class="resource">
+            <span>Credits:</span>
+            <span class="resource-value" id="credits-value">1500</span>
+          </div>
+          <div class="resource">
+            <span>Income:</span>
+            <span class="resource-value" id="income-value">+10/tick</span>
+          </div>
+        </div>
+
+        <!-- Battle Unit Bar - Quick unit access during battle phase -->
+        <div id="battle-unit-bar">
+          <div id="battle-unit-tabs"></div>
+          <div id="battle-unit-cards"></div>
+        </div>
+
+        <!-- Score Display -->
+        <div id="score-display">
+          <div class="score-team">
+            <span class="team-blue">Blue:</span>
+            <span class="team-blue" id="score-blue">0</span>
+          </div>
+          <div class="score-team">
+            <span class="team-red">Red:</span>
+            <span class="team-red" id="score-red">0</span>
+          </div>
+          <div style="font-size: 11px; color: #666; margin-top: 5px;">
+            First to 2000 wins
+          </div>
+        </div>
+
+        <!-- Phase Indicator -->
+        <div id="phase-indicator">
+          Phase: <span id="phase-text" class="phase-setup">SETUP</span>
+        </div>
+
+        <!-- Selection Panel -->
+        <div id="selection-panel">
+          <div class="selection-header" id="selection-header">No Selection</div>
+          <div class="selection-stats" id="selection-stats"></div>
+        </div>
+
+        <!-- Deployment Panel -->
+        <div id="deployment-panel">
+          <div style="font-weight: bold; margin-bottom: 10px;">Deploy Units</div>
+          <div id="unit-cards"></div>
+        </div>
+
+        <!-- Minimap -->
+        <div id="minimap">
+          <canvas id="minimap-canvas" width="200" height="200"></canvas>
+        </div>
+
+        <!-- Start Battle Button -->
+        <button id="start-battle-btn">START BATTLE</button>
+
+        <!-- Call Reinforcements Button (DEPRECATED - replaced by battle-unit-bar)
+        <button id="call-reinforcements-btn" style="
+          position: absolute;
+          top: 100px;
+          left: 10px;
+          padding: 10px 20px;
+          font-size: 14px;
+          font-weight: bold;
+          background: linear-gradient(135deg, #ff9f4a, #cc7020);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          display: none;
+          transition: transform 0.2s, box-shadow 0.2s;
+        ">CALL REINFORCEMENTS</button>
+        -->
+
+        <!-- Pause Menu -->
+        <div id="pause-menu">
+          <div class="pause-container">
+            <h2>GAME PAUSED</h2>
+
+            <!-- Players Section -->
+            <div class="pause-players-section">
+              <div class="pause-team">
+                <div class="pause-team-header team-blue">TEAM 1</div>
+                <div id="pause-team1-players" class="pause-player-list"></div>
+              </div>
+              <div class="pause-vs">VS</div>
+              <div class="pause-team">
+                <div class="pause-team-header team-red">TEAM 2</div>
+                <div id="pause-team2-players" class="pause-player-list"></div>
+              </div>
+            </div>
+
+            <div class="pause-buttons">
+              <button id="pause-resume-btn" class="pause-btn">Resume</button>
+              <button id="pause-settings-btn" class="pause-btn">Settings</button>
+              <button id="pause-surrender-btn" class="pause-btn danger">Surrender</button>
+              <button id="pause-quit-btn" class="pause-btn danger">Quit to Menu</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Victory Screen -->
+        <div id="victory-screen">
+          <div class="victory-text" id="victory-text">VICTORY</div>
+          <div class="victory-subtitle" id="victory-subtitle">"The Emperor Protects"</div>
+
+          <div class="victory-stats">
+            <div class="victory-score">
+              <div class="victory-score-value">
+                <span class="team-blue" id="victory-score-blue">0</span>
+                <span style="color: #666;"> vs </span>
+                <span class="team-red" id="victory-score-red">0</span>
+              </div>
+              <div class="victory-score-label">Final Score</div>
+            </div>
+
+            <div class="victory-highlights" id="victory-highlights">
+              <div class="highlight-card hero-card">
+                <div class="highlight-title">Hero of the Match</div>
+                <div class="highlight-unit" id="hero-unit-name">---</div>
+                <div class="highlight-stat" id="hero-kills">0 kills</div>
+              </div>
+              <div class="highlight-card efficient-card">
+                <div class="highlight-title">Most Cost Effective</div>
+                <div class="highlight-unit" id="efficient-unit-name">---</div>
+                <div class="highlight-stat" id="efficient-ratio">0 kills/100cr</div>
+              </div>
+            </div>
+
+            <h3>YOUR STATS</h3>
+            <div class="stat-row">
+              <span class="stat-label">Time:</span>
+              <span class="stat-value" id="victory-time">00:00</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Units Deployed:</span>
+              <span class="stat-value" id="victory-units-deployed">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Units Lost:</span>
+              <span class="stat-value" id="victory-units-lost">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Enemy Units Destroyed:</span>
+              <span class="stat-value" id="victory-units-destroyed">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Credits Earned:</span>
+              <span class="stat-value" id="victory-credits-earned">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Credits Spent:</span>
+              <span class="stat-value" id="victory-credits-spent">0</span>
+            </div>
+
+            <div id="top-killers-section" style="margin-top: 15px;">
+              <h3>TOP PERFORMERS</h3>
+              <div id="top-killers-list" class="top-killers-list"></div>
+            </div>
+          </div>
+
+          <div class="victory-buttons">
+            <button id="victory-play-again-btn" class="victory-btn victory-btn-primary">Play Again</button>
+            <button id="victory-main-menu-btn" class="victory-btn victory-btn-secondary">Main Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Screen -->
+      <div id="loading-screen">
+        <div class="loading-title">STELLAR SIEGE</div>
+        <div class="loading-bar">
+          <div class="loading-progress" id="loading-progress"></div>
+        </div>
+        <div style="margin-top: 10px; color: #666;" id="loading-text">Initializing...</div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

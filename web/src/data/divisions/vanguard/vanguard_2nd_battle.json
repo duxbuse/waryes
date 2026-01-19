@@ -1,0 +1,245 @@
+{
+  "id": "vanguard_2nd_battle",
+  "name": "2nd Battle Company (Tactical)",
+  "factionId": "vanguard",
+  "icon": "assets/icons/divisions/vanguard_2nd_battle.png",
+  "description": "Balanced force. Good mix of infantry, tanks and air support. The 'Jack of All Trades'.",
+  "playstyle": "Can adapt to any situation. Good at everything, master of none.",
+  "slotCosts": {
+    "LOG": [
+      1,
+      2,
+      2,
+      3
+    ],
+    "INF": [
+      1,
+      1,
+      1,
+      2,
+      2,
+      3,
+      3
+    ],
+    "TNK": [
+      1,
+      1,
+      2,
+      2,
+      3
+    ],
+    "REC": [
+      1,
+      2,
+      3
+    ],
+    "AA": [
+      1,
+      2,
+      3
+    ],
+    "ART": [
+      1,
+      2,
+      3
+    ],
+    "AIR": [
+      1,
+      2,
+      3
+    ],
+    "HEL": [
+      1,
+      2,
+      3
+    ]
+  },
+  "roster": [
+    {
+      "unitId": "vanguard_infantry",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_laser",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_auto",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_jetpack_squad",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_hunter_tank",
+      "maxCards": 2,
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_hunter_tank_laser",
+      "maxCards": 1,
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_iron_walker_assault",
+      "maxCards": 1,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_iron_walker_fusion",
+      "maxCards": 1,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_swift_skimmer_auto",
+      "maxCards": 2,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_recon",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_missile_tank",
+      "maxCards": 2,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_talon_interceptor",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_star_fighter",
+      "maxCards": 1,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "sdf_vortex_missile_launcher",
+  "name": "Vortex Missile Launcher",
+  "range": 3500,
+  "penetration": 300,
+  "damage": 200,
+  "suppression": 600,
+  "rateOfFire": 1,
+  "accuracy": 0.7,
+  "aimTime": 5,
+  "reloadTime": 20,
+  "salvoLength": 4,
+  "supplyCost": 100,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

@@ -1,19 +1,19 @@
 {
-    "name": "Heavy Laser Cannon (Tripod)",
-    "range": {
-        "ground": 2000,
-        "air": null
-    },
-    "penetration": 220,
-    "damage": "50 HE",
-    "suppression": 30,
-    "rate_of_fire": 6,
-    "accuracy": {
-        "static": 60,
-        "moving": 5
-    },
-    "aim_time": 2.5,
-    "reload_time": 6.0,
-    "salvo_length": 1,
-    "supply_cost": 20
+  "name": "Heavy Laser Cannon (Tripod)",
+  "range": 2000,
+  "penetration": 220,
+  "damage": 50,
+  "suppression": 30,
+  "rateOfFire": 6,
+  "accuracy": 0.6,
+  "aimTime": 2.5,
+  "reloadTime": 6,
+  "salvoLength": 1,
+  "supplyCost": 20,
+  "id": "sdf_heavy_laser_cannon_tripod",
+  "isAntiAir": false,
+  "canTargetGround": true,
+  "tags": [
+    "heavy"
+  ]
 }

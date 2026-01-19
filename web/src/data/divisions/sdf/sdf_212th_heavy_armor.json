@@ -1,0 +1,203 @@
+{
+  "id": "sdf_212th_heavy_armor",
+  "name": "212th Heavy Armored Regiment",
+  "factionId": "sdf",
+  "description": "The Steamroller. Slow, methodical, and incredibly durable. Lacks subtlety.",
+  "playstyle": "Focus on Main Battle Tanks and Heavy Armor.",
+  "slotCosts": {
+    "LOG": [
+      1,
+      1,
+      2,
+      2
+    ],
+    "INF": [
+      1,
+      2,
+      2,
+      3,
+      3
+    ],
+    "TNK": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      3,
+      3
+    ],
+    "REC": [
+      1,
+      2,
+      3
+    ],
+    "AA": [
+      1,
+      2,
+      2,
+      3
+    ],
+    "ART": [
+      1,
+      2,
+      3
+    ],
+    "AIR": [
+      2,
+      3,
+      4
+    ],
+    "HEL": [
+      2,
+      3,
+      4
+    ]
+  },
+  "roster": [
+    {
+      "unitId": "sdf_bastion_mbt",
+      "maxCards": 5,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_bastion_mbt_hunter",
+      "maxCards": 3,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_bastion_mbt_siege",
+      "maxCards": 3,
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_behemoth",
+      "maxCards": 1,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_trooper",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_engineer",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "notes": "Repair crew",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_skysweeper",
+      "maxCards": 3,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_tremor_cannon",
+      "maxCards": 1,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 4,
+        "elite": 0,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_scout_walker",
+      "maxCards": 3,
+      "notes": "Ion variant",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_scout_walker",
+      "maxCards": 2,
+      "notes": "Multilaser variant",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_nova_fighter_strike",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_nova_fighter_asf",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    }
+  ]
+}

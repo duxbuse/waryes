@@ -1,6 +1,0 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <!-- 3 Bullets / Barrels -->
-  <rect x="12" y="16" width="10" height="32" fill="white" stroke="black" stroke-width="3"/>
-  <rect x="27" y="16" width="10" height="32" fill="white" stroke="black" stroke-width="3"/>
-  <rect x="42" y="16" width="10" height="32" fill="white" stroke="black" stroke-width="3"/>
-</svg>

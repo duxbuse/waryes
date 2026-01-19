@@ -1,0 +1,16 @@
+{
+  "id": "vanguard_hunter_kinetic_cannon",
+  "name": "Hunter Kinetic Cannon",
+  "range": 2200,
+  "penetration": 200,
+  "damage": 60,
+  "suppression": 100,
+  "rateOfFire": 8,
+  "accuracy": 0.65,
+  "aimTime": 2,
+  "reloadTime": 5,
+  "salvoLength": 1,
+  "supplyCost": 25,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

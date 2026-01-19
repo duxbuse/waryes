@@ -1,0 +1,48 @@
+{
+  "id": "sdf_barrage_launcher",
+  "name": "Barrage Launcher",
+  "cost": 120,
+  "icon": "assets/icons/units/sdf/sdf_barrage_launcher.png",
+  "health": 7,
+  "speed": {
+    "road": 70,
+    "offRoad": 50,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 40,
+    "side": 30,
+    "rear": 15,
+    "top": 10
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 400,
+    "offRoad": 250
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_barrage_missile",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_heavy_auto_cannon_hull",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(pushd:*)",
+      "Bash(node ./node_modules/typescript/bin/tsc:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(bun run build)",
+      "Bash(bunx vitest:*)",
+      "Bash(bun test:*)",
+      "Bash(cat:*)",
+      "Bash(bun x tsc:*)",
+      "Bash(npm run typecheck:*)"
+    ]
+  }
+}
