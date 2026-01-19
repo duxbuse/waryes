@@ -210,20 +210,21 @@ export class AIManager {
 
   /**
    * Get enemy units from the perspective of the given unit
-   * Only returns units that are visible according to fog of war
+   * Only returns units that are visible according to fog of war (except on easy difficulty)
    */
   private getEnemyUnits(unit: Unit): readonly Unit[] {
     const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
     const allEnemyUnits = this.game.unitManager.getAllUnits(enemyTeam);
 
-    // Filter by visibility - AI can only see units revealed by fog of war
-    if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+    // On easy difficulty, AI sees all units (helps new players)
+    // On medium/hard difficulty, AI respects fog of war
+    if (this.difficulty !== 'easy' && this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
       return allEnemyUnits.filter(enemyUnit =>
         this.game.fogOfWarManager.isUnitVisibleToTeam(enemyUnit, unit.team)
       );
     }
 
-    // If fog of war is disabled, return all enemy units
+    // If fog of war is disabled or difficulty is easy, return all enemy units
     return allEnemyUnits;
   }
 
@@ -612,8 +613,9 @@ export class AIManager {
     for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
 
-      // Filter by visibility - AI can only see units revealed by fog of war
-      if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+      // On easy difficulty, AI sees all units (helps new players)
+      // On medium/hard difficulty, AI only sees units revealed by fog of war
+      if (this.difficulty !== 'easy' && this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
         if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
           continue; // Skip invisible enemies
         }
@@ -644,8 +646,9 @@ export class AIManager {
     for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
 
-      // Filter by visibility - AI can only see units revealed by fog of war
-      if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+      // On easy difficulty, AI sees all units (helps new players)
+      // On medium/hard difficulty, AI only sees units revealed by fog of war
+      if (this.difficulty !== 'easy' && this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
         if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
           continue; // Skip invisible enemies
         }
