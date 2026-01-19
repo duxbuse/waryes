@@ -17,6 +17,8 @@ export class PooledProjectile implements IPoolable {
   suppression: number = 0;
   sourceTeam: 'player' | 'enemy' = 'player';
   targetUnit: Unit | undefined = undefined;
+  attackerUnit: Unit | undefined = undefined;
+  weaponIndex: number = 0;
   timeAlive: number = 0;
   maxTime: number = 0;
   weaponData: WeaponData | null = null;
@@ -34,6 +36,8 @@ export class PooledProjectile implements IPoolable {
     this.penetration = 0;
     this.suppression = 0;
     this.targetUnit = undefined;
+    this.attackerUnit = undefined;
+    this.weaponIndex = 0;
     this.timeAlive = 0;
     this.maxTime = 0;
     this.weaponData = null;
@@ -49,6 +53,8 @@ export class PooledProjectile implements IPoolable {
     suppression: number,
     sourceTeam: 'player' | 'enemy',
     targetUnit: Unit | undefined,
+    attackerUnit: Unit | undefined,
+    weaponIndex: number,
     maxTime: number,
     weaponData: WeaponData,
     material: THREE.Material
@@ -62,6 +68,8 @@ export class PooledProjectile implements IPoolable {
     this.suppression = suppression;
     this.sourceTeam = sourceTeam;
     this.targetUnit = targetUnit;
+    this.attackerUnit = attackerUnit;
+    this.weaponIndex = weaponIndex;
     this.timeAlive = 0;
     this.maxTime = maxTime;
     this.weaponData = weaponData;

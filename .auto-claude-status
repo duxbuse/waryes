@@ -3,13 +3,13 @@
   "spec": "004-per-weapon-cooldown-and-damage-tracking",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 4,
     "total": 11,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Core Data Structures",
+    "current": "Combat Manager Integration",
     "id": null,
     "total": 3
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 5,
     "started_at": "2026-01-20T00:25:54.735706"
   },
-  "last_update": "2026-01-20T00:32:38.851111"
+  "last_update": "2026-01-20T00:38:50.303524"
 }
