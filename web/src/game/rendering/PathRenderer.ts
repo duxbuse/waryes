@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { Unit } from '../units/Unit';
 import type { Game } from '../../core/Game';
+import { VectorPool } from '../utils/VectorPool';
 
 interface PathData {
   line: THREE.Mesh | THREE.Line; // Can be Mesh (ribbon) or Line (fallback)
@@ -82,8 +83,10 @@ export class PathRenderer {
    */
   private createSolidRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Mesh {
     const pathWidth = 0.3;
-    const direction = new THREE.Vector3().subVectors(endPos, startPos).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+    const direction = VectorPool.acquire();
+    direction.subVectors(endPos, startPos).normalize();
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
 
     const ribbonVertices = new Float32Array([
       startPos.x - perpendicular.x, startPos.y, startPos.z - perpendicular.z,
@@ -117,8 +120,10 @@ export class PathRenderer {
    */
   private createDashedRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Group {
     const pathWidth = 0.3;
-    const direction = new THREE.Vector3().subVectors(endPos, startPos).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+    const direction = VectorPool.acquire();
+    direction.subVectors(endPos, startPos).normalize();
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
 
     // Dash pattern - more subtle than pre-order (shorter dashes)
     const segmentLength = 1.5; // Length of each dash (shorter than pre-order's 2)
@@ -133,8 +138,10 @@ export class PathRenderer {
       const t1 = (i * dashPattern) / totalDistance;
       const t2 = Math.min((i * dashPattern + segmentLength) / totalDistance, 1);
 
-      const p1 = new THREE.Vector3().lerpVectors(startPos, endPos, t1);
-      const p2 = new THREE.Vector3().lerpVectors(startPos, endPos, t2);
+      const p1 = VectorPool.acquire();
+      p1.lerpVectors(startPos, endPos, t1);
+      const p2 = VectorPool.acquire();
+      p2.lerpVectors(startPos, endPos, t2);
 
       const segmentVertices = new Float32Array([
         p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
@@ -252,8 +259,10 @@ export class PathRenderer {
       const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
       const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
 
-      const adjustedStart = new THREE.Vector3(startPos.x, startY, startPos.z);
-      const adjustedEnd = new THREE.Vector3(endPos.x, endY, endPos.z);
+      const adjustedStart = VectorPool.acquire();
+      adjustedStart.set(startPos.x, startY, startPos.z);
+      const adjustedEnd = VectorPool.acquire();
+      adjustedEnd.set(endPos.x, endY, endPos.z);
 
       // Get color for this command type
       const color = this.PATH_COLORS[commandType as keyof typeof this.PATH_COLORS] ?? this.PATH_COLORS.move;
@@ -308,8 +317,10 @@ export class PathRenderer {
 
     // Create a visible ribbon for pre-order path
     const pathWidth = 0.25; // Slightly thinner than regular paths
-    const direction = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+    const direction = VectorPool.acquire();
+    direction.subVectors(points[1], points[0]).normalize();
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
 
     // Create dashed ribbon by creating multiple small segments
     const segmentLength = 2; // Length of each dash
@@ -324,8 +335,10 @@ export class PathRenderer {
       const t1 = (i * dashPattern) / totalDistance;
       const t2 = Math.min((i * dashPattern + segmentLength) / totalDistance, 1);
 
-      const p1 = new THREE.Vector3().lerpVectors(points[0], points[1], t1);
-      const p2 = new THREE.Vector3().lerpVectors(points[0], points[1], t2);
+      const p1 = VectorPool.acquire();
+      p1.lerpVectors(points[0], points[1], t1);
+      const p2 = VectorPool.acquire();
+      p2.lerpVectors(points[0], points[1], t2);
 
       const segmentVertices = new Float32Array([
         p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
