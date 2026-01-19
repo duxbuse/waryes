@@ -606,6 +606,7 @@ export class AIManager {
    * 2. Damage percentage (wounded units higher priority)
    * 3. Distance (closer preferred, normalized)
    * 4. Threat level (units attacking allies)
+   * 5. Focus fire bonus (targets already being attacked by allies)
    */
   private calculateTargetPriority(
     attackingUnit: Unit,
@@ -636,6 +637,13 @@ export class AIManager {
     if (isThreat) {
       score += 20;
     }
+
+    // Factor 5: Focus fire bonus (0-30 points)
+    // Bonus for targets already being attacked by allies
+    // Encourages concentrating fire on high-value targets
+    // Diminishing returns: first ally = +15, second = +10, third+ = +5 (max +30)
+    const focusFireBonus = this.calculateFocusFireBonus(target, alliedUnits);
+    score += focusFireBonus;
 
     return score;
   }
@@ -682,6 +690,38 @@ export class AIManager {
     }
 
     return false;
+  }
+
+  /**
+   * Calculate focus fire bonus for targets already being attacked
+   * Encourages coordinated fire on high-value targets
+   *
+   * Returns:
+   * - 0 points if no allies are attacking this target
+   * - +15 points if 1 ally is attacking (concentrate fire)
+   * - +25 points if 2 allies are attacking (+10 for second)
+   * - +30 points if 3+ allies are attacking (+5 for third+, capped at 30)
+   *
+   * Diminishing returns prevent ALL units from targeting the same enemy
+   */
+  private calculateFocusFireBonus(target: Unit, alliedUnits: readonly Unit[]): number {
+    let attackerCount = 0;
+
+    // Count how many allied units are currently attacking this target
+    for (const ally of alliedUnits) {
+      // Check AI state to see if this unit is attacking the target
+      const allyState = this.aiStates.get(ally.id);
+      if (allyState && allyState.targetUnit && allyState.targetUnit.id === target.id) {
+        attackerCount++;
+      }
+    }
+
+    // Calculate bonus with diminishing returns
+    if (attackerCount === 0) return 0;
+    if (attackerCount === 1) return 15;
+    if (attackerCount === 2) return 25;
+    // Cap at 30 for 3+ attackers
+    return 30;
   }
 
   /**
