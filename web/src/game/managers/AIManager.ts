@@ -612,6 +612,13 @@ export class AIManager {
     for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
 
+      // Filter by visibility - AI can only see units revealed by fog of war
+      if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+        if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
+          continue; // Skip invisible enemies
+        }
+      }
+
       const dist = unit.position.distanceTo(enemy.position);
       if (dist < nearestDist) {
         nearestDist = dist;
@@ -636,6 +643,13 @@ export class AIManager {
 
     for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
+
+      // Filter by visibility - AI can only see units revealed by fog of war
+      if (this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+        if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
+          continue; // Skip invisible enemies
+        }
+      }
 
       const dist = unit.position.distanceTo(enemy.position);
       if (dist < nearestDist) {
