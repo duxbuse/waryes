@@ -1334,6 +1334,236 @@ export class AIManager {
   }
 
   /**
+   * Identify clustered enemy units that could be flanked
+   * Returns clusters of 3+ enemy units within 40m of each other
+   */
+  private identifyEnemyClusters(
+    enemyUnits: readonly Unit[],
+    minClusterSize: number = 3,
+    clusterRadius: number = 40
+  ): Unit[][] {
+    const clusters: Unit[][] = [];
+    const processed = new Set<string>();
+
+    // Find clusters using spatial proximity
+    for (const unit of enemyUnits) {
+      if (processed.has(unit.id)) continue;
+
+      // Find all nearby units
+      const nearbyUnits: Unit[] = [unit];
+      processed.add(unit.id);
+
+      for (const other of enemyUnits) {
+        if (processed.has(other.id)) continue;
+
+        const distance = unit.position.distanceTo(other.position);
+        if (distance <= clusterRadius) {
+          nearbyUnits.push(other);
+          processed.add(other.id);
+        }
+      }
+
+      // Only consider groups of minClusterSize or more
+      if (nearbyUnits.length >= minClusterSize) {
+        clusters.push(nearbyUnits);
+      }
+    }
+
+    return clusters;
+  }
+
+  /**
+   * Calculate flanking vectors (left and right) for an enemy cluster
+   * Returns positions to the left and right of the enemy formation
+   */
+  private calculateFlankingVectors(cluster: Unit[]): {
+    left: THREE.Vector3;
+    right: THREE.Vector3;
+    center: THREE.Vector3;
+    frontLine: THREE.Vector3;
+  } | null {
+    if (cluster.length === 0) return null;
+
+    // Calculate cluster center
+    const center = VectorPool.acquire();
+    center.set(0, 0, 0);
+    for (const unit of cluster) {
+      center.add(unit.position);
+    }
+    center.divideScalar(cluster.length);
+
+    // Calculate average facing direction (front line orientation)
+    // Use the average forward vector of all units in the cluster
+    const avgForward = VectorPool.acquire();
+    avgForward.set(0, 0, 0);
+    for (const unit of cluster) {
+      const unitForward = VectorPool.acquire();
+      unitForward.set(0, 0, -1);
+      unitForward.applyQuaternion(unit.mesh.quaternion);
+      avgForward.add(unitForward);
+      VectorPool.release(unitForward);
+    }
+    avgForward.divideScalar(cluster.length);
+    avgForward.normalize();
+
+    // Calculate perpendicular vectors (flanks)
+    // Left flank: rotate avgForward 90° counterclockwise
+    const leftFlankDir = VectorPool.acquire();
+    leftFlankDir.set(-avgForward.z, 0, avgForward.x);
+    leftFlankDir.normalize();
+
+    // Right flank: rotate avgForward 90° clockwise
+    const rightFlankDir = VectorPool.acquire();
+    rightFlankDir.set(avgForward.z, 0, -avgForward.x);
+    rightFlankDir.normalize();
+
+    // Calculate flank positions (40m to the sides)
+    const flankDistance = 40;
+    const leftPos = VectorPool.acquire();
+    leftPos.copy(center).add(leftFlankDir.multiplyScalar(flankDistance));
+    leftPos.y = this.game.getElevationAt(leftPos.x, leftPos.z);
+
+    const rightPos = VectorPool.acquire();
+    rightPos.copy(center).add(rightFlankDir.multiplyScalar(flankDistance));
+    rightPos.y = this.game.getElevationAt(rightPos.x, rightPos.z);
+
+    // Copy results before releasing
+    const result = {
+      left: leftPos.clone(),
+      right: rightPos.clone(),
+      center: center.clone(),
+      frontLine: avgForward.clone(),
+    };
+
+    // Release all pooled vectors
+    VectorPool.release(center);
+    VectorPool.release(avgForward);
+    VectorPool.release(leftFlankDir);
+    VectorPool.release(rightFlankDir);
+    VectorPool.release(leftPos);
+    VectorPool.release(rightPos);
+
+    return result;
+  }
+
+  /**
+   * Get available fast units suitable for flanking maneuvers
+   * Returns REC and HEL units with speed > 15
+   */
+  private getAvailableFastUnits(friendlyUnits: readonly Unit[]): Unit[] {
+    const fastUnits: Unit[] = [];
+
+    for (const unit of friendlyUnits) {
+      const category = unit.unitData.category;
+      const speed = unit.unitData.speed;
+
+      // REC and HEL units are fast and suitable for flanking
+      // Must have speed > 15 to be effective flankers
+      if ((category === 'REC' || category === 'HEL') && speed > 15) {
+        fastUnits.push(unit);
+      }
+    }
+
+    return fastUnits;
+  }
+
+  /**
+   * Identify flanking opportunities for AI units
+   * Returns array of flanking opportunities with target clusters and flank positions
+   */
+  identifyFlankingOpportunities(aiTeam: number): Array<{
+    cluster: Unit[];
+    flankPositions: {
+      left: THREE.Vector3;
+      right: THREE.Vector3;
+      center: THREE.Vector3;
+      frontLine: THREE.Vector3;
+    };
+    availableFlankers: Unit[];
+    priority: number;
+  }> {
+    const opportunities: Array<{
+      cluster: Unit[];
+      flankPositions: {
+        left: THREE.Vector3;
+        right: THREE.Vector3;
+        center: THREE.Vector3;
+        frontLine: THREE.Vector3;
+      };
+      availableFlankers: Unit[];
+      priority: number;
+    }> = [];
+
+    // Get friendly and enemy units
+    const friendlyUnits = this.game.unitManager.getUnitsForTeam(aiTeam);
+    const enemyUnits = this.game.unitManager
+      .getAllUnits()
+      .filter(u => u.team !== aiTeam && u.health > 0);
+
+    // Filter by fog of war (except on easy difficulty)
+    const visibleEnemies =
+      this.difficulty === 'easy'
+        ? enemyUnits
+        : enemyUnits.filter(u => this.game.fogOfWarManager.isUnitVisibleToTeam(u, aiTeam));
+
+    // Get available fast units for flanking
+    const availableFlankers = this.getAvailableFastUnits(friendlyUnits);
+
+    // Only proceed if we have fast units and visible enemies
+    if (availableFlankers.length === 0 || visibleEnemies.length === 0) {
+      return opportunities;
+    }
+
+    // Identify enemy clusters
+    const clusters = this.identifyEnemyClusters(visibleEnemies);
+
+    // For each cluster, calculate flanking vectors and priority
+    for (const cluster of clusters) {
+      const flankPositions = this.calculateFlankingVectors(cluster);
+      if (!flankPositions) continue;
+
+      // Calculate priority based on cluster size and unit value
+      let priority = 0;
+
+      // Base priority: cluster size (more units = higher priority)
+      priority += cluster.length * 10;
+
+      // Bonus for high-value targets in cluster
+      for (const unit of cluster) {
+        const categoryValue = this.getUnitCategoryValue(unit);
+        priority += categoryValue / 10; // Add 10% of category value
+      }
+
+      // Distance factor: closer clusters are higher priority
+      const avgDistance = VectorPool.acquire();
+      avgDistance.copy(flankPositions.center);
+      let minDistance = Infinity;
+      for (const flanker of availableFlankers) {
+        const dist = flanker.position.distanceTo(flankPositions.center);
+        if (dist < minDistance) minDistance = dist;
+      }
+      VectorPool.release(avgDistance);
+
+      // Closer is better (inverse distance bonus, max 30 points)
+      if (minDistance < 200) {
+        priority += (200 - minDistance) / 200 * 30;
+      }
+
+      opportunities.push({
+        cluster,
+        flankPositions,
+        availableFlankers,
+        priority,
+      });
+    }
+
+    // Sort by priority (highest first)
+    opportunities.sort((a, b) => b.priority - a.priority);
+
+    return opportunities;
+  }
+
+  /**
    * Clean up AI state for destroyed units
    */
   removeUnit(unitId: string): void {
