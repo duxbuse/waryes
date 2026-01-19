@@ -6,6 +6,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Exclude Bun-specific tests (jsonSchema.test.ts uses bun:test)
+    exclude: ['tests/jsonSchema.test.ts', 'node_modules/**'],
     // Use single threaded mode for compatibility with bun
     fileParallelism: false,
     // Verbose reporter for clear test output
