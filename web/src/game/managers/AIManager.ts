@@ -1127,13 +1127,69 @@ export class AIManager {
     unit.setAttackCommand(target);
   }
 
+  /**
+   * Calculate role-based position for combined arms tactics
+   * Infantry leads, tanks follow, artillery stays at range
+   */
+  private calculateRoleBasedPosition(unit: Unit, objectivePosition: THREE.Vector3): THREE.Vector3 {
+    const category = unit.unitData.category;
+
+    // Infantry: Front line (use objective position directly)
+    if (category === 'INF') {
+      return objectivePosition.clone();
+    }
+
+    // Logistics, Recon, AA, Helicopters, Aircraft: Default positioning
+    if (category === 'LOG' || category === 'REC' || category === 'AA' ||
+        category === 'HEL' || category === 'AIR') {
+      return objectivePosition.clone();
+    }
+
+    // Calculate direction from objective back toward unit (for positioning behind)
+    const direction = VectorPool.acquire();
+    direction.copy(unit.position).sub(objectivePosition).normalize();
+
+    let offset: number;
+
+    // Tanks: 10m behind infantry/objective
+    if (category === 'TNK') {
+      offset = 10;
+    }
+    // Artillery: 50m behind objective (support from range)
+    else if (category === 'ART') {
+      offset = 50;
+    }
+    // Default: Use objective position
+    else {
+      VectorPool.release(direction);
+      return objectivePosition.clone();
+    }
+
+    // Calculate adjusted position
+    const adjustedPosition = objectivePosition.clone();
+    adjustedPosition.x += direction.x * offset;
+    adjustedPosition.z += direction.z * offset;
+
+    // Clamp to terrain height
+    const y = this.game.getElevationAt(adjustedPosition.x, adjustedPosition.z);
+    adjustedPosition.y = y;
+
+    // Clean up pooled vector
+    VectorPool.release(direction);
+
+    return adjustedPosition;
+  }
+
   private orderMove(unit: Unit, state: AIUnitState, position: THREE.Vector3): void {
     state.behavior = 'moving';
     state.targetUnit = null;
-    state.targetPosition = position.clone();
+
+    // Apply role-based positioning for combined arms tactics
+    const adjustedPosition = this.calculateRoleBasedPosition(unit, position);
+    state.targetPosition = adjustedPosition.clone();
 
     // Issue move command
-    unit.setMoveCommand(position);
+    unit.setMoveCommand(adjustedPosition);
   }
 
   private orderRetreat(unit: Unit, state: AIUnitState): void {
