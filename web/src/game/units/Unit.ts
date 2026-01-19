@@ -715,15 +715,9 @@ export class Unit {
       }
     }
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path if queue building fails
-        this.game.pathRenderer.updatePath(this, target, 'move');
-      }
+      this.game.pathRenderer.updatePath(this, target, 'move');
     }
   }
 
@@ -746,16 +740,10 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Attack, targetUnit: target };
 
-    // Update path visualization (show path to target unit)
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     // For attack commands, we convert targetUnit to target position for visualization
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, target.position, 'attack');
-      }
+      this.game.pathRenderer.updatePath(this, target.position, 'attack');
     }
   }
 
@@ -814,15 +802,9 @@ export class Unit {
       }
     }
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, target, 'fast');
-      }
+      this.game.pathRenderer.updatePath(this, target, 'fast');
     }
   }
 
@@ -881,15 +863,9 @@ export class Unit {
       }
     }
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, target, 'reverse');
-      }
+      this.game.pathRenderer.updatePath(this, target, 'reverse');
     }
   }
 
@@ -948,15 +924,9 @@ export class Unit {
       }
     }
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, target, 'attackMove');
-      }
+      this.game.pathRenderer.updatePath(this, target, 'attackMove');
     }
   }
 
@@ -981,15 +951,9 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Garrison, target: buildingPos };
     this.targetPosition = buildingPos;
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, buildingPos, 'garrison');
-      }
+      this.game.pathRenderer.updatePath(this, buildingPos, 'garrison');
     }
   }
 
@@ -1054,15 +1018,9 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Mount, target: transportPos, targetUnit: transport };
     this.targetPosition = transportPos;
 
-    // Update path visualization with full queue
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
-      const fullQueue = this.buildFullCommandQueue();
-      if (fullQueue.length > 0) {
-        this.game.pathRenderer.updatePathQueue(this, fullQueue);
-      } else {
-        // Fallback to single path
-        this.game.pathRenderer.updatePath(this, transportPos, 'mount');
-      }
+      this.game.pathRenderer.updatePath(this, transportPos, 'mount');
     }
   }
 
