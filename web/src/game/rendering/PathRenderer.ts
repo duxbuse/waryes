@@ -119,6 +119,108 @@ export class PathRenderer {
   }
 
   /**
+   * Update path queue visualization for a unit with multiple waypoints
+   * Shows connected path segments for all queued commands
+   * Only shows paths for player-owned units (not enemies or AI allies)
+   */
+  updatePathQueue(unit: Unit, commandQueue: Array<{ type: string; target?: THREE.Vector3 }>): void {
+    // Remove existing path
+    this.clearPath(unit.id);
+
+    // Only show paths for player-owned units
+    if (unit.ownerId !== 'player') return;
+
+    // Build list of waypoints from command queue
+    const waypoints: Array<{ position: THREE.Vector3; commandType: string }> = [];
+
+    // Add all commands with target positions
+    for (const command of commandQueue) {
+      if (command.target) {
+        waypoints.push({
+          position: command.target.clone(),
+          commandType: command.type,
+        });
+      }
+    }
+
+    // No waypoints to render
+    if (waypoints.length === 0) return;
+
+    const pathDataList: PathData[] = [];
+
+    // Create path segments between consecutive waypoints
+    let startPos = unit.position.clone();
+
+    for (let i = 0; i < waypoints.length; i++) {
+      const waypoint = waypoints[i];
+      const endPos = waypoint.position.clone();
+      const commandType = waypoint.commandType;
+
+      // Sample terrain elevation and lift path above it for visibility
+      const startTerrainHeight = this.game.getElevationAt(startPos.x, startPos.z);
+      const endTerrainHeight = this.game.getElevationAt(endPos.x, endPos.z);
+
+      const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
+      const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+
+      const adjustedStart = new THREE.Vector3(startPos.x, startY, startPos.z);
+      const adjustedEnd = new THREE.Vector3(endPos.x, endY, endPos.z);
+
+      // Get color for this command type
+      const color = this.PATH_COLORS[commandType as keyof typeof this.PATH_COLORS] ?? this.PATH_COLORS.move;
+
+      // Create a visible ribbon for this segment
+      const pathWidth = 0.3;
+      const direction = new THREE.Vector3().subVectors(adjustedEnd, adjustedStart).normalize();
+      const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+
+      // Create a ribbon geometry (quad strip along the path)
+      const ribbonVertices = new Float32Array([
+        adjustedStart.x - perpendicular.x, adjustedStart.y, adjustedStart.z - perpendicular.z,
+        adjustedStart.x + perpendicular.x, adjustedStart.y, adjustedStart.z + perpendicular.z,
+        adjustedEnd.x - perpendicular.x, adjustedEnd.y, adjustedEnd.z - perpendicular.z,
+        adjustedEnd.x + perpendicular.x, adjustedEnd.y, adjustedEnd.z + perpendicular.z,
+      ]);
+
+      const ribbonIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(ribbonVertices, 3));
+      geometry.setIndex(new THREE.BufferAttribute(ribbonIndices, 1));
+
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+
+      const line = new THREE.Mesh(geometry, material);
+      line.renderOrder = 100; // Render on top
+      this.scene.add(line);
+
+      // Store path data for this segment
+      pathDataList.push({
+        line,
+        unit,
+        target: endPos,
+      });
+
+      // Create waypoint marker at this destination
+      this.createWaypoint(unit.id, endPos, color);
+
+      // Next segment starts where this one ends
+      startPos = endPos;
+    }
+
+    // Store all path segments for this unit
+    if (pathDataList.length > 0) {
+      this.pathData.set(unit.id, pathDataList);
+    }
+  }
+
+  /**
    * Show pre-order path (dashed line during setup phase)
    * Only shows paths for player-owned units
    */
