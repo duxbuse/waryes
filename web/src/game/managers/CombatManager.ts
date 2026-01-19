@@ -89,7 +89,8 @@ export class CombatManager {
   fireWeapon(
     attacker: Unit,
     target: Unit,
-    weaponId: string
+    weaponId: string,
+    weaponIndex?: number
   ): void {
     const weapon = getWeaponById(weaponId);
     if (!weapon) return;
@@ -387,15 +388,21 @@ export class CombatManager {
 
       // Engage target if we have one
       if (unit.combatTarget) {
-        // Check if can fire (rate of fire cooldown)
-        if (unit.canFire()) {
-          // Fire all weapons
-          for (const weaponSlot of unit.getWeapons()) {
+        // Fire each weapon independently based on its cooldown
+        const weapons = unit.getWeapons();
+        for (let weaponIndex = 0; weaponIndex < weapons.length; weaponIndex++) {
+          const weaponSlot = weapons[weaponIndex];
+          if (!weaponSlot) continue;
+
+          // Check if this specific weapon can fire
+          if (unit.canWeaponFire(weaponIndex)) {
+            // Fire all instances of this weapon
             for (let i = 0; i < weaponSlot.count; i++) {
-              this.fireWeapon(unit, unit.combatTarget, weaponSlot.weaponId);
+              this.fireWeapon(unit, unit.combatTarget, weaponSlot.weaponId, weaponIndex);
             }
+            // Reset cooldown for this specific weapon
+            unit.resetWeaponCooldown(weaponIndex, weaponSlot.weaponId);
           }
-          unit.resetFireCooldown();
         }
       }
     }
