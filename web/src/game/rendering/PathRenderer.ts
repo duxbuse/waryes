@@ -17,6 +17,8 @@ interface PathData {
   line: THREE.Mesh | THREE.Line; // Can be Mesh (ribbon) or Line (fallback)
   unit: Unit;
   target: THREE.Vector3;
+  fadeTimer: number; // Time remaining before path fades out completely (in seconds)
+  initialOpacity: number; // Initial opacity value to fade from
 }
 
 export class PathRenderer {
@@ -42,6 +44,10 @@ export class PathRenderer {
 
   // Height offset above terrain for visibility
   private readonly PATH_HEIGHT_OFFSET = 0.5; // 0.5m above terrain
+
+  // Fade animation settings
+  private readonly FADE_DURATION = 2.5; // Duration in seconds before path fades out completely
+  private readonly INITIAL_OPACITY = 0.8; // Starting opacity for paths
 
   constructor(scene: THREE.Scene, game: Game) {
     this.scene = scene;
@@ -98,7 +104,7 @@ export class PathRenderer {
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.8,
+      opacity: this.INITIAL_OPACITY,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -112,6 +118,8 @@ export class PathRenderer {
       line,
       unit,
       target: targetPosition.clone(),
+      fadeTimer: this.FADE_DURATION,
+      initialOpacity: this.INITIAL_OPACITY,
     }]);
 
     // Create waypoint marker at destination
@@ -191,7 +199,7 @@ export class PathRenderer {
       const material = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.8,
+        opacity: this.INITIAL_OPACITY,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
@@ -205,6 +213,8 @@ export class PathRenderer {
         line,
         unit,
         target: endPos,
+        fadeTimer: this.FADE_DURATION,
+        initialOpacity: this.INITIAL_OPACITY,
       });
 
       // Create waypoint marker at this destination
@@ -397,8 +407,9 @@ export class PathRenderer {
    * Update all paths (shrink as units move)
    * For multi-segment paths, only the first segment shrinks. When the unit reaches
    * the first waypoint, that segment is removed and the next segment becomes active.
+   * Also handles fade-out animation over time.
    */
-  update(): void {
+  update(dt: number = 1/60): void {
     // Update each unit's path queue
     for (const [unitId, dataList] of this.pathData) {
       if (dataList.length === 0) continue;
@@ -407,6 +418,30 @@ export class PathRenderer {
       const firstSegment = dataList[0];
       const unit = firstSegment.unit;
       const target = firstSegment.target;
+
+      // Update fade timer for all segments
+      let allSegmentsFaded = true;
+      for (const segment of dataList) {
+        segment.fadeTimer -= dt;
+
+        // Calculate opacity based on remaining fade time
+        const fadeProgress = Math.max(0, segment.fadeTimer / this.FADE_DURATION);
+        const newOpacity = segment.initialOpacity * fadeProgress;
+
+        if (segment.line.material instanceof THREE.Material) {
+          (segment.line.material as THREE.MeshBasicMaterial).opacity = newOpacity;
+        }
+
+        if (segment.fadeTimer > 0) {
+          allSegmentsFaded = false;
+        }
+      }
+
+      // If all segments have faded out, remove the entire path
+      if (allSegmentsFaded) {
+        this.clearPath(unitId);
+        continue;
+      }
 
       // Check if unit has reached the first waypoint
       const distanceToTarget = Math.sqrt(
