@@ -37,6 +37,7 @@ export class MinimapRenderer {
   // Combat indicators
   private combatIndicators: Map<string, CombatIndicator> = new Map();
   private nextIndicatorId = 0;
+  private lastRenderTime = 0;
 
   // Colors - dynamic based on biome
   private COLORS = {
@@ -229,6 +230,14 @@ export class MinimapRenderer {
     if (!this.map) return;
 
     try {
+      // Calculate delta time
+      const now = performance.now();
+      const dt = this.lastRenderTime === 0 ? 0.016 : (now - this.lastRenderTime) / 1000;
+      this.lastRenderTime = now;
+
+      // Update combat indicators (fade out and cleanup)
+      this.update(dt);
+
       const ctx = this.ctx;
       const canvas = this.canvas;
 
