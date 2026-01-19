@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import type { Unit } from '../units/Unit';
+import { type Unit, UnitCommand } from '../units/Unit';
 import type { Game } from '../../core/Game';
 
 export class UnitUI {
@@ -571,6 +571,55 @@ export class UnitUI {
   }
 
   /**
+   * Update order icon visibility based on current command
+   */
+  private updateOrderIconsVisibility(): void {
+    // Get unit's current command
+    const currentCommand = (this.unit as any).currentCommand;
+
+    // Hide all order icons first
+    if (this.moveIcon) this.moveIcon.visible = false;
+    if (this.attackIcon) this.attackIcon.visible = false;
+    if (this.holdIcon) this.holdIcon.visible = false;
+    if (this.fastMoveIcon) this.fastMoveIcon.visible = false;
+    if (this.reverseIcon) this.reverseIcon.visible = false;
+    if (this.attackMoveIcon) this.attackMoveIcon.visible = false;
+    if (this.garrisonIcon) this.garrisonIcon.visible = false;
+    if (this.mountIcon) this.mountIcon.visible = false;
+
+    // Show icon based on current command type
+    if (currentCommand) {
+      switch (currentCommand.type) {
+        case UnitCommand.Move:
+          if (this.moveIcon) this.moveIcon.visible = true;
+          break;
+        case UnitCommand.Attack:
+          if (this.attackIcon) this.attackIcon.visible = true;
+          break;
+        case UnitCommand.FastMove:
+          if (this.fastMoveIcon) this.fastMoveIcon.visible = true;
+          break;
+        case UnitCommand.Reverse:
+          if (this.reverseIcon) this.reverseIcon.visible = true;
+          break;
+        case UnitCommand.AttackMove:
+          if (this.attackMoveIcon) this.attackMoveIcon.visible = true;
+          break;
+        case UnitCommand.Garrison:
+          if (this.garrisonIcon) this.garrisonIcon.visible = true;
+          break;
+        case UnitCommand.Mount:
+          if (this.mountIcon) this.mountIcon.visible = true;
+          break;
+        case UnitCommand.None:
+        default:
+          // No icon shown for None or unknown commands
+          break;
+      }
+    }
+  }
+
+  /**
    * Update all ground ring indicators (aim + weapon reloads)
    */
   private updateGroundRingIndicators(): void {
@@ -742,6 +791,9 @@ export class UnitUI {
       this.mountedIcon.visible = this.unit.isMounted;
     }
 
+    // Update order icon visibility based on current command
+    this.updateOrderIconsVisibility();
+
     // Update ground ring indicators
     this.updateGroundRingIndicators();
 
@@ -757,6 +809,7 @@ export class UnitUI {
         if (this.moraleBarBg) this.moraleBarBg.visible = false;
         if (this.moraleBarFg) this.moraleBarFg.visible = false;
         this.statusIcons.visible = false;
+        this.orderIconsGroup.visible = false;
         if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
         for (const star of this.veterancyStars) {
           star.visible = false;
@@ -767,6 +820,7 @@ export class UnitUI {
         if (this.moraleBarBg) this.moraleBarBg.visible = true;
         if (this.moraleBarFg) this.moraleBarFg.visible = true;
         this.statusIcons.visible = true;
+        this.orderIconsGroup.visible = true;
         if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
         // Other indicators remain dynamically controlled
       }
