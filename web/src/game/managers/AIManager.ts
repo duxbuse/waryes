@@ -597,6 +597,93 @@ export class AIManager {
     state.targetPosition = null;
   }
 
+  /**
+   * Calculate priority score for a potential target
+   * Higher score = higher priority
+   *
+   * Factors:
+   * 1. Unit category value (LOG > TNK > ART > INF > others)
+   * 2. Damage percentage (wounded units higher priority)
+   * 3. Distance (closer preferred, normalized)
+   * 4. Threat level (units attacking allies)
+   */
+  private calculateTargetPriority(
+    attackingUnit: Unit,
+    target: Unit,
+    alliedUnits: readonly Unit[]
+  ): number {
+    let score = 0;
+
+    // Factor 1: Unit category value (0-100 points)
+    const categoryValue = this.getUnitCategoryValue(target);
+    score += categoryValue;
+
+    // Factor 2: Damage percentage (0-50 points)
+    // More damaged units are higher priority (finish them off)
+    const healthPercent = target.health / target.maxHealth;
+    const damageBonus = (1 - healthPercent) * 50;
+    score += damageBonus;
+
+    // Factor 3: Distance (0-30 points, inverse - closer is better)
+    // Normalize distance: 0m = 30 points, 100m+ = 0 points
+    const distance = attackingUnit.position.distanceTo(target.position);
+    const distanceBonus = Math.max(0, 30 - (distance / 100) * 30);
+    score += distanceBonus;
+
+    // Factor 4: Threat level (0-20 points)
+    // Bonus if target is currently attacking any allied unit
+    const isThreat = this.isTargetAttackingAllies(target, alliedUnits);
+    if (isThreat) {
+      score += 20;
+    }
+
+    return score;
+  }
+
+  /**
+   * Get priority value for unit category
+   * LOG (commanders) = 100 (highest priority)
+   * TNK (tanks) = 80
+   * ART (artillery) = 70
+   * INF (infantry) = 60
+   * AA (anti-air) = 50
+   * REC (reconnaissance) = 40
+   * HEL (helicopters) = 30
+   * AIR (aircraft) = 20
+   */
+  private getUnitCategoryValue(unit: Unit): number {
+    const category = unit.unitData?.category ?? 'INF';
+
+    const categoryValues: Record<string, number> = {
+      'LOG': 100, // Commanders - highest priority
+      'TNK': 80,  // Tanks - heavy threats
+      'ART': 70,  // Artillery - high value support
+      'INF': 60,  // Infantry - standard
+      'AA': 50,   // Anti-air - situational
+      'REC': 40,  // Reconnaissance - fast but low threat
+      'HEL': 30,  // Helicopters - mobile but vulnerable
+      'AIR': 20,  // Aircraft - difficult to hit
+    };
+
+    return categoryValues[category] ?? 50;
+  }
+
+  /**
+   * Check if target is currently attacking any allied units
+   */
+  private isTargetAttackingAllies(target: Unit, alliedUnits: readonly Unit[]): boolean {
+    // Check if target has a combat target that is one of our allies
+    if (!target.combatTarget) return false;
+
+    for (const ally of alliedUnits) {
+      if (target.combatTarget.id === ally.id) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private findNearestEnemy(unit: Unit): Unit | null {
     // Use spatial query with max search radius for efficiency
     const SEARCH_RADIUS = 500; // Max engagement search range
