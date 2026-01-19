@@ -15,6 +15,15 @@ import type { Game } from '../../core/Game';
 import type { GameMap } from '../../data/types';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 
+interface CombatIndicator {
+  id: string;
+  x: number;
+  z: number;
+  timeAlive: number;
+  duration: number;
+  team: 'player' | 'enemy';
+}
+
 export class MinimapRenderer {
   private readonly game: Game;
   private readonly canvas: HTMLCanvasElement;
@@ -24,6 +33,10 @@ export class MinimapRenderer {
   private pixelsPerMeter = 1;
   private offsetX = 0;
   private offsetY = 0;
+
+  // Combat indicators
+  private combatIndicators: Map<string, CombatIndicator> = new Map();
+  private nextIndicatorId = 0;
 
   // Colors - dynamic based on biome
   private COLORS = {
@@ -124,6 +137,44 @@ export class MinimapRenderer {
   }
 
   /**
+   * Create a combat indicator at a world position
+   */
+  createCombatIndicator(position: THREE.Vector3, team: 'player' | 'enemy'): void {
+    const id = `combat_${this.nextIndicatorId++}`;
+
+    const indicator: CombatIndicator = {
+      id,
+      x: position.x,
+      z: position.z,
+      timeAlive: 0,
+      duration: 1.0, // 1 second fade out
+      team,
+    };
+
+    this.combatIndicators.set(id, indicator);
+  }
+
+  /**
+   * Update combat indicators
+   */
+  update(dt: number): void {
+    const toRemove: string[] = [];
+
+    for (const [id, indicator] of this.combatIndicators.entries()) {
+      indicator.timeAlive += dt;
+
+      if (indicator.timeAlive >= indicator.duration) {
+        toRemove.push(id);
+      }
+    }
+
+    // Remove expired indicators
+    for (const id of toRemove) {
+      this.combatIndicators.delete(id);
+    }
+  }
+
+  /**
    * Apply biome-specific colors to the minimap
    */
   private applyBiomeColors(biome: string): void {
@@ -206,6 +257,9 @@ export class MinimapRenderer {
 
       // Render units
       this.renderUnits();
+
+      // Render combat indicators
+      this.renderCombatIndicators();
 
       // Render camera viewport
       this.renderCameraViewport();
@@ -425,6 +479,48 @@ export class MinimapRenderer {
       ctx.arc(x, z, 3, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
+    }
+  }
+
+  private renderCombatIndicators(): void {
+    if (!this.map) return;
+
+    const ctx = this.ctx;
+    const mapCenterX = this.map.width / 2;
+    const mapCenterZ = this.map.height / 2;
+
+    for (const indicator of this.combatIndicators.values()) {
+      // Convert world coordinates to minimap coordinates
+      const x = (indicator.x + mapCenterX) * this.pixelsPerMeter;
+      const z = (indicator.z + mapCenterZ) * this.pixelsPerMeter;
+
+      // Calculate fade progress (0 = just created, 1 = about to expire)
+      const progress = indicator.timeAlive / indicator.duration;
+
+      // Flash effect: brightest at start, fade out over time
+      const opacity = Math.max(0, 1 - progress);
+
+      // Determine color based on team
+      const color = indicator.team === 'player' ? this.COLORS.friendly : this.COLORS.enemy;
+
+      // Draw flashing circle
+      ctx.beginPath();
+      ctx.arc(x, z, 5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = opacity;
+      ctx.fill();
+
+      // Draw outer glow ring that expands
+      const ringRadius = 5 + (progress * 8); // Expands from 5 to 13 pixels
+      ctx.beginPath();
+      ctx.arc(x, z, ringRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = opacity * 0.5; // Dimmer ring
+      ctx.stroke();
+
+      // Reset alpha
+      ctx.globalAlpha = 1.0;
     }
   }
 

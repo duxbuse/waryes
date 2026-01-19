@@ -128,6 +128,8 @@ export class CombatManager {
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
       this.game.audioManager.playSound('weapon_fire');
+      // Create minimap combat indicator
+      this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
       return;
     }
 
@@ -137,6 +139,8 @@ export class CombatManager {
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
     this.game.audioManager.playSound('weapon_fire');
+    // Create minimap combat indicator
+    this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
   }
 
   private createProjectile(
