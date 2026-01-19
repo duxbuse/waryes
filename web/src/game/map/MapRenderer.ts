@@ -447,7 +447,7 @@ export class MapRenderer {
           const geo = new THREE.PlaneGeometry(overlayCellSize, overlayCellSize);
           geo.rotateX(-Math.PI / 2);
           // Position water elevated above terrain for visibility
-          geo.translate(worldX, cell.elevation + 0.3, worldZ);
+          geo.translate(worldX, cell.elevation + 1.2, worldZ);
           waterGeometries.push(geo);
         }
       }
@@ -556,7 +556,7 @@ export class MapRenderer {
 
     const width = river.width ?? 10;
     const halfWidth = width / 2;
-    const waterHeight = 0.3; // Elevated above terrain for visibility
+    const waterHeight = 1.2; // Elevated above terrain for visibility
 
     // Find lakes to detect connections
     const lakes = allWaterBodies.filter(w => w.type === 'lake');
@@ -793,7 +793,7 @@ export class MapRenderer {
   ): THREE.BufferGeometry | null {
     if (!lake.points || lake.points.length < 3) return null;
 
-    const waterHeight = 0.3; // Same as rivers - elevated above terrain for visibility
+    const waterHeight = 1.2; // Same as rivers - elevated above terrain for visibility
     const vertices: number[] = [];
     const indices: number[] = [];
 

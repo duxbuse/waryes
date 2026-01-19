@@ -20,3 +20,6 @@ web/test-results/
 .DS_Store
 Thumbs.db
 
+
+# Auto Claude data directory
+.auto-claude/

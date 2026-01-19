@@ -4910,7 +4910,7 @@ export class MapGenerator {
 
     // Pass 1: SPECIFIC smoothing for water beds (water-to-water only)
     // This removes "mountain noise" from the river bed by ignoring non-water neighbors
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 5; pass++) {
       const bedElevations: (number | null)[][] = [];
       for (let z = 0; z < rows; z++) {
         bedElevations[z] = [];
@@ -4925,8 +4925,9 @@ export class MapGenerator {
 
           let waterTotal = 0;
           let waterCount = 0;
-          for (let dz = -1; dz <= 1; dz++) {
-            for (let dx = -1; dx <= 1; dx++) {
+          // Use 5x5 kernel for more aggressive smoothing of bumpy terrain
+          for (let dz = -2; dz <= 2; dz++) {
+            for (let dx = -2; dx <= 2; dx++) {
               const nz = z + dz;
               const nx = x + dx;
               if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
@@ -4951,7 +4952,7 @@ export class MapGenerator {
     }
 
     // Pass 2: General transition smoothing for banks (as before, but water is now cleaner)
-    const numPasses = 5;
+    const numPasses = 7;
 
     for (let pass = 0; pass < numPasses; pass++) {
       // Store new elevations to avoid modifying during iteration
@@ -5489,30 +5490,118 @@ export class MapGenerator {
     const halfWidth = (river.width ?? 10) / 2;
     const bankWidth = 12; // Width of sloped bank on each side
 
+    // STEP 1: Calculate smooth elevation profile along river path
+    // Sample terrain at each river point
+    const riverElevations: number[] = [];
+    for (let i = 0; i < river.points.length; i++) {
+      const p = river.points[i]!;
+      const elev = this.getTerrainElevationAt(p.x, p.z);
+      riverElevations.push(elev);
+    }
+
+    // Determine source (high) and sink (low) elevations
+    const startElevation = riverElevations[0]!;
+    const endElevation = riverElevations[riverElevations.length - 1]!;
+
+    // Rivers MUST flow downhill - if endpoints are backwards, reverse the elevation profile
+    let sourceElevation = startElevation;
+    let sinkElevation = endElevation;
+
+    if (endElevation > startElevation) {
+      // River is flowing uphill - swap to make it flow downhill
+      sourceElevation = endElevation;
+      sinkElevation = startElevation;
+    }
+
+    // Ensure minimum elevation drop for proper flow (at least 5m over the river length)
+    const minDrop = 5;
+    if (sourceElevation - sinkElevation < minDrop) {
+      sinkElevation = sourceElevation - minDrop;
+    }
+
+    // Create forced downhill gradient from source to sink
+    // This ensures the river ALWAYS flows downhill, even through mountains
+    for (let i = 0; i < riverElevations.length; i++) {
+      const t = i / (riverElevations.length - 1); // 0 to 1 along river
+      const forcedElevation = sourceElevation + t * (sinkElevation - sourceElevation);
+
+      // Take the LOWER of forced gradient or sampled terrain (carve through high terrain)
+      riverElevations[i] = Math.min(riverElevations[i]!, forcedElevation);
+    }
+
+    // Smooth the river elevation profile to remove any remaining bumps
+    for (let pass = 0; pass < 6; pass++) {
+      const smoothed: number[] = [];
+      for (let i = 0; i < riverElevations.length; i++) {
+        if (i === 0 || i === riverElevations.length - 1) {
+          // Keep endpoints fixed
+          smoothed[i] = riverElevations[i]!;
+        } else {
+          // Average with neighbors for smooth gradient
+          const prev = riverElevations[i - 1]!;
+          const curr = riverElevations[i]!;
+          const next = riverElevations[i + 1]!;
+          smoothed[i] = (prev + curr * 2 + next) / 4;
+        }
+      }
+      riverElevations.length = 0;
+      riverElevations.push(...smoothed);
+    }
+
+    // Final pass: enforce strict downhill flow (no uphill, no flat for too long)
+    for (let i = 1; i < riverElevations.length; i++) {
+      if (riverElevations[i]! > riverElevations[i - 1]!) {
+        riverElevations[i] = riverElevations[i - 1]! - 0.1; // Force slight downhill
+      } else if (riverElevations[i]! === riverElevations[i - 1]!) {
+        riverElevations[i] = riverElevations[i - 1]! - 0.05; // Prevent long flat sections
+      }
+    }
+
+    // STEP 2: Paint river to terrain using calculated elevations
     for (let z = 0; z < rows; z++) {
       for (let x = 0; x < cols; x++) {
         const worldX = x * this.cellSize - this.width / 2;
         const worldZ = z * this.cellSize - this.height / 2;
 
-        // Find minimum distance to any river segment
+        // Find minimum distance to any river segment and closest point
         let minDist = Infinity;
+        let closestSegment = 0;
+        let closestT = 0;
+
         for (let i = 0; i < river.points.length - 1; i++) {
           const p1 = river.points[i]!;
           const p2 = river.points[i + 1]!;
           const dist = this.pointToSegmentDistance(worldX, worldZ, p1.x, p1.z, p2.x, p2.z);
-          minDist = Math.min(minDist, dist);
+          if (dist < minDist) {
+            minDist = dist;
+            closestSegment = i;
+
+            // Calculate position along segment (0 to 1)
+            const dx = p2.x - p1.x;
+            const dz = p2.z - p1.z;
+            const lenSq = dx * dx + dz * dz;
+            if (lenSq > 0.01) {
+              closestT = Math.max(0, Math.min(1, ((worldX - p1.x) * dx + (worldZ - p1.z) * dz) / lenSq));
+            }
+          }
         }
+
+        // Interpolate river elevation at this point
+        const e1 = riverElevations[closestSegment]!;
+        const e2 = riverElevations[closestSegment + 1]!;
+        const riverElevation = e1 + closestT * (e2 - e1);
 
         const flatBuffer = 2; // Extra flat area to ensure edges aren't bumpy
         if (minDist < halfWidth + flatBuffer) {
-          // Inside river - set to water and flat elevation
+          // Inside river - set to water and use calculated river elevation
           if (minDist < halfWidth) {
             this.terrain[z]![x]!.type = 'river';
             this.terrain[z]![x]!.cover = 'none';
           }
-          this.terrain[z]![x]!.elevation = 0;
+          // Carve slightly below river elevation for valley effect
+          this.terrain[z]![x]!.elevation = riverElevation - 2.0;
         } else if (minDist < halfWidth + bankWidth) {
-          // On river bank - create gradual slope
+          // On river bank - create gradual slope from river to existing terrain
           const currentElevation = this.terrain[z]![x]!.elevation;
           const distFromEdge = minDist - (halfWidth + flatBuffer);
           const effectiveBankWidth = bankWidth - flatBuffer;
@@ -5520,7 +5609,7 @@ export class MapGenerator {
 
           // Smooth cubic interpolation for natural slope
           const smoothFactor = slopeFactor * slopeFactor * (3 - 2 * slopeFactor);
-          const targetElevation = Math.max(0, currentElevation * smoothFactor);
+          const targetElevation = riverElevation - 2.0 + (currentElevation - (riverElevation - 2.0)) * smoothFactor;
           this.terrain[z]![x]!.elevation = targetElevation;
         }
       }

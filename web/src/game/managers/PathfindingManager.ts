@@ -63,6 +63,9 @@ export class PathfindingManager {
    * Build navigation grid by analyzing terrain
    */
   private buildNavigationGrid(): void {
+    let passableCount = 0;
+    let blockedCount = 0;
+
     for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
       for (let gridX = 0; gridX < this.gridWidth; gridX++) {
         const worldX = (gridX * this.gridSize) - this.mapWidth / 2;
@@ -71,8 +74,18 @@ export class PathfindingManager {
         // Check if this cell is passable
         const passable = this.isCellPassable(worldX, worldZ);
         this.navGrid[gridZ]![gridX] = passable;
+
+        if (passable) {
+          passableCount++;
+        } else {
+          blockedCount++;
+        }
       }
     }
+
+    const totalCells = this.gridWidth * this.gridHeight;
+    const passablePercent = ((passableCount / totalCells) * 100).toFixed(1);
+    console.log(`[PathfindingManager] Navigation grid built: ${passableCount}/${totalCells} cells passable (${passablePercent}%)`);
   }
 
   /**
@@ -82,7 +95,7 @@ export class PathfindingManager {
     // Check terrain height and slope
     const height = this.game.getElevationAt(worldX, worldZ);
 
-    // Check slope in all directions
+    // Check slope in cardinal directions only (diagonal checks were too strict)
     const sampleDist = this.gridSize / 2;
     const heightN = this.game.getElevationAt(worldX, worldZ + sampleDist);
     const heightS = this.game.getElevationAt(worldX, worldZ - sampleDist);
@@ -90,6 +103,7 @@ export class PathfindingManager {
     const heightW = this.game.getElevationAt(worldX - sampleDist, worldZ);
 
     const MAX_SLOPE = 1.0; // 45 degrees
+
     const slopeN = Math.abs(heightN - height) / sampleDist;
     const slopeS = Math.abs(heightS - height) / sampleDist;
     const slopeE = Math.abs(heightE - height) / sampleDist;
@@ -102,6 +116,13 @@ export class PathfindingManager {
 
     // Check terrain type
     const terrain = this.game.getTerrainAt(worldX, worldZ);
+    if (!terrain) {
+      // No terrain data - mark map edges as impassable
+      const gridPos = this.worldToGrid(worldX, worldZ);
+      return !(gridPos.x === 0 || gridPos.x === this.gridWidth - 1 ||
+               gridPos.z === 0 || gridPos.z === this.gridHeight - 1);
+    }
+
     if (terrain) {
       // Water is impassable for ground units
       if (terrain.type === 'water' || terrain.type === 'river') {
@@ -124,9 +145,27 @@ export class PathfindingManager {
     const startGrid = this.worldToGrid(start.x, start.z);
     const goalGrid = this.worldToGrid(goal.x, goal.z);
 
+    // Early termination: if goal is extremely far (>500m), likely unreachable
+    const straightLineDistance = Math.sqrt(
+      Math.pow(goalGrid.x - startGrid.x, 2) + Math.pow(goalGrid.z - startGrid.z, 2)
+    );
+    if (straightLineDistance > 125) { // 125 grid cells * 4m = 500m
+      return null;
+    }
+
     // Check if start and goal are valid
-    if (!this.isGridPassable(startGrid.x, startGrid.z) ||
-        !this.isGridPassable(goalGrid.x, goalGrid.z)) {
+    if (!this.isGridPassable(startGrid.x, startGrid.z)) {
+      // Reduce console spam - only log occasionally
+      if (Math.random() < 0.1) {
+        console.warn('[PathfindingManager] Start position is blocked');
+      }
+      return null;
+    }
+    if (!this.isGridPassable(goalGrid.x, goalGrid.z)) {
+      // Reduce console spam - only log occasionally
+      if (Math.random() < 0.1) {
+        console.warn('[PathfindingManager] Goal position is blocked');
+      }
       return null;
     }
 
@@ -145,7 +184,13 @@ export class PathfindingManager {
     startNode.f = startNode.g + startNode.h;
     openList.push(startNode);
 
-    while (openList.length > 0) {
+    // Safety limit to prevent infinite loops on large maps
+    // Lowered from 10000 to 2000 for faster failure and better performance
+    const MAX_ITERATIONS = 2000;
+    let iterations = 0;
+
+    while (openList.length > 0 && iterations < MAX_ITERATIONS) {
+      iterations++;
       // Find node with lowest f score
       let currentIdx = 0;
       for (let i = 1; i < openList.length; i++) {
@@ -212,6 +257,12 @@ export class PathfindingManager {
     }
 
     // No path found
+    if (iterations >= MAX_ITERATIONS) {
+      // Reduce console spam - only log occasionally (10% of the time)
+      if (Math.random() < 0.1) {
+        console.warn('[PathfindingManager] A* exceeded max iterations');
+      }
+    }
     return null;
   }
 
@@ -328,5 +379,44 @@ export class PathfindingManager {
       const passable = this.isCellPassable(worldX, worldZ);
       this.navGrid[grid.z]![grid.x] = passable;
     }
+  }
+
+  /**
+   * Find nearest reachable position to a target (spiral search)
+   * Useful when the direct target is impassable
+   */
+  findNearestReachablePosition(
+    start: THREE.Vector3,
+    goal: THREE.Vector3,
+    maxRadius: number = 50
+  ): THREE.Vector3 | null {
+    const goalGrid = this.worldToGrid(goal.x, goal.z);
+    const maxSteps = Math.ceil(maxRadius / this.gridSize);
+
+    // Spiral search outward from goal
+    for (let radius = 1; radius <= maxSteps; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          // Only check cells on ring edge (not interior)
+          if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+          const testX = goalGrid.x + dx;
+          const testZ = goalGrid.z + dz;
+
+          if (this.isGridPassable(testX, testZ)) {
+            const worldPos = this.gridToWorld(testX, testZ);
+            const testVec = new THREE.Vector3(worldPos.x, 0, worldPos.z);
+
+            // Verify path actually exists to this position
+            const path = this.findPath(start, testVec);
+            if (path && path.length > 0) {
+              return testVec;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
   }
 }

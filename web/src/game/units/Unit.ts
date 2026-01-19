@@ -643,9 +643,34 @@ export class Unit {
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
     } else {
-      // No path found, try direct movement as fallback
-      this.waypoints = [];
-      this.targetPosition = target.clone();
+      // No path found - try to get close instead of walking into obstacles
+      // Note: Reduced console spam - fallback is handled silently in most cases
+
+      const fallbackTarget = this.game.pathfindingManager.findNearestReachablePosition(
+        this.position,
+        target,
+        50  // max 50m search radius
+      );
+
+      if (fallbackTarget) {
+        const fallbackPath = this.game.pathfindingManager.findPath(this.position, fallbackTarget);
+        if (fallbackPath && fallbackPath.length > 0) {
+          this.waypoints = fallbackPath;
+          this.currentWaypointIndex = 0;
+          this.targetPosition = this.waypoints[0]!.clone();
+          this.stuckTimer = 0;
+        } else {
+          // Fallback path also failed - cancel command
+          this.currentCommand = { type: UnitCommand.None };
+          this.targetPosition = null;
+          this.waypoints = [];
+        }
+      } else {
+        // Completely unreachable - cancel command instead of walking into obstacle
+        this.currentCommand = { type: UnitCommand.None };
+        this.targetPosition = null;
+        this.waypoints = [];
+      }
     }
 
     // Update path visualization
@@ -695,9 +720,31 @@ export class Unit {
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
     } else {
-      // No path found, try direct movement as fallback
-      this.waypoints = [];
-      this.targetPosition = target.clone();
+      // No path found - try to get close instead of walking into obstacles
+
+      const fallbackTarget = this.game.pathfindingManager.findNearestReachablePosition(
+        this.position,
+        target,
+        50
+      );
+
+      if (fallbackTarget) {
+        const fallbackPath = this.game.pathfindingManager.findPath(this.position, fallbackTarget);
+        if (fallbackPath && fallbackPath.length > 0) {
+          this.waypoints = fallbackPath;
+          this.currentWaypointIndex = 0;
+          this.targetPosition = this.waypoints[0]!.clone();
+          this.stuckTimer = 0;
+        } else {
+          this.currentCommand = { type: UnitCommand.None };
+          this.targetPosition = null;
+          this.waypoints = [];
+        }
+      } else {
+        this.currentCommand = { type: UnitCommand.None };
+        this.targetPosition = null;
+        this.waypoints = [];
+      }
     }
 
     // Update path visualization
@@ -728,9 +775,31 @@ export class Unit {
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
     } else {
-      // No path found, try direct movement as fallback
-      this.waypoints = [];
-      this.targetPosition = target.clone();
+      // No path found - try to get close instead of walking into obstacles
+
+      const fallbackTarget = this.game.pathfindingManager.findNearestReachablePosition(
+        this.position,
+        target,
+        50
+      );
+
+      if (fallbackTarget) {
+        const fallbackPath = this.game.pathfindingManager.findPath(this.position, fallbackTarget);
+        if (fallbackPath && fallbackPath.length > 0) {
+          this.waypoints = fallbackPath;
+          this.currentWaypointIndex = 0;
+          this.targetPosition = this.waypoints[0]!.clone();
+          this.stuckTimer = 0;
+        } else {
+          this.currentCommand = { type: UnitCommand.None };
+          this.targetPosition = null;
+          this.waypoints = [];
+        }
+      } else {
+        this.currentCommand = { type: UnitCommand.None };
+        this.targetPosition = null;
+        this.waypoints = [];
+      }
     }
 
     // Update path visualization
@@ -761,9 +830,31 @@ export class Unit {
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
     } else {
-      // No path found, try direct movement as fallback
-      this.waypoints = [];
-      this.targetPosition = target.clone();
+      // No path found - try to get close instead of walking into obstacles
+
+      const fallbackTarget = this.game.pathfindingManager.findNearestReachablePosition(
+        this.position,
+        target,
+        50
+      );
+
+      if (fallbackTarget) {
+        const fallbackPath = this.game.pathfindingManager.findPath(this.position, fallbackTarget);
+        if (fallbackPath && fallbackPath.length > 0) {
+          this.waypoints = fallbackPath;
+          this.currentWaypointIndex = 0;
+          this.targetPosition = this.waypoints[0]!.clone();
+          this.stuckTimer = 0;
+        } else {
+          this.currentCommand = { type: UnitCommand.None };
+          this.targetPosition = null;
+          this.waypoints = [];
+        }
+      } else {
+        this.currentCommand = { type: UnitCommand.None };
+        this.targetPosition = null;
+        this.waypoints = [];
+      }
     }
 
     // Update path visualization
@@ -1348,15 +1439,30 @@ export class Unit {
     if (distMoved < 0.1) {
       this.stuckTimer += dt;
       if (this.stuckTimer > 2.0 && this.currentCommand.target) {
-        // Try to reroute
-        const path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
+        // Try to reroute silently
+
+        let path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
+
+        if (!path || path.length === 0) {
+          // Direct repath failed - try finding nearest reachable position
+          const fallback = this.game.pathfindingManager.findNearestReachablePosition(
+            this.position,
+            this.currentCommand.target,
+            50
+          );
+
+          if (fallback) {
+            path = this.game.pathfindingManager.findPath(this.position, fallback);
+          }
+        }
+
         if (path && path.length > 0) {
           this.waypoints = path;
           this.currentWaypointIndex = 0;
           this.targetPosition = this.waypoints[0]!.clone();
           this.stuckTimer = 0;
         } else {
-          // Still no path, give up
+          // Completely stuck - give up
           this.completeCommand();
           return;
         }

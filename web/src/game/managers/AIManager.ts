@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import type { CaptureZone } from '../../data/types';
+import { VectorPool } from '../utils/VectorPool';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -55,9 +56,9 @@ export class AIManager {
 
   // Timing parameters based on difficulty
   private readonly decisionIntervals: Record<AIDifficulty, number> = {
-    easy: 3.0,    // 3 seconds between decisions
-    medium: 1.5,  // 1.5 seconds
-    hard: 0.5,    // 0.5 seconds
+    easy: 4.0,    // 4 seconds between decisions (was 3)
+    medium: 2.0,  // 2 seconds (was 1.5)
+    hard: 1.0,    // 1 second (was 0.5)
   };
 
   // Strategic parameters
@@ -69,18 +70,27 @@ export class AIManager {
 
   // Strategic state
   private lastStrategicUpdate = 0;
-  private readonly strategicUpdateInterval = 2.0; // Update strategy every 2 seconds
+  private readonly strategicUpdateInterval = 4.0; // Update strategy every 4 seconds (was 2)
   private zoneAssessments: ZoneAssessment[] = [];
 
   // OPTIMIZATION: Stagger AI updates across frames
   private updateFrameCounter = 0;
-  private readonly AI_UPDATE_THROTTLE = 5; // Only process 1/5th of units per frame
+  private readonly AI_UPDATE_THROTTLE = 10; // Only process 1/10th of units per frame (was 5)
   private threatAssessment: ThreatAssessment = {
     totalEnemyStrength: 0,
     totalFriendlyStrength: 0,
     isWinning: false,
     shouldBeAggressive: false,
   };
+
+  // OPTIMIZATION: Cache CPU-controlled units to avoid filtering every frame
+  private cachedCpuUnits: Unit[] = [];
+  private lastCpuUnitsCacheUpdate = 0;
+  private readonly CPU_CACHE_INTERVAL = 0.5; // Update cache every 0.5 seconds
+
+  // OPTIMIZATION: Cache team unit lists to avoid repeated getAllUnits calls
+  private cachedFriendlyUnits: readonly Unit[] = [];
+  private cachedEnemyUnits: readonly Unit[] = [];
 
   constructor(game: Game) {
     this.game = game;
@@ -91,6 +101,10 @@ export class AIManager {
     this.aiStates.clear();
     this.zoneAssessments = [];
     this.lastStrategicUpdate = 0;
+    this.cachedCpuUnits = [];
+    this.lastCpuUnitsCacheUpdate = 0;
+    this.cachedFriendlyUnits = [];
+    this.cachedEnemyUnits = [];
   }
 
   setDifficulty(difficulty: AIDifficulty): void {
@@ -98,10 +112,32 @@ export class AIManager {
   }
 
   /**
-   * Update AI for all enemy units
+   * OPTIMIZATION: Update cached list of CPU-controlled units
+   * Only called periodically to avoid filtering every frame
+   */
+  private updateCpuUnitsCache(currentTime: number): void {
+    if (currentTime - this.lastCpuUnitsCacheUpdate < this.CPU_CACHE_INTERVAL) {
+      return; // Cache is still fresh
+    }
+
+    const allUnits = this.game.unitManager.getAllUnits();
+    this.cachedCpuUnits = allUnits.filter(u =>
+      u.health > 0 && (u.team === 'enemy' || (u.team === 'player' && u.ownerId !== 'player'))
+    );
+    this.lastCpuUnitsCacheUpdate = currentTime;
+  }
+
+  /**
+   * Update AI for all CPU-controlled units (enemy team + allied AI)
    */
   update(dt: number): void {
     const currentTime = performance.now() / 1000;
+
+    // OPTIMIZATION: Update CPU units cache periodically
+    this.updateCpuUnitsCache(currentTime);
+
+    // OPTIMIZATION: Early exit if no CPU units
+    if (this.cachedCpuUnits.length === 0) return;
 
     // Update strategic assessment periodically
     if (currentTime - this.lastStrategicUpdate >= this.strategicUpdateInterval) {
@@ -112,18 +148,20 @@ export class AIManager {
 
     // OPTIMIZATION: Stagger AI updates - only process subset of units per frame
     this.updateFrameCounter++;
-    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
+
+    // Use cached CPU units instead of filtering every frame
+    const cpuUnits = this.cachedCpuUnits;
     const decisionInterval = this.decisionIntervals[this.difficulty];
 
     // Only process units whose index % throttle == current frame % throttle
-    for (let i = 0; i < enemyUnits.length; i++) {
+    for (let i = 0; i < cpuUnits.length; i++) {
       // Skip units that aren't assigned to this frame
       if (i % this.AI_UPDATE_THROTTLE !== this.updateFrameCounter % this.AI_UPDATE_THROTTLE) {
         continue;
       }
 
-      const unit = enemyUnits[i];
-      if (unit.health <= 0) continue;
+      const unit = cpuUnits[i];
+      if (!unit || unit.health <= 0) continue;
 
       // Get or create AI state for this unit
       let state = this.aiStates.get(unit.id);
@@ -164,32 +202,66 @@ export class AIManager {
   }
 
   /**
+   * Get friendly units from the perspective of the given unit
+   */
+  private getFriendlyUnits(unit: Unit): readonly Unit[] {
+    return this.game.unitManager.getAllUnits(unit.team);
+  }
+
+  /**
+   * Get enemy units from the perspective of the given unit
+   */
+  private getEnemyUnits(unit: Unit): readonly Unit[] {
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+    return this.game.unitManager.getAllUnits(enemyTeam);
+  }
+
+  /**
+   * Check if a zone is owned by the given unit's team
+   */
+  private isZoneOurs(zone: CaptureZone, unit: Unit): boolean {
+    return zone.owner === unit.team;
+  }
+
+  /**
    * Update strategic assessment of the battlefield
    */
   private updateStrategicAssessment(): void {
     const captureZones = this.game.economyManager.getCaptureZones();
-    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
-    const playerUnits = this.game.unitManager.getAllUnits('player');
+
+    // Use cached CPU units
+    if (this.cachedCpuUnits.length === 0) return;
+
+    // Use first CPU unit as reference for team perspective
+    const referenceUnit = this.cachedCpuUnits[0];
+    if (!referenceUnit) return;
+
+    // OPTIMIZATION: Cache team units and reuse them for all assessments
+    this.cachedFriendlyUnits = this.getFriendlyUnits(referenceUnit);
+    this.cachedEnemyUnits = this.getEnemyUnits(referenceUnit);
 
     // Assess overall threat level
-    this.threatAssessment = this.assessThreat(enemyUnits, playerUnits);
+    this.threatAssessment = this.assessThreat(this.cachedFriendlyUnits, this.cachedEnemyUnits, referenceUnit);
 
     // Assess each zone
-    this.zoneAssessments = captureZones.map(zone => this.assessZone(zone, enemyUnits, playerUnits));
+    this.zoneAssessments = captureZones.map(zone =>
+      this.assessZone(zone, referenceUnit)
+    );
 
     // Sort by priority (highest first)
     this.zoneAssessments.sort((a, b) => b.priority - a.priority);
   }
 
-  private assessThreat(friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[]): ThreatAssessment {
+  private assessThreat(friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[], referenceUnit: Unit): ThreatAssessment {
     // Calculate strength based on health and unit count
     const friendlyStrength = friendlyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
     const enemyStrength = enemyUnits.reduce((sum, u) => sum + (u.health / u.maxHealth) * 100, 0);
 
     // Count zones
     const zones = this.game.economyManager.getCaptureZones();
-    const friendlyZones = zones.filter(z => z.owner === 'enemy').length;
-    const enemyZones = zones.filter(z => z.owner === 'player').length;
+    const friendlyZones = zones.filter(z => z.owner === referenceUnit.team).length;
+    const enemyTeam = referenceUnit.team === 'enemy' ? 'player' : 'enemy';
+    const enemyZones = zones.filter(z => z.owner === enemyTeam).length;
 
     const isWinning = friendlyStrength > enemyStrength * 1.2 || friendlyZones > enemyZones;
     const shouldBeAggressive = isWinning || friendlyStrength > enemyStrength;
@@ -202,35 +274,49 @@ export class AIManager {
     };
   }
 
-  private assessZone(zone: CaptureZone, friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[]): ZoneAssessment {
-    // Count units in/near zone
+  private assessZone(zone: CaptureZone, referenceUnit: Unit): ZoneAssessment {
+    // OPTIMIZATION: Use spatial queries instead of looping all units
+    // OPTIMIZATION: Use VectorPool to avoid GC pressure
     const zoneY = this.game.getElevationAt(zone.x, zone.z);
-    const zonePos = new THREE.Vector3(zone.x, zoneY, zone.z);
-    const detectionRadius = Math.max(zone.width, zone.height) / 2 + 30; // Include units approaching
+    const zonePos = VectorPool.acquire().set(zone.x, zoneY, zone.z);
+    const detectionRadius = Math.max(zone.width, zone.height) / 2 + 30;
 
+    // Get units near zone using spatial query (much faster than looping all units)
+    const friendlyTeam = referenceUnit.team;
+    const enemyTeam = friendlyTeam === 'enemy' ? 'player' : 'enemy';
+
+    const nearbyFriendlies = this.game.unitManager.getUnitsInRadius(zonePos, detectionRadius, friendlyTeam);
+    const nearbyEnemies = this.game.unitManager.getUnitsInRadius(zonePos, detectionRadius, enemyTeam);
+
+    // Calculate presence from nearby units only
     let friendlyPresence = 0;
-    let enemyPresence = 0;
     let nearestFriendlyDist = Infinity;
 
-    for (const unit of friendlyUnits) {
-      const dist = unit.position.distanceTo(zonePos);
-      if (dist < detectionRadius) {
-        friendlyPresence += unit.health / unit.maxHealth;
-      }
-      if (dist < nearestFriendlyDist) {
-        nearestFriendlyDist = dist;
+    for (const unit of nearbyFriendlies) {
+      friendlyPresence += unit.health / unit.maxHealth;
+      const distSq = unit.position.distanceToSquared(zonePos);
+      if (distSq < nearestFriendlyDist * nearestFriendlyDist) {
+        nearestFriendlyDist = Math.sqrt(distSq);
       }
     }
 
-    for (const unit of enemyUnits) {
-      const dist = unit.position.distanceTo(zonePos);
-      if (dist < detectionRadius) {
-        enemyPresence += unit.health / unit.maxHealth;
+    // If no friendlies nearby, check all friendlies for nearest (but skip presence calculation)
+    if (nearbyFriendlies.length === 0) {
+      for (const unit of this.cachedFriendlyUnits) {
+        const distSq = unit.position.distanceToSquared(zonePos);
+        if (distSq < nearestFriendlyDist * nearestFriendlyDist) {
+          nearestFriendlyDist = Math.sqrt(distSq);
+        }
       }
     }
 
-    // Determine zone status
-    const isOurs = zone.owner === 'enemy';
+    let enemyPresence = 0;
+    for (const unit of nearbyEnemies) {
+      enemyPresence += unit.health / unit.maxHealth;
+    }
+
+    // Determine zone status from the AI's team perspective
+    const isOurs = this.isZoneOurs(zone, referenceUnit);
     const isContested = friendlyPresence > 0 && enemyPresence > 0;
     const needsDefense = isOurs && enemyPresence > 0;
     const needsCapture = !isOurs;
@@ -246,7 +332,8 @@ export class AIManager {
       priority += 30; // Medium priority for neutral zones
     }
 
-    if (needsCapture && zone.owner === 'player') {
+    // Higher priority to capture enemy-owned zones (reuse enemyTeam from above)
+    if (needsCapture && zone.owner === enemyTeam) {
       priority += 40; // Higher priority to capture enemy zones
     }
 
@@ -278,8 +365,8 @@ export class AIManager {
    * Allocate units to strategic objectives
    */
   private allocateUnitsToObjectives(): void {
-    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
-    const availableUnits = enemyUnits.filter(u => {
+    // Use cached CPU units
+    const availableUnits = this.cachedCpuUnits.filter(u => {
       const state = this.aiStates.get(u.id);
       return u.health > 0 && state && state.behavior !== 'retreating';
     });
@@ -314,11 +401,19 @@ export class AIManager {
       if (unitsNeeded <= 0) continue;
 
       // Find nearest available units
+      // OPTIMIZATION: Use VectorPool and cache distances to avoid recalculating in sort
       const zoneY = this.game.getElevationAt(assessment.zone.x, assessment.zone.z);
-      const zonePos = new THREE.Vector3(assessment.zone.x, zoneY, assessment.zone.z);
-      const sortedUnits = [...availableUnits].sort((a, b) =>
-        a.position.distanceTo(zonePos) - b.position.distanceTo(zonePos)
-      );
+      const zonePos = VectorPool.acquire().set(assessment.zone.x, zoneY, assessment.zone.z);
+
+      // Cache distances to avoid recalculating during sort
+      const unitDistances = availableUnits.map(u => ({
+        unit: u,
+        distSq: u.position.distanceToSquared(zonePos)
+      }));
+
+      // Sort by cached squared distance (faster than distanceTo in sort comparator)
+      unitDistances.sort((a, b) => a.distSq - b.distSq);
+      const sortedUnits = unitDistances.map(ud => ud.unit);
 
       for (let i = 0; i < Math.min(unitsNeeded, sortedUnits.length); i++) {
         const unit = sortedUnits[i];
@@ -417,10 +512,11 @@ export class AIManager {
     unit.useSmoke();
     state.lastSmokeTime = currentTime;
 
+    // OPTIMIZATION: Disable debug logging in production for performance
     // Get remaining smoke ammo for logging
-    const smokeIndex = unit.findSmokeWeaponIndex();
-    const remaining = smokeIndex >= 0 ? unit.getWeaponAmmo(smokeIndex) : 0;
-    console.log(`AI ${unit.name} deployed ${smokeType} smoke (${remaining} remaining)`);
+    // const smokeIndex = unit.findSmokeWeaponIndex();
+    // const remaining = smokeIndex >= 0 ? unit.getWeaponAmmo(smokeIndex) : 0;
+    // console.log(`AI ${unit.name} deployed ${smokeType} smoke (${remaining} remaining)`);
   }
 
   /**
@@ -443,8 +539,9 @@ export class AIManager {
 
       if (zone) {
         // Check if we're at the zone
+        // OPTIMIZATION: Use VectorPool
         const zoneY = this.game.getElevationAt(zone.zone.x, zone.zone.z);
-        const zonePos = new THREE.Vector3(zone.zone.x, zoneY, zone.zone.z);
+        const zonePos = VectorPool.acquire().set(zone.zone.x, zoneY, zone.zone.z);
         const distToZone = unit.position.distanceTo(zonePos);
         const zoneRadiusEstimate = Math.max(zone.zone.width, zone.zone.height) / 2;
 
@@ -491,16 +588,17 @@ export class AIManager {
   private findNearestEnemy(unit: Unit): Unit | null {
     // Use spatial query with max search radius for efficiency
     const SEARCH_RADIUS = 500; // Max engagement search range
-    const playerUnits = this.game.unitManager.getUnitsInRadius(
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+    const enemyUnits = this.game.unitManager.getUnitsInRadius(
       unit.position,
       SEARCH_RADIUS,
-      'player'
+      enemyTeam
     );
 
     let nearest: Unit | null = null;
     let nearestDist = Infinity;
 
-    for (const enemy of playerUnits) {
+    for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
 
       const dist = unit.position.distanceTo(enemy.position);
@@ -515,16 +613,17 @@ export class AIManager {
 
   private findNearestEnemyInRange(unit: Unit, range: number): Unit | null {
     // Use spatial query limited to the actual range for efficiency
-    const playerUnits = this.game.unitManager.getUnitsInRadius(
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+    const enemyUnits = this.game.unitManager.getUnitsInRadius(
       unit.position,
       range,
-      'player'
+      enemyTeam
     );
 
     let nearest: Unit | null = null;
     let nearestDist = range;
 
-    for (const enemy of playerUnits) {
+    for (const enemy of enemyUnits) {
       if (enemy.health <= 0) continue;
 
       const dist = unit.position.distanceTo(enemy.position);
@@ -546,12 +645,14 @@ export class AIManager {
 
     // Find the best zone to move toward
     const captureZones = this.game.economyManager.getCaptureZones();
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
 
     let bestZone: CaptureZone | null = null;
     let bestScore = -Infinity;
 
     for (const zone of captureZones) {
-      if (zone.owner === 'enemy') continue; // Already ours
+      // Skip zones we already own
+      if (this.isZoneOurs(zone, unit)) continue;
 
       const distance = Math.sqrt(
         Math.pow(unit.position.x - zone.x, 2) +
@@ -566,8 +667,8 @@ export class AIManager {
         score += 20;
       }
 
-      // Aggressive AI prefers attacking
-      if (this.threatAssessment.shouldBeAggressive && zone.owner === 'player') {
+      // Aggressive AI prefers attacking enemy zones
+      if (this.threatAssessment.shouldBeAggressive && zone.owner === enemyTeam) {
         score += 15;
       }
 
@@ -583,7 +684,7 @@ export class AIManager {
       return new THREE.Vector3(bestZone.x, zoneY, bestZone.z);
     }
 
-    // Otherwise, move toward player units
+    // Otherwise, move toward enemy units
     const nearestEnemy = this.findNearestEnemy(unit);
     if (nearestEnemy) {
       return nearestEnemy.position.clone();
@@ -623,26 +724,32 @@ export class AIManager {
       unit.setMoveCommand(retreatPos);
     }
 
-    console.log(`AI ${unit.name} retreating!`);
+    // OPTIMIZATION: Disable debug logging in production for performance
+    // console.log(`AI ${unit.name} retreating!`);
   }
 
   private findRetreatPosition(unit: Unit): THREE.Vector3 | null {
     // Priority 1: Retreat to a friendly-held zone
     const friendlyZones = this.zoneAssessments.filter(z =>
-      z.zone.owner === 'enemy' && !z.isContested
+      z.zone.owner === unit.team && !z.isContested
     );
 
     if (friendlyZones.length > 0) {
       // Find nearest safe zone
+      // OPTIMIZATION: Use squared distance and VectorPool
       let nearest = friendlyZones[0];
       if (!nearest) return this.fallbackRetreatPosition(unit);
-      let nearestDist = unit.position.distanceTo(new THREE.Vector3(nearest.zone.x, this.game.getElevationAt(nearest.zone.x, nearest.zone.z), nearest.zone.z));
+
+      const zoneY0 = this.game.getElevationAt(nearest.zone.x, nearest.zone.z);
+      const zonePos0 = VectorPool.acquire().set(nearest.zone.x, zoneY0, nearest.zone.z);
+      let nearestDistSq = unit.position.distanceToSquared(zonePos0);
 
       for (const zone of friendlyZones) {
         const zoneY = this.game.getElevationAt(zone.zone.x, zone.zone.z);
-        const dist = unit.position.distanceTo(new THREE.Vector3(zone.zone.x, zoneY, zone.zone.z));
-        if (dist < nearestDist) {
-          nearestDist = dist;
+        const zonePos = VectorPool.acquire().set(zone.zone.x, zoneY, zone.zone.z);
+        const distSq = unit.position.distanceToSquared(zonePos);
+        if (distSq < nearestDistSq) {
+          nearestDistSq = distSq;
           nearest = zone;
         }
       }
@@ -656,19 +763,22 @@ export class AIManager {
   }
 
   private fallbackRetreatPosition(unit: Unit): THREE.Vector3 | null {
-    const enemyZones = this.game.currentMap?.deploymentZones.filter(z => z.team === 'enemy');
-    if (enemyZones && enemyZones.length > 0) {
-      // Find nearest enemy zone
-      let nearestZone = enemyZones[0]!;
-      let minDist = Infinity;
+    // Retreat toward friendly deployment zone
+    const deploymentZones = this.game.currentMap?.deploymentZones.filter(z => z.team === unit.team);
+    if (deploymentZones && deploymentZones.length > 0) {
+      // Find nearest friendly deployment zone
+      // OPTIMIZATION: Use squared distance and VectorPool
+      let nearestZone = deploymentZones[0]!;
+      let minDistSq = Infinity;
 
-      for (const zone of enemyZones) {
+      for (const zone of deploymentZones) {
         const centerX = (zone.minX + zone.maxX) / 2;
         const centerZ = (zone.minZ + zone.maxZ) / 2;
         const centerY = this.game.getElevationAt(centerX, centerZ);
-        const dist = unit.position.distanceTo(new THREE.Vector3(centerX, centerY, centerZ));
-        if (dist < minDist) {
-          minDist = dist;
+        const centerPos = VectorPool.acquire().set(centerX, centerY, centerZ);
+        const distSq = unit.position.distanceToSquared(centerPos);
+        if (distSq < minDistSq) {
+          minDistSq = distSq;
           nearestZone = zone;
         }
       }
@@ -682,8 +792,10 @@ export class AIManager {
     // Last resort: Move away from nearest enemy
     const nearestEnemy = this.findNearestEnemy(unit);
     if (nearestEnemy) {
-      const awayDir = unit.position.clone().sub(nearestEnemy.position).normalize();
-      return unit.position.clone().add(awayDir.multiplyScalar(50));
+      const awayDir = VectorPool.acquire().copy(unit.position).sub(nearestEnemy.position).normalize();
+      const retreatPos = VectorPool.acquire().copy(unit.position).add(awayDir.multiplyScalar(50));
+      // Must create new Vector3 since this persists in state
+      return new THREE.Vector3(retreatPos.x, retreatPos.y, retreatPos.z);
     }
 
     return null;
@@ -745,6 +857,11 @@ export class AIManager {
    */
   removeUnit(unitId: string): void {
     this.aiStates.delete(unitId);
+    // Remove from cached units
+    const index = this.cachedCpuUnits.findIndex(u => u.id === unitId);
+    if (index !== -1) {
+      this.cachedCpuUnits.splice(index, 1);
+    }
   }
 
   /**
@@ -753,5 +870,8 @@ export class AIManager {
   clear(): void {
     this.aiStates.clear();
     this.zoneAssessments = [];
+    this.cachedCpuUnits = [];
+    this.cachedFriendlyUnits = [];
+    this.cachedEnemyUnits = [];
   }
 }
