@@ -559,10 +559,10 @@ export class AIManager {
 
         if (distToZone <= zoneRadiusEstimate + 5) {
           // At the zone - defend or capture
-          const nearestEnemy = this.findNearestEnemyInRange(unit, this.engageRange);
+          const bestTarget = this.selectBestTarget(unit, this.engageRange);
 
-          if (nearestEnemy) {
-            this.orderAttack(unit, state, nearestEnemy);
+          if (bestTarget) {
+            this.orderAttack(unit, state, bestTarget);
           } else {
             // Hold position in zone
             state.behavior = zone.needsDefense ? 'defending' : 'capturing';
@@ -578,9 +578,9 @@ export class AIManager {
     }
 
     // Priority 3: Attack nearby enemies
-    const nearestEnemy = this.findNearestEnemyInRange(unit, this.engageRange);
-    if (nearestEnemy) {
-      this.orderAttack(unit, state, nearestEnemy);
+    const bestTarget = this.selectBestTarget(unit, this.engageRange);
+    if (bestTarget) {
+      this.orderAttack(unit, state, bestTarget);
       return;
     }
 
@@ -682,6 +682,56 @@ export class AIManager {
     }
 
     return false;
+  }
+
+  /**
+   * Select the best target using priority scoring system
+   * Returns the enemy unit with the highest priority score within range
+   *
+   * @param unit - The unit selecting a target
+   * @param range - Maximum engagement range
+   * @returns The highest priority target, or null if none found
+   */
+  private selectBestTarget(unit: Unit, range: number): Unit | null {
+    // Use spatial query limited to the actual range for efficiency
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+    const enemyUnits = this.game.unitManager.getUnitsInRadius(
+      unit.position,
+      range,
+      enemyTeam
+    );
+
+    // Get allied units for threat assessment
+    const alliedUnits = this.getFriendlyUnits(unit);
+
+    let bestTarget: Unit | null = null;
+    let bestScore = -Infinity;
+
+    for (const enemy of enemyUnits) {
+      if (enemy.health <= 0) continue;
+
+      // On easy difficulty, AI sees all units (helps new players)
+      // On medium/hard difficulty, AI only sees units revealed by fog of war
+      if (this.difficulty !== 'easy' && this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
+        if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
+          continue; // Skip invisible enemies
+        }
+      }
+
+      // Check if enemy is within actual range (spatial query might include units slightly outside)
+      const distance = unit.position.distanceTo(enemy.position);
+      if (distance > range) continue;
+
+      // Calculate priority score for this target
+      const score = this.calculateTargetPriority(unit, enemy, alliedUnits);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTarget = enemy;
+      }
+    }
+
+    return bestTarget;
   }
 
   private findNearestEnemy(unit: Unit): Unit | null {
