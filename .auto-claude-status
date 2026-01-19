@@ -1,10 +1,10 @@
 {
   "active": true,
   "spec": "002-functional-minimap",
-  "state": "planning",
+  "state": "building",
   "subtasks": {
-    "completed": 0,
-    "total": 0,
+    "completed": 1,
+    "total": 6,
     "in_progress": 1,
     "failed": 0
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
+    "number": 3,
     "started_at": "2026-01-20T00:24:48.512387"
   },
-  "last_update": "2026-01-20T00:29:04.839088"
+  "last_update": "2026-01-20T00:32:53.349758"
 }

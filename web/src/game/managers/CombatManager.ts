@@ -95,14 +95,18 @@ export class CombatManager {
     if (!weapon) return;
 
     // Calculate hit chance based on distance, accuracy, cover
-    const attackerPos = attacker.isGarrisoned && attacker.garrisonedBuilding
+    const isGarrisoned = attacker.isGarrisoned && attacker.garrisonedBuilding;
+    const attackerPos = isGarrisoned
       ? VectorPool.acquire().set(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
       : attacker.position;
 
     const distance = attackerPos.distanceTo(target.position);
 
     // Out of range
-    if (distance > weapon.range) return;
+    if (distance > weapon.range) {
+      if (isGarrisoned) VectorPool.release(attackerPos);
+      return;
+    }
 
     // Base hit chance from weapon accuracy
     let hitChance = weapon.accuracy;
@@ -128,8 +132,11 @@ export class CombatManager {
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
       this.game.audioManager.playSound('weapon_fire');
+      VectorPool.release(forward);
       // Create minimap combat indicator
       this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
+      // Clean up pooled vector if garrisoned
+      if (isGarrisoned) VectorPool.release(attackerPos);
       return;
     }
 
@@ -139,8 +146,11 @@ export class CombatManager {
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
     this.game.audioManager.playSound('weapon_fire');
+    VectorPool.release(forward);
     // Create minimap combat indicator
     this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
+    // Clean up pooled vector if garrisoned
+    if (isGarrisoned) VectorPool.release(attackerPos);
   }
 
   private createProjectile(
