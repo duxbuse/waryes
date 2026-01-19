@@ -395,43 +395,85 @@ export class PathRenderer {
 
   /**
    * Update all paths (shrink as units move)
+   * For multi-segment paths, only the first segment shrinks. When the unit reaches
+   * the first waypoint, that segment is removed and the next segment becomes active.
    */
   update(): void {
-    // Update each path ribbon to start from unit's current position
-    for (const [_unitId, dataList] of this.pathData) {
-      for (const data of dataList) {
-        const { line, unit, target } = data;
+    // Update each unit's path queue
+    for (const [unitId, dataList] of this.pathData) {
+      if (dataList.length === 0) continue;
 
-        if (line instanceof THREE.Mesh) {
-          // Update ribbon geometry
-          const positions = line.geometry.attributes.position as THREE.BufferAttribute;
-          if (positions && positions.count === 4) {
-            // Ribbon has 4 vertices
-            const pathWidth = 0.3;
+      // Get the first segment (active segment unit is moving toward)
+      const firstSegment = dataList[0];
+      const unit = firstSegment.unit;
+      const target = firstSegment.target;
 
-            // Sample terrain heights
-            const startTerrainHeight = this.game.getElevationAt(unit.position.x, unit.position.z);
-            const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
-            const endTerrainHeight = this.game.getElevationAt(target.x, target.z);
-            const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+      // Check if unit has reached the first waypoint
+      const distanceToTarget = Math.sqrt(
+        Math.pow(unit.position.x - target.x, 2) +
+        Math.pow(unit.position.z - target.z, 2)
+      );
 
-            // Calculate perpendicular direction
-            const dx = target.x - unit.position.x;
-            const dz = target.z - unit.position.z;
-            const length = Math.sqrt(dx * dx + dz * dz);
-            if (length > 0.01) {
-              const dirX = dx / length;
-              const dirZ = dz / length;
-              const perpX = -dirZ * (pathWidth / 2);
-              const perpZ = dirX * (pathWidth / 2);
+      // If unit reached waypoint (within 2 meter threshold), remove first segment
+      if (distanceToTarget < 2) {
+        // Remove the first segment's line
+        this.scene.remove(firstSegment.line);
+        firstSegment.line.geometry.dispose();
+        (firstSegment.line.material as THREE.Material).dispose();
 
-              // Update all 4 vertices of the ribbon
-              positions.setXYZ(0, unit.position.x - perpX, startY, unit.position.z - perpZ);
-              positions.setXYZ(1, unit.position.x + perpX, startY, unit.position.z + perpZ);
-              positions.setXYZ(2, target.x - perpX, endY, target.z - perpZ);
-              positions.setXYZ(3, target.x + perpX, endY, target.z + perpZ);
-              positions.needsUpdate = true;
-            }
+        // Remove the first waypoint marker
+        const markers = this.waypointMarkers.get(unitId);
+        if (markers && markers.length > 0) {
+          const marker = markers.shift()!; // Remove first marker
+          this.scene.remove(marker);
+          marker.geometry.dispose();
+          (marker.material as THREE.Material).dispose();
+        }
+
+        // Remove first segment from array
+        dataList.shift();
+
+        // If no more segments, remove the unit from pathData
+        if (dataList.length === 0) {
+          this.pathData.delete(unitId);
+          if (markers && markers.length === 0) {
+            this.waypointMarkers.delete(unitId);
+          }
+        }
+        continue; // Skip to next unit
+      }
+
+      // Update only the first segment (active path) to shrink from unit's current position
+      const line = firstSegment.line;
+      if (line instanceof THREE.Mesh) {
+        // Update ribbon geometry
+        const positions = line.geometry.attributes.position as THREE.BufferAttribute;
+        if (positions && positions.count === 4) {
+          // Ribbon has 4 vertices
+          const pathWidth = 0.3;
+
+          // Sample terrain heights
+          const startTerrainHeight = this.game.getElevationAt(unit.position.x, unit.position.z);
+          const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
+          const endTerrainHeight = this.game.getElevationAt(target.x, target.z);
+          const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+
+          // Calculate perpendicular direction
+          const dx = target.x - unit.position.x;
+          const dz = target.z - unit.position.z;
+          const length = Math.sqrt(dx * dx + dz * dz);
+          if (length > 0.01) {
+            const dirX = dx / length;
+            const dirZ = dz / length;
+            const perpX = -dirZ * (pathWidth / 2);
+            const perpZ = dirX * (pathWidth / 2);
+
+            // Update all 4 vertices of the ribbon
+            positions.setXYZ(0, unit.position.x - perpX, startY, unit.position.z - perpZ);
+            positions.setXYZ(1, unit.position.x + perpX, startY, unit.position.z + perpZ);
+            positions.setXYZ(2, target.x - perpX, endY, target.z - perpZ);
+            positions.setXYZ(3, target.x + perpX, endY, target.z + perpZ);
+            positions.needsUpdate = true;
           }
         }
       }
