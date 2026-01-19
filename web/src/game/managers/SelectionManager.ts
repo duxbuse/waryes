@@ -9,6 +9,7 @@
 
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
+import { getWeaponById } from '../../data/factions';
 
 export class SelectionManager {
   private readonly game: Game;
@@ -229,12 +230,34 @@ export class SelectionManager {
     // Update stats
     if (this.selectedUnits.length === 1) {
       const unit = this.selectedUnits[0]!;
-      this.selectionStats.innerHTML = `
+      let statsHtml = `
         <div>Type: ${unit.unitType}</div>
         <div>Health: ${unit.health}/${unit.maxHealth}</div>
         <div>Morale: ${Math.round(unit.morale)}%</div>
         <div>Team: ${unit.team}</div>
       `;
+
+      // Add weapon stats
+      const weapons = unit.getWeapons();
+      if (weapons.length > 0) {
+        statsHtml += '<div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;">';
+        statsHtml += '<strong>Weapons:</strong>';
+        for (let i = 0; i < weapons.length; i++) {
+          const weaponSlot = weapons[i];
+          if (weaponSlot) {
+            const weapon = getWeaponById(weaponSlot.weaponId);
+            if (weapon) {
+              const cooldown = unit.getWeaponCooldown(i);
+              const damage = unit.getWeaponDamageDealt(i);
+              const status = cooldown > 0 ? `Reloading (${cooldown.toFixed(1)}s)` : 'Ready';
+              statsHtml += `<div>${weapon.name}: ${status} | Damage: ${damage.toFixed(0)}</div>`;
+            }
+          }
+        }
+        statsHtml += '</div>';
+      }
+
+      this.selectionStats.innerHTML = statsHtml;
     } else {
       // Show breakdown by type
       const typeCounts = new Map<string, number>();
