@@ -49,6 +49,25 @@ interface ThreatAssessment {
   shouldBeAggressive: boolean;
 }
 
+interface GroupComposition {
+  totalUnits: number;
+  categoryCounts: Record<string, number>; // Category -> count
+  totalStrength: number; // Sum of all unit health values
+  averageHealth: number; // Average health percentage (0-1)
+  hasLogistics: boolean; // Can capture zones
+  hasInfantry: boolean; // Good for close combat and urban
+  hasArmor: boolean; // TNK - heavy firepower and armor
+  hasRecon: boolean; // REC - spotting and flanking
+  hasAA: boolean; // Anti-air coverage
+  hasArtillery: boolean; // Long-range fire support
+  hasAir: boolean; // HEL or AIR units
+  maxWeaponRange: number; // Longest weapon range in group
+  canCapture: boolean; // Has LOG units to capture zones
+  isBalanced: boolean; // Has variety of unit types
+  antiArmorCapability: number; // Sum of penetration values
+  antiInfantryCapability: number; // Units good against soft targets
+}
+
 export class AIManager {
   private readonly game: Game;
   private readonly aiStates: Map<string, AIUnitState> = new Map();
@@ -109,6 +128,97 @@ export class AIManager {
 
   setDifficulty(difficulty: AIDifficulty): void {
     this.difficulty = difficulty;
+  }
+
+  /**
+   * Analyze the composition of a unit group to determine capabilities and balance
+   * Used for tactical decision-making and force assessment
+   */
+  analyzeGroupComposition(units: Unit[]): GroupComposition {
+    const composition: GroupComposition = {
+      totalUnits: 0,
+      categoryCounts: {},
+      totalStrength: 0,
+      averageHealth: 0,
+      hasLogistics: false,
+      hasInfantry: false,
+      hasArmor: false,
+      hasRecon: false,
+      hasAA: false,
+      hasArtillery: false,
+      hasAir: false,
+      maxWeaponRange: 0,
+      canCapture: false,
+      isBalanced: false,
+      antiArmorCapability: 0,
+      antiInfantryCapability: 0,
+    };
+
+    // Early exit for empty groups
+    if (units.length === 0) {
+      return composition;
+    }
+
+    let totalHealthPercent = 0;
+    let uniqueCategories = 0;
+
+    // Analyze each unit in the group
+    for (const unit of units) {
+      if (!unit || unit.health <= 0) continue;
+
+      composition.totalUnits++;
+      totalHealthPercent += unit.health / unit.maxHealth;
+      composition.totalStrength += unit.health;
+
+      const category = unit.unitData.category;
+
+      // Count by category
+      composition.categoryCounts[category] = (composition.categoryCounts[category] ?? 0) + 1;
+
+      // Set capability flags
+      if (category === 'LOG') {
+        composition.hasLogistics = true;
+        composition.canCapture = true;
+      }
+      if (category === 'INF') composition.hasInfantry = true;
+      if (category === 'TNK') composition.hasArmor = true;
+      if (category === 'REC') composition.hasRecon = true;
+      if (category === 'AA') composition.hasAA = true;
+      if (category === 'ART') composition.hasArtillery = true;
+      if (category === 'HEL' || category === 'AIR') composition.hasAir = true;
+
+      // Analyze weapons for capabilities
+      for (const weaponSlot of unit.unitData.weapons) {
+        const weaponData = this.game.getWeaponById(weaponSlot.weaponId);
+        if (!weaponData) continue;
+
+        // Track maximum weapon range
+        if (weaponData.range > composition.maxWeaponRange) {
+          composition.maxWeaponRange = weaponData.range;
+        }
+
+        // Anti-armor capability (high penetration weapons)
+        if (weaponData.penetration >= 5) {
+          composition.antiArmorCapability += weaponData.penetration * weaponSlot.count;
+        }
+
+        // Anti-infantry capability (high damage, low penetration)
+        if (weaponData.damage >= 20 && weaponData.penetration < 5) {
+          composition.antiInfantryCapability += weaponData.damage * weaponSlot.count;
+        }
+      }
+    }
+
+    // Calculate averages
+    if (composition.totalUnits > 0) {
+      composition.averageHealth = totalHealthPercent / composition.totalUnits;
+    }
+
+    // Determine if group is balanced (has at least 3 different unit types)
+    uniqueCategories = Object.keys(composition.categoryCounts).length;
+    composition.isBalanced = uniqueCategories >= 3;
+
+    return composition;
   }
 
   /**
