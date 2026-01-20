@@ -7,7 +7,7 @@ import type { DeckData } from './types';
 
 export const STARTER_DECKS: DeckData[] = [
   // ============ SDF Starter Decks ============
-  
+
   // SDF 7th Mechanized - Balanced mechanized force
   {
     id: 'starter_sdf_7th_mechanized',
@@ -16,18 +16,29 @@ export const STARTER_DECKS: DeckData[] = [
     units: [
       { unitId: 'sdf_trooper', veterancy: 0 },
       { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
       { unitId: 'sdf_militia', veterancy: 0 },
+      { unitId: 'sdf_militia', veterancy: 0 },
+      { unitId: 'sdf_hwt_heavy_bolter', veterancy: 0 },
       { unitId: 'sdf_hwt_heavy_bolter', veterancy: 0 },
       { unitId: 'sdf_hwt_missile', veterancy: 0 },
       { unitId: 'sdf_bastion_mbt', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt_rotary', veterancy: 0 },
+      { unitId: 'sdf_scout_walker', veterancy: 0 },
       { unitId: 'sdf_scout_walker', veterancy: 0 },
       { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_field_gun_bombast', veterancy: 0 },
       { unitId: 'sdf_field_gun_bombast', veterancy: 0 },
       { unitId: 'sdf_falcon_gunship_rotary', veterancy: 0 },
+      { unitId: 'sdf_centurion_apc', veterancy: 0 },
+      { unitId: 'sdf_armored_transport', veterancy: 0 },
+      { unitId: 'sdf_transport_truck', veterancy: 0 },
+      { unitId: 'sdf_transport_truck', veterancy: 0 },
     ],
-    activationPoints: 24,
+    activationPoints: 50,
   },
-  
+
   // SDF 212th Heavy Armor - Tank-heavy force
   {
     id: 'starter_sdf_212th_heavy_armor',
@@ -35,18 +46,29 @@ export const STARTER_DECKS: DeckData[] = [
     divisionId: 'sdf_212th_heavy_armor',
     units: [
       { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_militia', veterancy: 0 },
+      { unitId: 'sdf_engineer', veterancy: 0 },
       { unitId: 'sdf_engineer', veterancy: 0 },
       { unitId: 'sdf_bastion_mbt', veterancy: 0 },
       { unitId: 'sdf_bastion_mbt', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt', veterancy: 0 },
       { unitId: 'sdf_bastion_mbt_hunter', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt_siege', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt_rotary', veterancy: 0 },
       { unitId: 'sdf_scout_walker', veterancy: 0 },
+      { unitId: 'sdf_scout_walker', veterancy: 0 },
+      { unitId: 'sdf_skysweeper', veterancy: 0 },
       { unitId: 'sdf_skysweeper', veterancy: 0 },
       { unitId: 'sdf_tremor_cannon', veterancy: 0 },
       { unitId: 'sdf_nova_fighter_strike', veterancy: 0 },
+      { unitId: 'sdf_nova_fighter_asf', veterancy: 0 },
+      { unitId: 'sdf_armored_transport', veterancy: 0 },
+      { unitId: 'sdf_centurion_apc', veterancy: 0 },
     ],
-    activationPoints: 26,
+    activationPoints: 50,
   },
-  
+
   // SDF 45th Siege - Artillery focus
   {
     id: 'starter_sdf_45th_siege',
@@ -54,19 +76,29 @@ export const STARTER_DECKS: DeckData[] = [
     divisionId: 'sdf_45th_siege',
     units: [
       { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
+      { unitId: 'sdf_militia', veterancy: 0 },
       { unitId: 'sdf_militia', veterancy: 0 },
       { unitId: 'sdf_hwt_lascannon', veterancy: 0 },
+      { unitId: 'sdf_hwt_lascannon', veterancy: 0 },
+      { unitId: 'sdf_mortar_team', veterancy: 0 },
       { unitId: 'sdf_mortar_team', veterancy: 0 },
       { unitId: 'sdf_tremor_cannon', veterancy: 0 },
       { unitId: 'sdf_tremor_cannon', veterancy: 0 },
       { unitId: 'sdf_barrage_launcher', veterancy: 0 },
+      { unitId: 'sdf_barrage_launcher', veterancy: 0 },
+      { unitId: 'sdf_field_gun_bombast', veterancy: 0 },
       { unitId: 'sdf_field_gun_bombast', veterancy: 0 },
       { unitId: 'sdf_scout_walker', veterancy: 0 },
+      { unitId: 'sdf_scout_walker', veterancy: 0 },
       { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_bastion_mbt', veterancy: 0 },
+      { unitId: 'sdf_engineer', veterancy: 0 },
     ],
-    activationPoints: 25,
+    activationPoints: 50,
   },
-  
+
   // SDF 101st Airborne - Air assault focus
   {
     id: 'starter_sdf_101st_airborne',
@@ -75,20 +107,30 @@ export const STARTER_DECKS: DeckData[] = [
     units: [
       { unitId: 'sdf_stormtrooper', veterancy: 0 },
       { unitId: 'sdf_stormtrooper', veterancy: 0 },
+      { unitId: 'sdf_stormtrooper', veterancy: 0 },
+      { unitId: 'sdf_trooper', veterancy: 0 },
       { unitId: 'sdf_trooper', veterancy: 0 },
       { unitId: 'sdf_hwt_lascannon', veterancy: 0 },
+      { unitId: 'sdf_hwt_lascannon', veterancy: 0 },
+      { unitId: 'sdf_rocket_team', veterancy: 0 },
       { unitId: 'sdf_rocket_team', veterancy: 0 },
       { unitId: 'sdf_falcon_gunship_rotary', veterancy: 0 },
+      { unitId: 'sdf_falcon_gunship_rotary', veterancy: 0 },
+      { unitId: 'sdf_falcon_gunship_at', veterancy: 0 },
       { unitId: 'sdf_falcon_gunship_at', veterancy: 0 },
       { unitId: 'sdf_nova_fighter_interceptor', veterancy: 0 },
+      { unitId: 'sdf_nova_fighter_bomber', veterancy: 0 },
+      { unitId: 'sdf_scout_walker', veterancy: 0 },
       { unitId: 'sdf_scout_walker', veterancy: 0 },
       { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_mortar_team', veterancy: 0 },
+      { unitId: 'sdf_sniper_team', veterancy: 0 },
     ],
-    activationPoints: 27,
+    activationPoints: 50,
   },
-  
+
   // ============ Vanguard Starter Decks ============
-  
+
   // Vanguard 1st Veteran - Elite exo-armor focus
   {
     id: 'starter_vanguard_1st_veteran',
@@ -96,18 +138,27 @@ export const STARTER_DECKS: DeckData[] = [
     divisionId: 'vanguard_1st_veteran',
     units: [
       { unitId: 'vanguard_exo_armor_kinetic', veterancy: 1 },
+      { unitId: 'vanguard_exo_armor_kinetic', veterancy: 1 },
+      { unitId: 'vanguard_exo_armor_shock', veterancy: 1 },
       { unitId: 'vanguard_exo_armor_shock', veterancy: 1 },
       { unitId: 'vanguard_infantry', veterancy: 0 },
+      { unitId: 'vanguard_infantry_fusion', veterancy: 0 },
+      { unitId: 'vanguard_infantry_ion', veterancy: 0 },
       { unitId: 'vanguard_recon', veterancy: 0 },
+      { unitId: 'vanguard_recon_sniper', veterancy: 0 },
       { unitId: 'vanguard_fortress_tank', veterancy: 0 },
       { unitId: 'vanguard_iron_walker_assault', veterancy: 0 },
       { unitId: 'vanguard_hunter_tank', veterancy: 0 },
+      { unitId: 'vanguard_hunter_tank_laser', veterancy: 0 },
       { unitId: 'vanguard_raven_hunter', veterancy: 0 },
+      { unitId: 'vanguard_raven_dropship', veterancy: 0 },
       { unitId: 'vanguard_heavy_support_auto', veterancy: 0 },
+      { unitId: 'vanguard_heavy_support_laser', veterancy: 0 },
+      { unitId: 'vanguard_talon_strike', veterancy: 0 },
     ],
-    activationPoints: 28,
+    activationPoints: 50,
   },
-  
+
   // Vanguard 2nd Battle - Balanced tactical force
   {
     id: 'starter_vanguard_2nd_battle',
@@ -116,18 +167,28 @@ export const STARTER_DECKS: DeckData[] = [
     units: [
       { unitId: 'vanguard_infantry', veterancy: 0 },
       { unitId: 'vanguard_infantry', veterancy: 0 },
+      { unitId: 'vanguard_infantry', veterancy: 0 },
       { unitId: 'vanguard_infantry_fusion', veterancy: 0 },
+      { unitId: 'vanguard_infantry_ion', veterancy: 0 },
+      { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
       { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
       { unitId: 'vanguard_recon', veterancy: 0 },
+      { unitId: 'vanguard_recon_bike', veterancy: 0 },
+      { unitId: 'vanguard_recon_sniper', veterancy: 0 },
       { unitId: 'vanguard_hunter_tank', veterancy: 0 },
+      { unitId: 'vanguard_fortress_tank', veterancy: 0 },
       { unitId: 'vanguard_iron_walker_assault', veterancy: 0 },
       { unitId: 'vanguard_swift_skimmer_auto', veterancy: 0 },
+      { unitId: 'vanguard_swift_skimmer_fusion', veterancy: 0 },
       { unitId: 'vanguard_heavy_support_laser', veterancy: 0 },
+      { unitId: 'vanguard_heavy_support_auto', veterancy: 0 },
       { unitId: 'vanguard_talon_interceptor', veterancy: 0 },
+      { unitId: 'vanguard_raven_hunter', veterancy: 0 },
+      { unitId: 'vanguard_apc', veterancy: 0 },
     ],
-    activationPoints: 25,
+    activationPoints: 50,
   },
-  
+
   // Vanguard 8th Assault - Fast attack focus
   {
     id: 'starter_vanguard_8th_assault',
@@ -136,17 +197,28 @@ export const STARTER_DECKS: DeckData[] = [
     units: [
       { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
       { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
+      { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
+      { unitId: 'vanguard_infantry', veterancy: 0 },
       { unitId: 'vanguard_infantry_fusion', veterancy: 0 },
+      { unitId: 'vanguard_infantry_ion', veterancy: 0 },
+      { unitId: 'vanguard_exo_armor_kinetic', veterancy: 0 },
+      { unitId: 'vanguard_exo_armor_shock', veterancy: 0 },
+      { unitId: 'vanguard_outrider', veterancy: 0 },
       { unitId: 'vanguard_outrider', veterancy: 0 },
       { unitId: 'vanguard_swift_skimmer_fusion', veterancy: 0 },
+      { unitId: 'vanguard_swift_skimmer_auto', veterancy: 0 },
       { unitId: 'vanguard_recon_bike', veterancy: 0 },
+      { unitId: 'vanguard_recon_bike', veterancy: 0 },
+      { unitId: 'vanguard_hunter_tank', veterancy: 0 },
       { unitId: 'vanguard_hunter_tank_laser', veterancy: 0 },
       { unitId: 'vanguard_raven_dropship', veterancy: 0 },
+      { unitId: 'vanguard_talon_interceptor', veterancy: 0 },
       { unitId: 'vanguard_heavy_support_auto', veterancy: 0 },
+      { unitId: 'vanguard_apc', veterancy: 0 },
     ],
-    activationPoints: 26,
+    activationPoints: 50,
   },
-  
+
   // Vanguard 10th Scout - Recon/flanking focus
   {
     id: 'starter_vanguard_10th_scout',
@@ -155,16 +227,26 @@ export const STARTER_DECKS: DeckData[] = [
     units: [
       { unitId: 'vanguard_recon', veterancy: 0 },
       { unitId: 'vanguard_recon', veterancy: 0 },
+      { unitId: 'vanguard_recon', veterancy: 0 },
+      { unitId: 'vanguard_recon_sniper', veterancy: 0 },
       { unitId: 'vanguard_recon_sniper', veterancy: 0 },
       { unitId: 'vanguard_infantry', veterancy: 0 },
+      { unitId: 'vanguard_infantry', veterancy: 0 },
+      { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
+      { unitId: 'vanguard_jetpack_squad', veterancy: 0 },
+      { unitId: 'vanguard_outrider', veterancy: 0 },
       { unitId: 'vanguard_outrider', veterancy: 0 },
       { unitId: 'vanguard_swift_skimmer_auto', veterancy: 0 },
       { unitId: 'vanguard_swift_skimmer_missile', veterancy: 0 },
+      { unitId: 'vanguard_swift_skimmer_fusion', veterancy: 0 },
+      { unitId: 'vanguard_recon_bike', veterancy: 0 },
       { unitId: 'vanguard_recon_bike', veterancy: 0 },
       { unitId: 'vanguard_hunter_tank', veterancy: 0 },
+      { unitId: 'vanguard_hunter_tank_laser', veterancy: 0 },
       { unitId: 'vanguard_talon_interceptor', veterancy: 0 },
+      { unitId: 'vanguard_raven_hunter', veterancy: 0 },
     ],
-    activationPoints: 24,
+    activationPoints: 50,
   },
 ];
 
