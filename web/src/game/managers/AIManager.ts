@@ -7,6 +7,34 @@
  * - Uses smoke for protection
  * - Retreats damaged units
  * - Plans attacks on enemy positions
+ *
+ * ## Difficulty Levels
+ *
+ * ### Easy - Forgiving AI for Beginners
+ * - Vision: Sees ALL units (fog of war disabled) - helps new players understand threats
+ * - Targeting: 30% chance to pick suboptimal targets (makes mistakes)
+ * - Tactics: No flanking maneuvers (simpler frontal assault only)
+ * - Retreat: 40% health threshold (more cautious, easier to push back)
+ * - Decision Speed: 4 seconds between decisions (slower reactions)
+ * - Resources: Same income as player (no bonuses)
+ *
+ * ### Medium (Normal) - Fair Challenge for Intermediate Players
+ * - Vision: Respects fog of war (only sees visible units) - FAIR PLAY
+ * - Targeting: Optimal target selection (best targets always chosen)
+ * - Tactics: All features enabled (flanking, combined arms, focus fire)
+ * - Retreat: 25% health threshold (standard tactical retreat)
+ * - Decision Speed: 2 seconds between decisions (moderate reactions)
+ * - Resources: Same income as player (no bonuses) - FAIR PLAY
+ * - **This is the baseline "fair but challenging" AI with no cheats**
+ *
+ * ### Hard - Aggressive AI for Veterans
+ * - Vision: Respects fog of war (only sees visible units) - FAIR PLAY
+ * - Targeting: Optimal target selection (best targets always chosen)
+ * - Tactics: All features enabled (flanking, combined arms, focus fire)
+ * - Retreat: 25% health threshold (standard tactical retreat)
+ * - Decision Speed: 1 second between decisions (fast reactions)
+ * - Resources: Same income as player (no bonuses) - FAIR PLAY
+ * - **Hard AI wins through better execution, NOT cheating**
  */
 
 import * as THREE from 'three';
