@@ -317,9 +317,6 @@ describe('AIManager - Group Composition Analysis', () => {
           // Return enemies within radius
           return enemies.filter(e => e.position.distanceTo(pos) <= radius);
         }),
-        getUnitsForTeam: vi.fn((team: number) => {
-          return team === aiUnit.team ? [aiUnit] : enemies;
-        }),
       };
 
       const testGame = {
@@ -390,19 +387,19 @@ describe('AIManager - Group Composition Analysis', () => {
       // This test verifies that AI uses gameRNG, not Math.random()
       // We can verify this by checking that RNG state changes after AI decisions
 
-      const enemy = createMockUnit('INF');
-      enemy.position.set(10, 0, 10);
+      const enemy1 = createMockUnit('INF');
+      enemy1.position.set(10, 0, 10);
+
+      const enemy2 = createMockUnit('INF');
+      enemy2.position.set(15, 0, 15);
 
       const aiUnit = createMockUnit('INF');
       aiUnit.team = 'enemy';
       aiUnit.position.set(0, 0, 0);
 
       const mockUnitManager = {
-        getAllUnits: vi.fn().mockReturnValue([aiUnit, enemy]),
-        getUnitsInRadius: vi.fn(() => [enemy]),
-        getUnitsForTeam: vi.fn((team: number) => {
-          return team === aiUnit.team ? [aiUnit] : [enemy];
-        }),
+        getAllUnits: vi.fn().mockReturnValue([aiUnit, enemy1, enemy2]),
+        getUnitsInRadius: vi.fn(() => [enemy1, enemy2]),
       };
 
       const testGame = {

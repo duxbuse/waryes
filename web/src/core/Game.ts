@@ -1111,6 +1111,10 @@ export class Game {
     // Clear pre-order path visualizations (dashed lines)
     this.pathRenderer?.clearAllPreOrderPaths();
 
+    // Initialize AI strategy and queue initial movements
+    // This ensures AI units have orders ready and begin moving immediately
+    this.aiManager.initializeBattle();
+
     // Start battle
     console.log('[Game] Starting battle...');
     this.setPhase(GamePhase.Battle);

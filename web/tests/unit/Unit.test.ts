@@ -12,6 +12,7 @@ const mockGame = {
   unitManager: {
     destroyUnit: vi.fn(),
     getAllUnits: vi.fn().mockReturnValue([]),
+    getUnitsInRadius: vi.fn().mockReturnValue([]),
   },
   selectionManager: {
     removeFromSelection: vi.fn(),
@@ -20,6 +21,11 @@ const mockGame = {
     add: vi.fn(),
     remove: vi.fn(),
   },
+  pathfindingManager: {
+    findPath: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+    findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
+  },
+  getElevationAt: vi.fn().mockReturnValue(0),
 } as unknown as Game;
 
 const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {

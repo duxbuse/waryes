@@ -9,25 +9,39 @@ import type { UnitData, WeaponData, DivisionData } from './types';
 type GlobModule<T> = Record<string, { default: T }>;
 
 // Import all unit JSON files using Vite's glob import (eager mode)
+// Falls back to empty object in test environments where import.meta.glob is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const unitModules: GlobModule<UnitData> = (import.meta as any).glob(
-  './units/**/*.json',
-  { eager: true }
-);
+let unitModules: GlobModule<UnitData> = {};
+try {
+  // In Vite environment, this will be transformed at build time
+  // In test environment, this will throw and we'll use the fallback empty object
+  unitModules = (import.meta as any).glob('./units/**/*.json', { eager: true });
+} catch (e) {
+  // Test environment fallback
+  unitModules = {};
+}
 
 // Import all weapon JSON files using Vite's glob import (eager mode)
+// Falls back to empty object in test environments where import.meta.glob is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const weaponModules: GlobModule<WeaponData> = (import.meta as any).glob(
-  './weapons/**/*.json',
-  { eager: true }
-);
+let weaponModules: GlobModule<WeaponData> = {};
+try {
+  weaponModules = (import.meta as any).glob('./weapons/**/*.json', { eager: true });
+} catch (e) {
+  // Test environment fallback
+  weaponModules = {};
+}
 
 // Import all division JSON files using Vite's glob import (eager mode)
+// Falls back to empty object in test environments where import.meta.glob is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const divisionModules: GlobModule<DivisionData> = (import.meta as any).glob(
-  './divisions/**/*.json',
-  { eager: true }
-);
+let divisionModules: GlobModule<DivisionData> = {};
+try {
+  divisionModules = (import.meta as any).glob('./divisions/**/*.json', { eager: true });
+} catch (e) {
+  // Test environment fallback
+  divisionModules = {};
+}
 
 // Extract unit data from modules
 export const UNITS: UnitData[] = Object.values(unitModules).map(
@@ -70,5 +84,9 @@ export function getDivisionsByFaction(factionId: string): DivisionData[] {
   return DIVISIONS.filter((d) => d.factionId === factionId);
 }
 
-// Debug: log loaded data counts
-console.log(`Loaded ${UNITS.length} units, ${WEAPONS.length} weapons, and ${DIVISIONS.length} divisions from JSON`);
+// Debug: log loaded data counts (only in non-test environments)
+if (UNITS.length > 0 || WEAPONS.length > 0 || DIVISIONS.length > 0) {
+  console.log(`Loaded ${UNITS.length} units, ${WEAPONS.length} weapons, and ${DIVISIONS.length} divisions from JSON`);
+} else if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+  console.warn('dataLoader: Running in test environment - JSON data not loaded via import.meta.glob (this is expected)');
+}

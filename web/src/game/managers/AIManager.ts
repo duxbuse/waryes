@@ -45,6 +45,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
+import { UnitCommand } from '../units/Unit';
 import type { CaptureZone } from '../../data/types';
 import { VectorPool } from '../utils/VectorPool';
 import { gameRNG } from '../utils/DeterministicRNG';
@@ -125,10 +126,13 @@ export class AIManager {
 
   // Timing parameters based on difficulty
   private readonly decisionIntervals: Record<AIDifficulty, number> = {
-    easy: 4.0,    // 4 seconds between decisions (was 3)
-    medium: 2.0,  // 2 seconds (was 1.5)
-    hard: 1.0,    // 1 second (was 0.5)
+    easy: 15.0,    // 15 seconds - AI issues orders and waits for units to execute
+    medium: 10.0,  // 10 seconds - slightly more responsive
+    hard: 8.0,     // 8 seconds - most responsive, but still gives time to execute orders
   };
+
+  // CRITICAL PERFORMANCE: Limit decision-making to prevent frame rate drops
+  private readonly MAX_DECISIONS_PER_FRAME = 3; // Never make more than 3 decisions in a single frame
 
   // Strategic parameters
   private readonly engageRange = 80;
@@ -154,7 +158,9 @@ export class AIManager {
 
   // Strategic state
   private lastStrategicUpdate = 0;
-  private readonly strategicUpdateInterval = 4.0; // Update strategy every 4 seconds (was 2)
+  private readonly strategicUpdateInterval = 10.0; // Update strategy every 10 seconds (AI only needs to reassess occasionally)
+  private lastFlankingUpdate = 0;
+  private readonly flankingUpdateInterval = 20.0; // Update flanking opportunities every 20 seconds (expensive operation)
   private zoneAssessments: ZoneAssessment[] = [];
   private flankingOpportunities: FlankingOpportunity[] = [];
 
@@ -304,10 +310,66 @@ export class AIManager {
   }
 
   /**
+   * Initialize AI strategy at battle start
+   * Runs strategic assessment and assigns initial orders so AI units move immediately
+   */
+  initializeBattle(): void {
+    const currentTime = performance.now() / 1000;
+
+    console.log('[AIManager] Initializing battle strategy...');
+
+    // Force immediate cache update
+    this.updateCpuUnitsCache(currentTime);
+
+    if (this.cachedCpuUnits.length === 0) {
+      console.log('[AIManager] No CPU units to initialize');
+      return;
+    }
+
+    // Run strategic assessment immediately
+    this.updateStrategicAssessment();
+    this.allocateUnitsToObjectives();
+    this.lastStrategicUpdate = currentTime;
+
+    // Run flanking assessment
+    if (this.cachedCpuUnits[0]) {
+      this.updateFlankingOpportunities(this.cachedCpuUnits[0].team);
+      this.lastFlankingUpdate = currentTime;
+    }
+
+    // Initialize all AI unit states with staggered decision times
+    // This ensures they have orders queued and ready to execute
+    const decisionInterval = this.decisionIntervals[this.difficulty];
+    let staggerOffset = 0;
+
+    for (const unit of this.cachedCpuUnits) {
+      if (!unit || unit.health <= 0) continue;
+
+      // Create or get AI state
+      let state = this.aiStates.get(unit.id);
+      if (!state) {
+        state = this.createInitialState(unit);
+        this.aiStates.set(unit.id, state);
+      }
+
+      // Make initial decision for this unit with staggered timing
+      // Offset by 0.5 seconds per unit to spread decisions across first few seconds
+      state.lastDecisionTime = currentTime - decisionInterval + staggerOffset;
+      this.makeDecision(unit, state, currentTime);
+
+      staggerOffset += 0.5; // Stagger by 0.5 seconds
+      if (staggerOffset > decisionInterval) staggerOffset = 0; // Wrap around
+    }
+
+    console.log(`[AIManager] Initialized ${this.cachedCpuUnits.length} AI units with initial orders`);
+  }
+
+  /**
    * Update AI for all CPU-controlled units (enemy team + allied AI)
    */
   update(dt: number): void {
-    const currentTime = performance.now() / 1000;
+    const updateStart = performance.now();
+    const currentTime = updateStart / 1000;
 
     // OPTIMIZATION: Update CPU units cache periodically
     this.updateCpuUnitsCache(currentTime);
@@ -316,10 +378,28 @@ export class AIManager {
     if (this.cachedCpuUnits.length === 0) return;
 
     // Update strategic assessment periodically
+    let strategicTime = 0;
     if (currentTime - this.lastStrategicUpdate >= this.strategicUpdateInterval) {
+      const t0 = performance.now();
       this.updateStrategicAssessment();
+      const t1 = performance.now();
       this.allocateUnitsToObjectives();
+      const t2 = performance.now();
+      strategicTime = t2 - t0;
+      console.log(`[AI PROFILE] Strategic update: ${strategicTime.toFixed(1)}ms (assessment: ${(t1-t0).toFixed(1)}ms, allocation: ${(t2-t1).toFixed(1)}ms)`);
       this.lastStrategicUpdate = currentTime;
+    }
+
+    // Update flanking opportunities less frequently (expensive operation)
+    let flankingTime = 0;
+    if (currentTime - this.lastFlankingUpdate >= this.flankingUpdateInterval) {
+      if (this.cachedCpuUnits.length > 0 && this.cachedCpuUnits[0]) {
+        const t0 = performance.now();
+        this.updateFlankingOpportunities(this.cachedCpuUnits[0].team);
+        flankingTime = performance.now() - t0;
+        console.log(`[AI PROFILE] Flanking update: ${flankingTime.toFixed(1)}ms`);
+      }
+      this.lastFlankingUpdate = currentTime;
     }
 
     // OPTIMIZATION: Stagger AI updates - only process subset of units per frame
@@ -328,6 +408,10 @@ export class AIManager {
     // Use cached CPU units instead of filtering every frame
     const cpuUnits = this.cachedCpuUnits;
     const decisionInterval = this.decisionIntervals[this.difficulty];
+
+    let decisionsTime = 0;
+    let decisionsCount = 0;
+    const loopStart = performance.now();
 
     // Only process units whose index % throttle == current frame % throttle
     for (let i = 0; i < cpuUnits.length; i++) {
@@ -350,26 +434,46 @@ export class AIManager {
       this.checkEmergencySituations(unit, state, currentTime);
 
       // Check if it's time to make a decision
-      if (currentTime - state.lastDecisionTime >= decisionInterval) {
+      // CRITICAL PERFORMANCE: Two-layer throttling to maintain 60 FPS
+      // 1. Units have staggered decision times (randomized on creation)
+      // 2. Maximum 3 decisions per frame (prevents clustering)
+      // This spreads expensive operations (pathfinding, target selection) across frames
+      if (currentTime - state.lastDecisionTime >= decisionInterval && decisionsCount < this.MAX_DECISIONS_PER_FRAME) {
+        const t0 = performance.now();
         this.makeDecision(unit, state, currentTime);
+        decisionsTime += performance.now() - t0;
+        decisionsCount++;
         state.lastDecisionTime = currentTime;
       }
 
-      // Execute current behavior
+      // Execute current behavior (lightweight, just checks unit state)
       this.executeBehavior(unit, state, dt);
 
       // Update health tracking
       state.healthAtLastCheck = unit.health;
     }
+
+    const loopTime = performance.now() - loopStart;
+    const totalTime = performance.now() - updateStart;
+
+    if (totalTime > 10 || decisionsCount > 0) {
+      console.log(`[AI PROFILE] Total: ${totalTime.toFixed(1)}ms | Loop: ${loopTime.toFixed(1)}ms | Decisions: ${decisionsCount} (${decisionsTime.toFixed(1)}ms) | Units: ${cpuUnits.length}`);
+    }
   }
 
   private createInitialState(unit: Unit): AIUnitState {
+    // CRITICAL: Stagger initial decision times to spread load across frames
+    // Randomize within the decision interval so not all units decide at once
+    const decisionInterval = this.decisionIntervals[this.difficulty];
+    const currentTime = performance.now() / 1000;
+    const randomOffset = Math.random() * decisionInterval;
+
     return {
       behavior: 'idle',
       targetUnit: null,
       targetPosition: null,
       targetZone: null,
-      lastDecisionTime: 0,
+      lastDecisionTime: currentTime - randomOffset, // Offset so decisions spread over time
       lastDamageTime: 0,
       lastSmokeTime: 0,
       healthAtLastCheck: unit.health,
@@ -438,9 +542,6 @@ export class AIManager {
 
     // Sort by priority (highest first)
     this.zoneAssessments.sort((a, b) => b.priority - a.priority);
-
-    // Identify flanking opportunities for fast units
-    this.updateFlankingOpportunities(referenceUnit.team);
   }
 
   private assessThreat(friendlyUnits: readonly Unit[], enemyUnits: readonly Unit[], referenceUnit: Unit): ThreatAssessment {
@@ -583,6 +684,9 @@ export class AIManager {
     if (enemyPresence > friendlyPresence * 1.5) {
       priority -= 20; // Avoid heavily defended positions
     }
+
+    // Release pooled vector
+    VectorPool.release(zonePos);
 
     return {
       zone,
@@ -873,6 +977,9 @@ export class AIManager {
       }
     }
 
+    // Release pooled vector
+    VectorPool.release(zonePos);
+
     return selectedUnits;
   }
 
@@ -1015,6 +1122,8 @@ export class AIManager {
           state.targetZone = zone.zone;
         }
 
+        // Release pooled vector
+        VectorPool.release(zonePos);
         return;
       }
     }
@@ -1503,6 +1612,10 @@ export class AIManager {
 
         const finalWaitPos = new THREE.Vector3(waitPosition.x, waitPosition.y, waitPosition.z);
 
+        // Release pooled vectors
+        VectorPool.release(direction);
+        VectorPool.release(waitPosition);
+
         this.orderMove(unit, state, finalWaitPos);
         return;
       }
@@ -1578,6 +1691,12 @@ export class AIManager {
     const waypointY = this.game.getElevationAt(waypoint.x, waypoint.z);
     const result = new THREE.Vector3(waypoint.x, waypointY, waypoint.z);
 
+    // Release all pooled vectors
+    VectorPool.release(toEnemy);
+    VectorPool.release(perpendicular);
+    VectorPool.release(toFlank);
+    VectorPool.release(waypoint);
+
     return result;
   }
 
@@ -1636,6 +1755,9 @@ export class AIManager {
     const y = this.game.getElevationAt(adjustedPosition.x, adjustedPosition.z);
     adjustedPosition.y = y;
 
+    // Release pooled vector
+    VectorPool.release(direction);
+
     return adjustedPosition;
   }
 
@@ -1647,8 +1769,17 @@ export class AIManager {
     const adjustedPosition = this.calculateRoleBasedPosition(unit, position);
     state.targetPosition = adjustedPosition.clone();
 
-    // Issue move command
-    unit.setMoveCommand(adjustedPosition);
+    // PERFORMANCE: Use simple direct movement without pathfinding for AI
+    // Set up direct movement (straight line to target)
+    unit.commandQueue = [];
+    unit.currentCommand = { type: UnitCommand.Move, target: adjustedPosition.clone() };
+    unit.waypoints = [adjustedPosition.clone()]; // Direct path to target
+    unit.currentWaypointIndex = 0;
+    unit.targetPosition = adjustedPosition.clone();
+    unit.stuckTimer = 0;
+
+    // Skip pathfinding and path visualization for AI (performance)
+    // Units will navigate using separation/avoidance
   }
 
   private orderRetreat(unit: Unit, state: AIUnitState): void {
@@ -1692,7 +1823,11 @@ export class AIManager {
           nearestDistSq = distSq;
           nearest = zone;
         }
+        VectorPool.release(zonePos); // Release in loop
       }
+
+      // Release the initial zone position
+      VectorPool.release(zonePos0);
 
       const finalZoneY = this.game.getElevationAt(nearest.zone.x, nearest.zone.z);
       return new THREE.Vector3(nearest.zone.x, finalZoneY, nearest.zone.z);
@@ -1721,6 +1856,7 @@ export class AIManager {
           minDistSq = distSq;
           nearestZone = zone;
         }
+        VectorPool.release(centerPos); // Release in loop
       }
 
       const retreatX = (nearestZone.minX + nearestZone.maxX) / 2;
@@ -1737,6 +1873,10 @@ export class AIManager {
 
       // Must create new Vector3 since this persists in state
       const result = new THREE.Vector3(retreatPos.x, retreatPos.y, retreatPos.z);
+
+      // Release pooled vectors
+      VectorPool.release(awayDir);
+      VectorPool.release(retreatPos);
 
       return result;
     }
@@ -1807,27 +1947,29 @@ export class AIManager {
     const clusters: Unit[][] = [];
     const processed = new Set<string>();
 
-    // Find clusters using spatial proximity
+    // OPTIMIZATION: Use spatial query instead of O(n²) nested loop
     for (const unit of enemyUnits) {
       if (processed.has(unit.id)) continue;
 
-      // Find all nearby units
-      const nearbyUnits: Unit[] = [unit];
-      processed.add(unit.id);
+      // Use spatial query to find nearby units (O(1) with spatial hashing)
+      const nearbyUnits = this.game.unitManager.getUnitsInRadius(
+        unit.position,
+        clusterRadius,
+        unit.team === 'enemy' ? 'enemy' : 'player'
+      );
 
-      for (const other of enemyUnits) {
-        if (processed.has(other.id)) continue;
-
-        const distance = unit.position.distanceTo(other.position);
-        if (distance <= clusterRadius) {
-          nearbyUnits.push(other);
-          processed.add(other.id);
+      // Filter to only include enemy units not yet processed
+      const clusterUnits: Unit[] = [];
+      for (const nearby of nearbyUnits) {
+        if (!processed.has(nearby.id) && enemyUnits.includes(nearby)) {
+          clusterUnits.push(nearby);
+          processed.add(nearby.id);
         }
       }
 
       // Only consider groups of minClusterSize or more
-      if (nearbyUnits.length >= minClusterSize) {
-        clusters.push(nearbyUnits);
+      if (clusterUnits.length >= minClusterSize) {
+        clusters.push(clusterUnits);
       }
     }
 
@@ -1863,6 +2005,7 @@ export class AIManager {
       unitForward.set(0, 0, -1);
       unitForward.applyQuaternion(unit.mesh.quaternion);
       avgForward.add(unitForward);
+      VectorPool.release(unitForward); // Release immediately after use
     }
     avgForward.divideScalar(cluster.length);
     avgForward.normalize();
@@ -1895,6 +2038,14 @@ export class AIManager {
       center: center.clone(),
       frontLine: avgForward.clone(),
     };
+
+    // Release all pooled vectors
+    VectorPool.release(center);
+    VectorPool.release(avgForward);
+    VectorPool.release(leftFlankDir);
+    VectorPool.release(rightFlankDir);
+    VectorPool.release(leftPos);
+    VectorPool.release(rightPos);
 
     return result;
   }
@@ -1948,7 +2099,7 @@ export class AIManager {
     }> = [];
 
     // Get friendly and enemy units
-    const friendlyUnits = this.game.unitManager.getUnitsForTeam(aiTeam);
+    const friendlyUnits = this.game.unitManager.getAllUnits(aiTeam);
     const enemyUnits = this.game.unitManager
       .getAllUnits()
       .filter(u => u.team !== aiTeam && u.health > 0);
