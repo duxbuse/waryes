@@ -584,8 +584,6 @@ export class AIManager {
       priority -= 20; // Avoid heavily defended positions
     }
 
-    VectorPool.release(zonePos);
-
     return {
       zone,
       priority,
@@ -875,7 +873,6 @@ export class AIManager {
       }
     }
 
-    VectorPool.release(zonePos);
     return selectedUnits;
   }
 
@@ -1018,7 +1015,6 @@ export class AIManager {
           state.targetZone = zone.zone;
         }
 
-        VectorPool.release(zonePos);
         return;
       }
     }
@@ -1507,9 +1503,6 @@ export class AIManager {
 
         const finalWaitPos = new THREE.Vector3(waitPosition.x, waitPosition.y, waitPosition.z);
 
-        VectorPool.release(direction);
-        VectorPool.release(waitPosition);
-
         this.orderMove(unit, state, finalWaitPos);
         return;
       }
@@ -1585,12 +1578,6 @@ export class AIManager {
     const waypointY = this.game.getElevationAt(waypoint.x, waypoint.z);
     const result = new THREE.Vector3(waypoint.x, waypointY, waypoint.z);
 
-    // Release pooled vectors
-    VectorPool.release(toEnemy);
-    VectorPool.release(perpendicular);
-    VectorPool.release(toFlank);
-    VectorPool.release(waypoint);
-
     return result;
   }
 
@@ -1637,7 +1624,6 @@ export class AIManager {
     }
     // Default: Use objective position
     else {
-      VectorPool.release(direction);
       return objectivePosition.clone();
     }
 
@@ -1649,9 +1635,6 @@ export class AIManager {
     // Clamp to terrain height
     const y = this.game.getElevationAt(adjustedPosition.x, adjustedPosition.z);
     adjustedPosition.y = y;
-
-    // Clean up pooled vector
-    VectorPool.release(direction);
 
     return adjustedPosition;
   }
@@ -1709,10 +1692,7 @@ export class AIManager {
           nearestDistSq = distSq;
           nearest = zone;
         }
-        VectorPool.release(zonePos);
       }
-
-      VectorPool.release(zonePos0);
 
       const finalZoneY = this.game.getElevationAt(nearest.zone.x, nearest.zone.z);
       return new THREE.Vector3(nearest.zone.x, finalZoneY, nearest.zone.z);
@@ -1741,7 +1721,6 @@ export class AIManager {
           minDistSq = distSq;
           nearestZone = zone;
         }
-        VectorPool.release(centerPos);
       }
 
       const retreatX = (nearestZone.minX + nearestZone.maxX) / 2;
@@ -1758,9 +1737,6 @@ export class AIManager {
 
       // Must create new Vector3 since this persists in state
       const result = new THREE.Vector3(retreatPos.x, retreatPos.y, retreatPos.z);
-
-      VectorPool.release(awayDir);
-      VectorPool.release(retreatPos);
 
       return result;
     }
@@ -1887,7 +1863,6 @@ export class AIManager {
       unitForward.set(0, 0, -1);
       unitForward.applyQuaternion(unit.mesh.quaternion);
       avgForward.add(unitForward);
-      VectorPool.release(unitForward);
     }
     avgForward.divideScalar(cluster.length);
     avgForward.normalize();
@@ -1920,14 +1895,6 @@ export class AIManager {
       center: center.clone(),
       frontLine: avgForward.clone(),
     };
-
-    // Release all pooled vectors
-    VectorPool.release(center);
-    VectorPool.release(avgForward);
-    VectorPool.release(leftFlankDir);
-    VectorPool.release(rightFlankDir);
-    VectorPool.release(leftPos);
-    VectorPool.release(rightPos);
 
     return result;
   }
@@ -2021,14 +1988,11 @@ export class AIManager {
       }
 
       // Distance factor: closer clusters are higher priority
-      const avgDistance = VectorPool.acquire();
-      avgDistance.copy(flankPositions.center);
       let minDistance = Infinity;
       for (const flanker of availableFlankers) {
         const dist = flanker.position.distanceTo(flankPositions.center);
         if (dist < minDistance) minDistance = dist;
       }
-      VectorPool.release(avgDistance);
 
       // Closer is better (inverse distance bonus, max 30 points)
       if (minDistance < 200) {
