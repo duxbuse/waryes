@@ -23,6 +23,13 @@ class VectorPoolClass {
     return vector.set(0, 0, 0);
   }
 
+  release(vector: THREE.Vector3): void {
+    // Simple implementation: no-op for now
+    // The pool is reset in bulk at the start of each frame
+    // This method exists for API compatibility and future optimization
+    void vector;
+  }
+
   reset(): void {
     this.index = 0;
   }

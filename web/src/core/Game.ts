@@ -453,6 +453,10 @@ export class Game {
   private fixedUpdate(dt: number): void {
     if (this._isPaused) return;
 
+    // CRITICAL PERFORMANCE: Reset pathfinding budget at start of each frame
+    // This prevents pathfinding from consuming entire frame budget
+    this.pathfindingManager.resetFrameBudget();
+
     if (this._phase === GamePhase.Battle) {
       const t0 = performance.now();
       this.unitManager.fixedUpdate(dt);
@@ -1110,6 +1114,10 @@ export class Game {
 
     // Clear pre-order path visualizations (dashed lines)
     this.pathRenderer?.clearAllPreOrderPaths();
+
+    // Initialize AI strategy and queue initial movements
+    // This ensures AI units have orders ready and begin moving immediately
+    this.aiManager.initializeBattle();
 
     // Start battle
     console.log('[Game] Starting battle...');

@@ -14,6 +14,7 @@ import type { Unit } from '../units/Unit';
 import * as THREE from 'three';
 
 import { opticsToNumber } from '../../data/types';
+import { VectorPool } from '../utils/VectorPool';
 
 export enum VisibilityState {
   Unexplored = 0,  // Never seen (black)
@@ -46,6 +47,13 @@ export class FogOfWarManager {
   private visionUpdateFrameCounter = 0;
   private readonly VISION_UPDATE_THROTTLE = 20; // Update 1/20th of units per frame (more aggressive)
 
+  // CRITICAL PERFORMANCE: Frame budget to prevent frame rate collapse
+  private visionUpdatesThisFrame = 0;
+  private readonly MAX_VISION_UPDATES_PER_FRAME = 3; // Max 3 units update vision per frame (~10-15ms total)
+
+  // Track which units own which vision cells for efficient clearing
+  private unitVisionCells = new Map<string, Set<string>>(); // unitId -> set of cell keys
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -57,7 +65,9 @@ export class FogOfWarManager {
     this.currentVision.clear();
     this.exploredGrid.clear();
     this.lastUnitPositions.clear();
+    this.unitVisionCells.clear();
     this.blockingGrid = null;
+    this.visionUpdatesThisFrame = 0;
   }
 
   /**
@@ -78,8 +88,12 @@ export class FogOfWarManager {
     // Clear current vision and rebuild completely
     this.currentVision.clear();
     this.lastUnitPositions.clear();
+    this.unitVisionCells.clear();
 
-    // Update vision for all units immediately (no throttling)
+    // Reset frame budget for forced update
+    this.visionUpdatesThisFrame = 0;
+
+    // Update vision for all units immediately (no throttling or budget for forced update)
     for (const unit of allUnits) {
       if (unit.health <= 0) continue;
 
@@ -102,6 +116,9 @@ export class FogOfWarManager {
   update(dt: number): void {
     if (!this.enabled) return;
 
+    // CRITICAL PERFORMANCE: Reset frame budget
+    this.visionUpdatesThisFrame = 0;
+
     // Initialize or update blocking grid if needed
     if (!this.blockingGrid && this.game.currentMap) {
       this.initializeBlockingGrid();
@@ -120,6 +137,7 @@ export class FogOfWarManager {
     // Track which units moved significantly for incremental optimization
     let anyUnitMoved = false;
     const currentUnitIds = new Set<string>();
+    const unitsToUpdate: Unit[] = []; // Units that need vision updates
 
     for (const unit of allUnits) {
       if (unit.health <= 0) continue;
@@ -130,6 +148,7 @@ export class FogOfWarManager {
         // New unit - track position and mark as moved
         this.lastUnitPositions.set(unit.id, unit.position.clone());
         anyUnitMoved = true;
+        unitsToUpdate.push(unit);
       } else {
         // Check if unit moved significantly
         const distSq = lastPos.distanceToSquared(unit.position);
@@ -137,14 +156,17 @@ export class FogOfWarManager {
           // Unit moved - update tracked position
           lastPos.copy(unit.position);
           anyUnitMoved = true;
+          unitsToUpdate.push(unit);
         }
       }
     }
 
-    // Clean up dead/removed units from position tracking
+    // Clean up dead/removed units from position tracking and vision
     for (const trackedId of this.lastUnitPositions.keys()) {
       if (!currentUnitIds.has(trackedId)) {
         this.lastUnitPositions.delete(trackedId);
+        // Clear vision cells for removed unit
+        this.clearVisionForUnit(trackedId);
         anyUnitMoved = true; // Need to recalculate since a unit is gone
       }
     }
@@ -157,22 +179,26 @@ export class FogOfWarManager {
       return;
     }
 
-    // Clear current vision and rebuild (full update when any unit moved)
-    this.currentVision.clear();
-
-    // OPTIMIZATION: Throttle vision updates - only process 1/THROTTLE of units per frame
-    // This spreads expensive LOS calculations across multiple frames
+    // OPTIMIZATION: Throttle vision updates with frame budget
+    // Only update units that moved, up to budget limit
     this.visionUpdateFrameCounter++;
     const currentBatch = this.visionUpdateFrameCounter % this.VISION_UPDATE_THROTTLE;
 
-    // Update vision for each unit's team (throttled)
+    // Update vision for moved units (with budget and throttle)
     let unitIndex = 0;
-    for (const unit of allUnits) {
-      if (unit.health <= 0) continue;
+    for (const unit of unitsToUpdate) {
+      // CRITICAL PERFORMANCE: Check frame budget
+      if (this.visionUpdatesThisFrame >= this.MAX_VISION_UPDATES_PER_FRAME) {
+        break; // Budget exhausted - defer remaining updates to next frame
+      }
 
       // Only update units in current batch (staggered across frames)
       if (unitIndex % this.VISION_UPDATE_THROTTLE === currentBatch) {
+        // Clear old vision for this unit
+        this.clearVisionForUnit(unit.id);
+        // Update new vision
         this.updateVisionForUnit(unit);
+        this.visionUpdatesThisFrame++;
       }
       unitIndex++;
     }
@@ -364,6 +390,24 @@ export class FogOfWarManager {
   }
 
   /**
+   * Clear vision cells for a specific unit
+   */
+  private clearVisionForUnit(unitId: string): void {
+    const cellsToRemove = this.unitVisionCells.get(unitId);
+    if (!cellsToRemove) return;
+
+    // Remove cells from all team vision maps
+    for (const teamVision of this.currentVision.values()) {
+      for (const key of cellsToRemove) {
+        teamVision.delete(key);
+      }
+    }
+
+    // Clear the tracking
+    cellsToRemove.clear();
+  }
+
+  /**
    * Update vision around a unit
    */
   private updateVisionForUnit(unit: Unit): void {
@@ -376,6 +420,13 @@ export class FogOfWarManager {
       this.currentVision.set(team, new Map());
     }
     const teamVision = this.currentVision.get(team)!;
+
+    // Track which cells this unit reveals
+    let unitCells = this.unitVisionCells.get(unit.id);
+    if (!unitCells) {
+      unitCells = new Set<string>();
+      this.unitVisionCells.set(unit.id, unitCells);
+    }
 
     // Mark cells within vision radius as visible
     const cellRadius = Math.ceil(visionRadius / this.cellSize);
@@ -396,18 +447,28 @@ export class FogOfWarManager {
           if (dist < 60) {
             // Close cells are automatically visible (no LOS check needed)
             teamVision.set(key, true);
+            unitCells.add(key);
             if (team === 'player') {
               this.exploredGrid.set(key, true);
             }
           } else {
             // Only do expensive LOS check for distant cells
-            const startPos = unitPos.clone();
+            // OPTIMIZATION: Use VectorPool to avoid GC pressure
+            const startPos = VectorPool.acquire();
+            startPos.copy(unitPos);
             startPos.y += 2;
-            const targetPos = new THREE.Vector3(worldX, 0, worldZ);
-            targetPos.y = this.getTerrainHeight(worldX, worldZ) + 2;
 
-            if (!this.isLOSBlocked(startPos, targetPos)) {
+            const targetPos = VectorPool.acquire();
+            targetPos.set(worldX, this.getTerrainHeight(worldX, worldZ) + 2, worldZ);
+
+            const blocked = this.isLOSBlocked(startPos, targetPos);
+
+            VectorPool.release(startPos);
+            VectorPool.release(targetPos);
+
+            if (!blocked) {
               teamVision.set(key, true);
+              unitCells.add(key);
               if (team === 'player') {
                 this.exploredGrid.set(key, true);
               }

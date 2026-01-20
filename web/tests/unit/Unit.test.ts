@@ -22,39 +22,11 @@ const createMockGame = () => ({
     remove: vi.fn(),
   },
   pathfindingManager: {
-    findPath: vi.fn().mockReturnValue([]),
-    findNearestReachablePosition: vi.fn().mockReturnValue(null),
+    findPath: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+    findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
   },
-  buildingManager: {
-    findNearestBuilding: vi.fn().mockReturnValue(null),
-    hasCapacity: vi.fn().mockReturnValue(false),
-    tryGarrison: vi.fn().mockReturnValue(false),
-    ungarrison: vi.fn().mockReturnValue(null),
-    spawnDefensiveStructure: vi.fn().mockReturnValue(null),
-  },
-  transportManager: {
-    tryMount: vi.fn().mockReturnValue(false),
-    unloadAll: vi.fn().mockReturnValue([]),
-  },
-  fogOfWarManager: {
-    isEnabled: vi.fn().mockReturnValue(false),
-    isVisible: vi.fn().mockReturnValue(true),
-  },
-  visualEffectsManager: {
-    createDestructionEffect: vi.fn(),
-  },
-  audioManager: {
-    playSound: vi.fn(),
-  },
-  pathRenderer: {
-    updatePath: vi.fn(),
-    clearPath: vi.fn(),
-  },
-  currentMap: null,
   getElevationAt: vi.fn().mockReturnValue(0),
-}) as unknown as Game;
-
-let mockGame: Game;
+} as unknown as Game;
 
 const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
   const config: UnitConfig = {
