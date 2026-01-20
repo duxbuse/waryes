@@ -64,7 +64,9 @@
       "unitId": "sdf_trooper",
       "maxCards": 8,
       "transportOptions": [
-        "sdf_centurion_apc"
+        "sdf_centurion_apc",
+        "sdf_armored_transport",
+        "sdf_transport_truck"
       ],
       "availability": {
         "trained": 12,
@@ -78,7 +80,9 @@
       "unitId": "sdf_militia",
       "maxCards": 4,
       "transportOptions": [
-        "sdf_centurion_apc"
+        "sdf_centurion_apc",
+        "sdf_armored_transport",
+        "sdf_transport_truck"
       ],
       "availability": {
         "trained": 18,
@@ -92,7 +96,9 @@
       "unitId": "sdf_hwt_missile",
       "maxCards": 3,
       "transportOptions": [
-        "sdf_centurion_apc"
+        "sdf_centurion_apc",
+        "sdf_armored_transport",
+        "sdf_transport_truck"
       ],
       "availability": {
         "trained": 12,
@@ -106,7 +112,9 @@
       "unitId": "sdf_hwt_heavy_bolter",
       "maxCards": 3,
       "transportOptions": [
-        "sdf_centurion_apc"
+        "sdf_centurion_apc",
+        "sdf_armored_transport",
+        "sdf_transport_truck"
       ],
       "availability": {
         "trained": 12,
@@ -114,6 +122,42 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_centurion_apc",
+      "maxCards": 4,
+      "notes": "Armed IFV with laser and autocannon",
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_armored_transport",
+      "maxCards": 5,
+      "notes": "Fast armored APC",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_transport_truck",
+      "maxCards": 6,
+      "notes": "Cheap unarmored transport",
+      "availability": {
+        "trained": 16,
+        "legend": 0,
+        "rookie": 24,
+        "elite": 0,
+        "veteran": 12
       }
     },
     {
