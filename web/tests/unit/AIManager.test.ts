@@ -8,6 +8,7 @@ import { AIManager } from '../../src/game/managers/AIManager';
 import type { Game } from '../../src/core/Game';
 import type { Unit } from '../../src/game/units/Unit';
 import type { UnitData, WeaponData } from '../../src/data/types';
+import { setGameSeed, getGameRNGState } from '../../src/game/utils/DeterministicRNG';
 
 // Mock weapon data
 const mockWeapon: WeaponData = {
@@ -284,6 +285,153 @@ describe('AIManager - Group Composition Analysis', () => {
       expect(composition.maxWeaponRange).toBe(100); // AT weapon range
       expect(composition.antiArmorCapability).toBeGreaterThan(0);
       expect(composition.antiInfantryCapability).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Deterministic Behavior', () => {
+    it('should produce identical decisions with the same random seed', () => {
+      // Setup: Create multiple enemy units for AI to choose from
+      const enemies = [
+        createMockUnit('INF'),
+        createMockUnit('TNK'),
+        createMockUnit('REC'),
+        createMockUnit('AA'),
+        createMockUnit('ART'),
+      ];
+
+      // Position them at different locations
+      enemies[0]!.position.set(10, 0, 10);
+      enemies[1]!.position.set(20, 0, 20);
+      enemies[2]!.position.set(30, 0, 30);
+      enemies[3]!.position.set(40, 0, 40);
+      enemies[4]!.position.set(50, 0, 50);
+
+      const aiUnit = createMockUnit('INF');
+      aiUnit.team = 'enemy';
+      aiUnit.position.set(0, 0, 0);
+
+      // Mock unit manager to return these units
+      const mockUnitManager = {
+        getAllUnits: vi.fn().mockReturnValue([aiUnit, ...enemies]),
+        getUnitsInRadius: vi.fn((pos: THREE.Vector3, radius: number, team?: number) => {
+          // Return enemies within radius
+          return enemies.filter(e => e.position.distanceTo(pos) <= radius);
+        }),
+        getUnitsForTeam: vi.fn((team: number) => {
+          return team === aiUnit.team ? [aiUnit] : enemies;
+        }),
+      };
+
+      const testGame = {
+        ...mockGame,
+        unitManager: mockUnitManager,
+        fogOfWarManager: null,
+        economyManager: {
+          getCaptureZones: vi.fn().mockReturnValue([]),
+        },
+        getElevationAt: vi.fn().mockReturnValue(0),
+        currentMap: null,
+      } as unknown as Game;
+
+      // Create AI manager with easy difficulty (uses random decision making)
+      const testAI = new AIManager(testGame);
+      testAI.initialize('easy');
+
+      // Test 1: Run with seed 12345
+      setGameSeed(12345);
+      const stateAfterFirstRun = getGameRNGState();
+      const decisions1: string[] = [];
+
+      // Simulate AI making decisions for 5 iterations
+      for (let i = 0; i < 5; i++) {
+        // Get the private method using type assertion
+        const aiManagerAny = testAI as any;
+        const target = aiManagerAny.selectBestTarget(aiUnit, 100);
+        decisions1.push(target ? target.id : 'none');
+      }
+
+      // Test 2: Reset seed and run again
+      setGameSeed(12345);
+      const stateAfterSecondSeed = getGameRNGState();
+      const decisions2: string[] = [];
+
+      // Same iterations
+      for (let i = 0; i < 5; i++) {
+        const aiManagerAny = testAI as any;
+        const target = aiManagerAny.selectBestTarget(aiUnit, 100);
+        decisions2.push(target ? target.id : 'none');
+      }
+
+      // Verify: Same seed should produce identical RNG state
+      expect(stateAfterFirstRun).toBe(stateAfterSecondSeed);
+
+      // Verify: Same seed should produce identical decisions
+      expect(decisions1).toEqual(decisions2);
+      expect(decisions1.length).toBe(5);
+      expect(decisions2.length).toBe(5);
+
+      // Additional verification: Different seed should produce different results
+      setGameSeed(99999);
+      const decisions3: string[] = [];
+
+      for (let i = 0; i < 5; i++) {
+        const aiManagerAny = testAI as any;
+        const target = aiManagerAny.selectBestTarget(aiUnit, 100);
+        decisions3.push(target ? target.id : 'none');
+      }
+
+      // With easy AI (30% random mistakes), different seed should produce different results
+      // Note: There's a small chance this could be the same, but statistically unlikely
+      const isDifferent = decisions3.some((decision, i) => decision !== decisions1[i]);
+      expect(isDifferent).toBe(true);
+    });
+
+    it('should use gameRNG for random decisions', () => {
+      // This test verifies that AI uses gameRNG, not Math.random()
+      // We can verify this by checking that RNG state changes after AI decisions
+
+      const enemy = createMockUnit('INF');
+      enemy.position.set(10, 0, 10);
+
+      const aiUnit = createMockUnit('INF');
+      aiUnit.team = 'enemy';
+      aiUnit.position.set(0, 0, 0);
+
+      const mockUnitManager = {
+        getAllUnits: vi.fn().mockReturnValue([aiUnit, enemy]),
+        getUnitsInRadius: vi.fn(() => [enemy]),
+        getUnitsForTeam: vi.fn((team: number) => {
+          return team === aiUnit.team ? [aiUnit] : [enemy];
+        }),
+      };
+
+      const testGame = {
+        ...mockGame,
+        unitManager: mockUnitManager,
+        fogOfWarManager: null,
+        economyManager: {
+          getCaptureZones: vi.fn().mockReturnValue([]),
+        },
+      } as unknown as Game;
+
+      const testAI = new AIManager(testGame);
+      testAI.initialize('easy');
+
+      // Set seed and record initial state
+      setGameSeed(54321);
+      const initialState = getGameRNGState();
+
+      // Make AI decision (on easy difficulty, has 30% chance to make random choice)
+      const aiManagerAny = testAI as any;
+
+      // Call multiple times to ensure RNG is used
+      for (let i = 0; i < 10; i++) {
+        aiManagerAny.selectBestTarget(aiUnit, 100);
+      }
+
+      // RNG state should have changed (proving gameRNG was used)
+      const finalState = getGameRNGState();
+      expect(finalState).not.toBe(initialState);
     });
   });
 });
