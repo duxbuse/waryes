@@ -584,6 +584,8 @@ export class AIManager {
       priority -= 20; // Avoid heavily defended positions
     }
 
+    VectorPool.release(zonePos);
+
     return {
       zone,
       priority,
@@ -1015,6 +1017,8 @@ export class AIManager {
           this.orderMove(unit, state, zonePos);
           state.targetZone = zone.zone;
         }
+
+        VectorPool.release(zonePos);
         return;
       }
     }
@@ -1705,7 +1709,10 @@ export class AIManager {
           nearestDistSq = distSq;
           nearest = zone;
         }
+        VectorPool.release(zonePos);
       }
+
+      VectorPool.release(zonePos0);
 
       const finalZoneY = this.game.getElevationAt(nearest.zone.x, nearest.zone.z);
       return new THREE.Vector3(nearest.zone.x, finalZoneY, nearest.zone.z);
@@ -1734,6 +1741,7 @@ export class AIManager {
           minDistSq = distSq;
           nearestZone = zone;
         }
+        VectorPool.release(centerPos);
       }
 
       const retreatX = (nearestZone.minX + nearestZone.maxX) / 2;
@@ -1747,8 +1755,14 @@ export class AIManager {
     if (nearestEnemy) {
       const awayDir = VectorPool.acquire().copy(unit.position).sub(nearestEnemy.position).normalize();
       const retreatPos = VectorPool.acquire().copy(unit.position).add(awayDir.multiplyScalar(50));
+
       // Must create new Vector3 since this persists in state
-      return new THREE.Vector3(retreatPos.x, retreatPos.y, retreatPos.z);
+      const result = new THREE.Vector3(retreatPos.x, retreatPos.y, retreatPos.z);
+
+      VectorPool.release(awayDir);
+      VectorPool.release(retreatPos);
+
+      return result;
     }
 
     return null;
