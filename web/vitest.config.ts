@@ -6,8 +6,14 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Exclude Bun-specific tests (jsonSchema.test.ts uses bun:test)
+    exclude: ['tests/jsonSchema.test.ts', 'node_modules/**'],
     // Use single threaded mode for compatibility with bun
     fileParallelism: false,
+    // Verbose reporter for clear test output
+    reporters: ['verbose'],
+    // Test timeout (10 seconds - no individual test should exceed this)
+    testTimeout: 10000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

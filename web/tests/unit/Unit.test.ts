@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { Unit, UnitCommand, type UnitConfig } from '../../src/game/units/Unit';
 import type { Game } from '../../src/core/Game';
 
-// Mock the Game class
-const mockGame = {
+// Mock the Game class with all required managers
+const createMockGame = () => ({
   unitManager: {
     destroyUnit: vi.fn(),
     getAllUnits: vi.fn().mockReturnValue([]),
@@ -46,6 +46,7 @@ const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
 describe('Unit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGame = createMockGame();
   });
 
   describe('initialization', () => {
@@ -177,6 +178,11 @@ describe('Unit', () => {
         position: new THREE.Vector3(0, 0, 0),
         speed: 10,
       });
+
+      // Mock pathfinding to return a direct path to target
+      (mockGame.pathfindingManager.findPath as ReturnType<typeof vi.fn>).mockReturnValue([
+        new THREE.Vector3(100, 0, 0),
+      ]);
 
       unit.setFrozen(false);
       unit.setMoveCommand(new THREE.Vector3(100, 0, 0));
