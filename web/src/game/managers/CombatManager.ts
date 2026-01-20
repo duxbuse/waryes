@@ -89,7 +89,8 @@ export class CombatManager {
   fireWeapon(
     attacker: Unit,
     target: Unit,
-    weaponId: string
+    weaponId: string,
+    weaponIndex?: number
   ): void {
     const weapon = getWeaponById(weaponId);
     if (!weapon) return;
@@ -123,7 +124,7 @@ export class CombatManager {
     // Roll for hit (deterministic)
     if (gameRNG.next() > hitChance) {
       // Miss - create tracer anyway for visual
-      this.createProjectile(attacker, target, weapon, false, distance);
+      this.createProjectile(attacker, target, weapon, false, distance, weaponIndex ?? 0);
       // Create muzzle flash and sound
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
@@ -132,7 +133,7 @@ export class CombatManager {
     }
 
     // Hit - create projectile with kinetic scaling
-    this.createProjectile(attacker, target, weapon, true, distance);
+    this.createProjectile(attacker, target, weapon, true, distance, weaponIndex ?? 0);
     // Create muzzle flash and sound
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
@@ -144,7 +145,8 @@ export class CombatManager {
     target: Unit,
     weaponData: WeaponData,
     willHit: boolean,
-    firingDistance: number
+    firingDistance: number,
+    weaponIndex: number
   ): void {
     const id = `proj_${this.nextProjectileId++}`;
 
@@ -195,6 +197,8 @@ export class CombatManager {
       willHit ? weaponData.suppression : weaponData.suppression * 0.5,
       attacker.team,
       willHit ? target : undefined,
+      attacker,
+      weaponIndex,
       maxTime,
       weaponData,
       material
@@ -242,20 +246,26 @@ export class CombatManager {
 
     // Apply damage
     if (result.damage > 0) {
-      // Register attack for kill attribution (find attacker by team)
-      const attackers = this.game.unitManager.getAllUnits(proj.sourceTeam);
-      if (attackers.length > 0) {
-        // Find closest attacker as the likely shooter
-        let closest = attackers[0]!;
-        let closestDist = closest.position.distanceTo(proj.start);
-        for (const attacker of attackers) {
-          const dist = attacker.position.distanceTo(proj.start);
-          if (dist < closestDist) {
-            closest = attacker;
-            closestDist = dist;
+      // Register attack for kill attribution and track damage per weapon
+      if (proj.attackerUnit) {
+        this.game.unitManager.registerAttack(proj.attackerUnit, proj.targetUnit);
+        // Track damage dealt by this weapon
+        proj.attackerUnit.addWeaponDamage(proj.weaponIndex, result.damage);
+      } else {
+        // Fallback: find closest attacker by team (for backward compatibility)
+        const attackers = this.game.unitManager.getAllUnits(proj.sourceTeam);
+        if (attackers.length > 0) {
+          let closest = attackers[0]!;
+          let closestDist = closest.position.distanceTo(proj.start);
+          for (const attacker of attackers) {
+            const dist = attacker.position.distanceTo(proj.start);
+            if (dist < closestDist) {
+              closest = attacker;
+              closestDist = dist;
+            }
           }
+          this.game.unitManager.registerAttack(closest, proj.targetUnit);
         }
-        this.game.unitManager.registerAttack(closest, proj.targetUnit);
       }
       proj.targetUnit.takeDamage(result.damage);
 
@@ -387,15 +397,21 @@ export class CombatManager {
 
       // Engage target if we have one
       if (unit.combatTarget) {
-        // Check if can fire (rate of fire cooldown)
-        if (unit.canFire()) {
-          // Fire all weapons
-          for (const weaponSlot of unit.getWeapons()) {
+        // Fire each weapon independently based on its cooldown
+        const weapons = unit.getWeapons();
+        for (let weaponIndex = 0; weaponIndex < weapons.length; weaponIndex++) {
+          const weaponSlot = weapons[weaponIndex];
+          if (!weaponSlot) continue;
+
+          // Check if this specific weapon can fire
+          if (unit.canWeaponFire(weaponIndex)) {
+            // Fire all instances of this weapon
             for (let i = 0; i < weaponSlot.count; i++) {
-              this.fireWeapon(unit, unit.combatTarget, weaponSlot.weaponId);
+              this.fireWeapon(unit, unit.combatTarget, weaponSlot.weaponId, weaponIndex);
             }
+            // Reset cooldown for this specific weapon
+            unit.resetWeaponCooldown(weaponIndex, weaponSlot.weaponId);
           }
-          unit.resetFireCooldown();
         }
       }
     }

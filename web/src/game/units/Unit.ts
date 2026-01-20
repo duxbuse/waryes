@@ -73,7 +73,8 @@ export class Unit {
   // Combat
   private weapons: WeaponSlot[] = [];
   private weaponAmmo: number[] = []; // Current ammo per weapon slot (index matches weapons array)
-  private fireCooldown: number = 0;
+  private weaponCooldowns: number[] = []; // Current cooldown per weapon slot (index matches weapons array)
+  private weaponDamageDealt: number[] = []; // Total damage dealt per weapon slot (index matches weapons array)
   private fireRate: number = 1; // shots per second base (mutable for veterancy)
 
   // Kill tracking
@@ -175,6 +176,8 @@ export class Unit {
 
     // Initialize weapon ammo from weapon slots
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
+    this.weaponDamageDealt = this.weapons.map(() => 0);
 
     // Apply veterancy bonuses
     this.applyVeterancyBonuses();
@@ -392,12 +395,73 @@ export class Unit {
     return maxRange || 20; // Default range
   }
 
+  /**
+   * Check if ANY weapon can fire (wrapper for backward compatibility)
+   */
   canFire(): boolean {
-    return this.fireCooldown <= 0 && !this._isRouting && this._suppression < 80;
+    if (this._isRouting || this._suppression >= 80) return false;
+    // Check if any weapon has cooled down
+    for (let i = 0; i < this.weaponCooldowns.length; i++) {
+      if (this.weaponCooldowns[i] <= 0) return true;
+    }
+    return false;
   }
 
+  /**
+   * Reset fire cooldown for all weapons (legacy method for backward compatibility)
+   * @deprecated Use resetWeaponCooldown(weaponIndex, weaponId) instead
+   */
   resetFireCooldown(): void {
-    this.fireCooldown = 1 / this.fireRate;
+    // Reset all weapon cooldowns based on their individual rates of fire
+    for (let i = 0; i < this.weapons.length; i++) {
+      const weapon = getWeaponById(this.weapons[i]!.weaponId);
+      if (weapon && weapon.rateOfFire > 0) {
+        this.weaponCooldowns[i] = 60 / weapon.rateOfFire;
+      }
+    }
+  }
+
+  // Per-weapon cooldown management
+  /**
+   * Get current cooldown for a weapon slot
+   */
+  getWeaponCooldown(weaponIndex: number): number {
+    return this.weaponCooldowns[weaponIndex] ?? 0;
+  }
+
+  /**
+   * Check if a specific weapon can fire (checks cooldown, routing, suppression)
+   */
+  canWeaponFire(weaponIndex: number): boolean {
+    const cooldown = this.weaponCooldowns[weaponIndex] ?? 0;
+    return cooldown <= 0 && !this._isRouting && this._suppression < 80;
+  }
+
+  /**
+   * Reset cooldown for a specific weapon based on its rate of fire
+   */
+  resetWeaponCooldown(weaponIndex: number, weaponId: string): void {
+    const weapon = getWeaponById(weaponId);
+    if (weapon && weapon.rateOfFire > 0) {
+      // Convert rate of fire (rounds per minute) to cooldown (seconds)
+      this.weaponCooldowns[weaponIndex] = 60 / weapon.rateOfFire;
+    }
+  }
+
+  /**
+   * Get total damage dealt by a weapon slot
+   */
+  getWeaponDamageDealt(weaponIndex: number): number {
+    return this.weaponDamageDealt[weaponIndex] ?? 0;
+  }
+
+  /**
+   * Add damage to a weapon's damage tracking
+   */
+  addWeaponDamage(weaponIndex: number, damage: number): void {
+    if (weaponIndex >= 0 && weaponIndex < this.weaponDamageDealt.length) {
+      this.weaponDamageDealt[weaponIndex] += damage;
+    }
   }
 
   // Weapon ammunition management
@@ -447,6 +511,7 @@ export class Unit {
    */
   resupplyAllWeapons(): void {
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
   }
 
   /**
@@ -1072,9 +1137,11 @@ export class Unit {
   fixedUpdate(dt: number): void {
     if (this._isFrozen) return;
 
-    // Update fire cooldown
-    if (this.fireCooldown > 0) {
-      this.fireCooldown -= dt;
+    // Update weapon cooldowns
+    for (let i = 0; i < this.weaponCooldowns.length; i++) {
+      if (this.weaponCooldowns[i] > 0) {
+        this.weaponCooldowns[i] -= dt;
+      }
     }
 
     // Recover suppression over time (with veterancy bonus)
@@ -1648,7 +1715,7 @@ export class Unit {
 
     // Move towards target if out of range
     const distance = this.mesh.position.distanceTo(target.position);
-    const attackRange = 20; // TODO: Get from weapon data
+    const attackRange = this.getMaxWeaponRange();
 
     if (distance > attackRange) {
       // Move closer
