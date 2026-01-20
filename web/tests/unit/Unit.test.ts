@@ -7,11 +7,12 @@ import * as THREE from 'three';
 import { Unit, UnitCommand, type UnitConfig } from '../../src/game/units/Unit';
 import type { Game } from '../../src/core/Game';
 
-// Mock the Game class
-const mockGame = {
+// Mock the Game class with all required managers
+const createMockGame = () => ({
   unitManager: {
     destroyUnit: vi.fn(),
     getAllUnits: vi.fn().mockReturnValue([]),
+    getUnitsInRadius: vi.fn().mockReturnValue([]),
   },
   selectionManager: {
     removeFromSelection: vi.fn(),
@@ -20,7 +21,40 @@ const mockGame = {
     add: vi.fn(),
     remove: vi.fn(),
   },
-} as unknown as Game;
+  pathfindingManager: {
+    findPath: vi.fn().mockReturnValue([]),
+    findNearestReachablePosition: vi.fn().mockReturnValue(null),
+  },
+  buildingManager: {
+    findNearestBuilding: vi.fn().mockReturnValue(null),
+    hasCapacity: vi.fn().mockReturnValue(false),
+    tryGarrison: vi.fn().mockReturnValue(false),
+    ungarrison: vi.fn().mockReturnValue(null),
+    spawnDefensiveStructure: vi.fn().mockReturnValue(null),
+  },
+  transportManager: {
+    tryMount: vi.fn().mockReturnValue(false),
+    unloadAll: vi.fn().mockReturnValue([]),
+  },
+  fogOfWarManager: {
+    isEnabled: vi.fn().mockReturnValue(false),
+    isVisible: vi.fn().mockReturnValue(true),
+  },
+  visualEffectsManager: {
+    createDestructionEffect: vi.fn(),
+  },
+  audioManager: {
+    playSound: vi.fn(),
+  },
+  pathRenderer: {
+    updatePath: vi.fn(),
+    clearPath: vi.fn(),
+  },
+  currentMap: null,
+  getElevationAt: vi.fn().mockReturnValue(0),
+}) as unknown as Game;
+
+let mockGame: Game;
 
 const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
   const config: UnitConfig = {
@@ -40,6 +74,7 @@ const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
 describe('Unit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGame = createMockGame();
   });
 
   describe('initialization', () => {
@@ -171,6 +206,11 @@ describe('Unit', () => {
         position: new THREE.Vector3(0, 0, 0),
         speed: 10,
       });
+
+      // Mock pathfinding to return a direct path to target
+      (mockGame.pathfindingManager.findPath as ReturnType<typeof vi.fn>).mockReturnValue([
+        new THREE.Vector3(100, 0, 0),
+      ]);
 
       unit.setFrozen(false);
       unit.setMoveCommand(new THREE.Vector3(100, 0, 0));

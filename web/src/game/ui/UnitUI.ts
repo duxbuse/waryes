@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import type { Unit } from '../units/Unit';
+import { type Unit, UnitCommand } from '../units/Unit';
 import type { Game } from '../../core/Game';
 import { getWeaponById } from '../../data/factions';
 
@@ -32,6 +32,17 @@ export class UnitUI {
   private suppressedIcon: THREE.Mesh | null = null;
   private garrisonedIcon: THREE.Mesh | null = null;
   private mountedIcon: THREE.Mesh | null = null;
+
+  // Order icon meshes (current command)
+  private orderIconsGroup: THREE.Group;
+  private moveIcon: THREE.Mesh | null = null;
+  private attackIcon: THREE.Mesh | null = null;
+  private holdIcon: THREE.Mesh | null = null;
+  private fastMoveIcon: THREE.Mesh | null = null;
+  private reverseIcon: THREE.Mesh | null = null;
+  private attackMoveIcon: THREE.Mesh | null = null;
+  private garrisonIcon: THREE.Mesh | null = null;
+  private mountIcon: THREE.Mesh | null = null;
 
   // Ground ring indicators (positioned around unit on ground, not billboarded)
   private groundRingsGroup: THREE.Group | null = null;
@@ -74,6 +85,11 @@ export class UnitUI {
     this.statusIcons.position.y = 0.6;
     this.container.add(this.statusIcons);
 
+    // Create order icons container (above status icons, same Y as veterancy stars)
+    this.orderIconsGroup = new THREE.Group();
+    this.orderIconsGroup.position.y = 0.5; // Same Y as veterancy stars
+    this.container.add(this.orderIconsGroup);
+
     // Create bars (skip if using batched renderer)
     const useBatchedRenderer = options?.useBatchedRenderer ?? false;
     if (!useBatchedRenderer) {
@@ -86,6 +102,9 @@ export class UnitUI {
 
     // Create status icons
     this.createStatusIcons();
+
+    // Create order icons
+    this.createOrderIcons();
 
     // Create ground ring indicators (aim + weapon reloads)
     this.createGroundRings();
@@ -109,6 +128,7 @@ export class UnitUI {
     });
     this.healthBarBg = new THREE.Mesh(bgGeometry, bgMaterial);
     this.healthBarBg.renderOrder = 1000;
+    this.healthBarBg.visible = true; // Explicitly visible
     this.container.add(this.healthBarBg);
 
     // Foreground (colored based on health %)
@@ -123,6 +143,7 @@ export class UnitUI {
     this.healthBarFg = new THREE.Mesh(fgGeometry, fgMaterial);
     this.healthBarFg.position.z = 0.01; // Slightly in front
     this.healthBarFg.renderOrder = 1001;
+    this.healthBarFg.visible = true; // Explicitly visible
     this.container.add(this.healthBarFg);
   }
 
@@ -141,6 +162,7 @@ export class UnitUI {
     this.moraleBarBg = new THREE.Mesh(bgGeometry, bgMaterial);
     this.moraleBarBg.position.y = yOffset;
     this.moraleBarBg.renderOrder = 1000;
+    this.moraleBarBg.visible = true; // Explicitly visible
     this.container.add(this.moraleBarBg);
 
     // Foreground (blue)
@@ -156,6 +178,7 @@ export class UnitUI {
     this.moraleBarFg.position.y = yOffset;
     this.moraleBarFg.position.z = 0.01; // Slightly in front
     this.moraleBarFg.renderOrder = 1001;
+    this.moraleBarFg.visible = true; // Explicitly visible
     this.container.add(this.moraleBarFg);
   }
 
@@ -240,6 +263,138 @@ export class UnitUI {
     this.mountedIcon.renderOrder = 1002;
     this.mountedIcon.visible = false;
     this.statusIcons.add(this.mountedIcon);
+  }
+
+  private createOrderIcons(): void {
+    const iconSize = 0.35;
+
+    // Move icon (blue circle with arrow)
+    const moveGeometry = new THREE.CircleGeometry(iconSize, 16);
+    const moveMaterial = new THREE.MeshBasicMaterial({
+      color: 0x4a9eff, // Blue
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.moveIcon = new THREE.Mesh(moveGeometry, moveMaterial);
+    this.moveIcon.renderOrder = 1003;
+    this.moveIcon.visible = false;
+    this.orderIconsGroup.add(this.moveIcon);
+
+    // Attack icon (red triangle pointing up)
+    const attackShape = new THREE.Shape();
+    attackShape.moveTo(0, iconSize);
+    attackShape.lineTo(-iconSize * 0.866, -iconSize * 0.5);
+    attackShape.lineTo(iconSize * 0.866, -iconSize * 0.5);
+    attackShape.lineTo(0, iconSize);
+    const attackGeometry = new THREE.ShapeGeometry(attackShape);
+    const attackMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff3333, // Red
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.attackIcon = new THREE.Mesh(attackGeometry, attackMaterial);
+    this.attackIcon.renderOrder = 1003;
+    this.attackIcon.visible = false;
+    this.orderIconsGroup.add(this.attackIcon);
+
+    // Hold icon (yellow square)
+    const holdGeometry = new THREE.PlaneGeometry(iconSize * 1.5, iconSize * 1.5);
+    const holdMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffdd00, // Yellow
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.holdIcon = new THREE.Mesh(holdGeometry, holdMaterial);
+    this.holdIcon.renderOrder = 1003;
+    this.holdIcon.visible = false;
+    this.orderIconsGroup.add(this.holdIcon);
+
+    // Fast move icon (cyan/light blue circle)
+    const fastMoveGeometry = new THREE.CircleGeometry(iconSize, 16);
+    const fastMoveMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ffff, // Cyan
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.fastMoveIcon = new THREE.Mesh(fastMoveGeometry, fastMoveMaterial);
+    this.fastMoveIcon.renderOrder = 1003;
+    this.fastMoveIcon.visible = false;
+    this.orderIconsGroup.add(this.fastMoveIcon);
+
+    // Reverse icon (orange triangle pointing down)
+    const reverseShape = new THREE.Shape();
+    reverseShape.moveTo(0, -iconSize);
+    reverseShape.lineTo(-iconSize * 0.866, iconSize * 0.5);
+    reverseShape.lineTo(iconSize * 0.866, iconSize * 0.5);
+    reverseShape.lineTo(0, -iconSize);
+    const reverseGeometry = new THREE.ShapeGeometry(reverseShape);
+    const reverseMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff8800, // Orange
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.reverseIcon = new THREE.Mesh(reverseGeometry, reverseMaterial);
+    this.reverseIcon.renderOrder = 1003;
+    this.reverseIcon.visible = false;
+    this.orderIconsGroup.add(this.reverseIcon);
+
+    // Attack-move icon (purple diamond)
+    const attackMoveShape = new THREE.Shape();
+    attackMoveShape.moveTo(0, iconSize);
+    attackMoveShape.lineTo(iconSize, 0);
+    attackMoveShape.lineTo(0, -iconSize);
+    attackMoveShape.lineTo(-iconSize, 0);
+    attackMoveShape.lineTo(0, iconSize);
+    const attackMoveGeometry = new THREE.ShapeGeometry(attackMoveShape);
+    const attackMoveMaterial = new THREE.MeshBasicMaterial({
+      color: 0xaa33ff, // Purple
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.attackMoveIcon = new THREE.Mesh(attackMoveGeometry, attackMoveMaterial);
+    this.attackMoveIcon.renderOrder = 1003;
+    this.attackMoveIcon.visible = false;
+    this.orderIconsGroup.add(this.attackMoveIcon);
+
+    // Garrison icon (orange/brown square representing building)
+    const garrisonGeometry = new THREE.PlaneGeometry(iconSize * 1.3, iconSize * 1.3);
+    const garrisonMaterial = new THREE.MeshBasicMaterial({
+      color: 0xcc6600, // Brown/Orange
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.garrisonIcon = new THREE.Mesh(garrisonGeometry, garrisonMaterial);
+    this.garrisonIcon.renderOrder = 1003;
+    this.garrisonIcon.visible = false;
+    this.orderIconsGroup.add(this.garrisonIcon);
+
+    // Mount icon (green circle representing transport)
+    const mountGeometry = new THREE.CircleGeometry(iconSize, 16);
+    const mountMaterial = new THREE.MeshBasicMaterial({
+      color: 0x33ff33, // Green
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    });
+    this.mountIcon = new THREE.Mesh(mountGeometry, mountMaterial);
+    this.mountIcon.renderOrder = 1003;
+    this.mountIcon.visible = false;
+    this.orderIconsGroup.add(this.mountIcon);
   }
 
   /**
@@ -421,6 +576,55 @@ export class UnitUI {
   }
 
   /**
+   * Update order icon visibility based on current command
+   */
+  private updateOrderIconsVisibility(): void {
+    // Get unit's current command
+    const currentCommand = (this.unit as any).currentCommand;
+
+    // Hide all order icons first
+    if (this.moveIcon) this.moveIcon.visible = false;
+    if (this.attackIcon) this.attackIcon.visible = false;
+    if (this.holdIcon) this.holdIcon.visible = false;
+    if (this.fastMoveIcon) this.fastMoveIcon.visible = false;
+    if (this.reverseIcon) this.reverseIcon.visible = false;
+    if (this.attackMoveIcon) this.attackMoveIcon.visible = false;
+    if (this.garrisonIcon) this.garrisonIcon.visible = false;
+    if (this.mountIcon) this.mountIcon.visible = false;
+
+    // Show icon based on current command type
+    if (currentCommand) {
+      switch (currentCommand.type) {
+        case UnitCommand.Move:
+          if (this.moveIcon) this.moveIcon.visible = true;
+          break;
+        case UnitCommand.Attack:
+          if (this.attackIcon) this.attackIcon.visible = true;
+          break;
+        case UnitCommand.FastMove:
+          if (this.fastMoveIcon) this.fastMoveIcon.visible = true;
+          break;
+        case UnitCommand.Reverse:
+          if (this.reverseIcon) this.reverseIcon.visible = true;
+          break;
+        case UnitCommand.AttackMove:
+          if (this.attackMoveIcon) this.attackMoveIcon.visible = true;
+          break;
+        case UnitCommand.Garrison:
+          if (this.garrisonIcon) this.garrisonIcon.visible = true;
+          break;
+        case UnitCommand.Mount:
+          if (this.mountIcon) this.mountIcon.visible = true;
+          break;
+        case UnitCommand.None:
+        default:
+          // No icon shown for None or unknown commands
+          break;
+      }
+    }
+  }
+
+  /**
    * Update all ground ring indicators (aim + weapon reloads)
    */
   private updateGroundRingIndicators(): void {
@@ -506,7 +710,11 @@ export class UnitUI {
     canvas.height = 128;
     const context = canvas.getContext('2d');
 
-    if (!context) return;
+    if (!context) {
+      console.warn('UnitUI: Failed to get 2D canvas context for category icon');
+      this.categoryIcon = null;
+      return;
+    }
 
     // Background circle with team/owner color
     const colorHex = this.unit.getUnitColor();
@@ -592,34 +800,41 @@ export class UnitUI {
       this.mountedIcon.visible = this.unit.isMounted;
     }
 
+    // Update order icon visibility based on current command
+    this.updateOrderIconsVisibility();
+
     // Update ground ring indicators
     this.updateGroundRingIndicators();
 
-    // Update category icon visibility based on tactical view
-    if (this.categoryIcon) {
-      const isTacticalView = this.game.cameraController.isTacticalView;
-      this.categoryIcon.visible = isTacticalView;
+    // Update tactical view visibility (independent of categoryIcon existence)
+    const isTacticalView = this.game.cameraController?.isTacticalView ?? false;
 
-      // Hide detailed UI elements in tactical view
-      if (isTacticalView) {
-        if (this.healthBarBg) this.healthBarBg.visible = false;
-        if (this.healthBarFg) this.healthBarFg.visible = false;
-        if (this.moraleBarBg) this.moraleBarBg.visible = false;
-        if (this.moraleBarFg) this.moraleBarFg.visible = false;
-        this.statusIcons.visible = false;
-        if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
-        for (const star of this.veterancyStars) {
-          star.visible = false;
-        }
-      } else {
-        if (this.healthBarBg) this.healthBarBg.visible = true;
-        if (this.healthBarFg) this.healthBarFg.visible = true;
-        if (this.moraleBarBg) this.moraleBarBg.visible = true;
-        if (this.moraleBarFg) this.moraleBarFg.visible = true;
-        this.statusIcons.visible = true;
-        if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
-        // Other indicators remain dynamically controlled
+    // Update category icon visibility
+    if (this.categoryIcon) {
+      this.categoryIcon.visible = isTacticalView;
+    }
+
+    // Hide detailed UI elements in tactical view, show in normal view
+    if (isTacticalView) {
+      if (this.healthBarBg) this.healthBarBg.visible = false;
+      if (this.healthBarFg) this.healthBarFg.visible = false;
+      if (this.moraleBarBg) this.moraleBarBg.visible = false;
+      if (this.moraleBarFg) this.moraleBarFg.visible = false;
+      this.statusIcons.visible = false;
+      this.orderIconsGroup.visible = false;
+      if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
+      for (const star of this.veterancyStars) {
+        star.visible = false;
       }
+    } else {
+      if (this.healthBarBg) this.healthBarBg.visible = true;
+      if (this.healthBarFg) this.healthBarFg.visible = true;
+      if (this.moraleBarBg) this.moraleBarBg.visible = true;
+      if (this.moraleBarFg) this.moraleBarFg.visible = true;
+      this.statusIcons.visible = true;
+      this.orderIconsGroup.visible = true;
+      if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
+      // Other indicators remain dynamically controlled
     }
 
     // Billboard effect - always face camera (independent of unit rotation)
@@ -679,6 +894,40 @@ export class UnitUI {
     if (this.mountedIcon) {
       this.mountedIcon.geometry.dispose();
       (this.mountedIcon.material as THREE.Material).dispose();
+    }
+
+    // Clean up order icons
+    if (this.moveIcon) {
+      this.moveIcon.geometry.dispose();
+      (this.moveIcon.material as THREE.Material).dispose();
+    }
+    if (this.attackIcon) {
+      this.attackIcon.geometry.dispose();
+      (this.attackIcon.material as THREE.Material).dispose();
+    }
+    if (this.holdIcon) {
+      this.holdIcon.geometry.dispose();
+      (this.holdIcon.material as THREE.Material).dispose();
+    }
+    if (this.fastMoveIcon) {
+      this.fastMoveIcon.geometry.dispose();
+      (this.fastMoveIcon.material as THREE.Material).dispose();
+    }
+    if (this.reverseIcon) {
+      this.reverseIcon.geometry.dispose();
+      (this.reverseIcon.material as THREE.Material).dispose();
+    }
+    if (this.attackMoveIcon) {
+      this.attackMoveIcon.geometry.dispose();
+      (this.attackMoveIcon.material as THREE.Material).dispose();
+    }
+    if (this.garrisonIcon) {
+      this.garrisonIcon.geometry.dispose();
+      (this.garrisonIcon.material as THREE.Material).dispose();
+    }
+    if (this.mountIcon) {
+      this.mountIcon.geometry.dispose();
+      (this.mountIcon.material as THREE.Material).dispose();
     }
 
     // Clean up ground ring indicators

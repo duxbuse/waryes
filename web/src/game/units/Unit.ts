@@ -225,8 +225,7 @@ export class Unit {
     this.mesh.add(this.selectionRing);
 
     // Create UI (health bars, morale bars)
-    // Use batched renderer for better performance
-    this.unitUI = new UnitUI(this, game, { useBatchedRenderer: true });
+    this.unitUI = new UnitUI(this, game);
 
     // Initialize scan timer with random offset to stagger updates across units (deterministic)
     this.targetScanTimer = gameRNG.next() * 1.0;
@@ -601,7 +600,7 @@ export class Unit {
     // Recreate UI to show new veterancy stars
     if (this.unitUI) {
       this.unitUI.destroy();
-      this.unitUI = new UnitUI(this, this.game, { useBatchedRenderer: true });
+      this.unitUI = new UnitUI(this, this.game);
     }
 
     const rankName = this.veterancy === 1 ? 'Hardened' : 'Elite';
@@ -694,6 +693,48 @@ export class Unit {
     this.targetPosition = null;
   }
 
+  /**
+   * Build full command queue for path visualization
+   * Includes current command + all queued commands
+   */
+  private buildFullCommandQueue(): Array<{ type: string; target?: THREE.Vector3 }> {
+    const fullQueue: Array<{ type: string; target?: THREE.Vector3 }> = [];
+
+    // Add current command if it has a target or targetUnit
+    if (this.currentCommand.type !== UnitCommand.None) {
+      if (this.currentCommand.target) {
+        fullQueue.push({
+          type: this.currentCommand.type,
+          target: this.currentCommand.target
+        });
+      } else if (this.currentCommand.targetUnit) {
+        // Convert targetUnit to position for visualization
+        fullQueue.push({
+          type: this.currentCommand.type,
+          target: this.currentCommand.targetUnit.position.clone()
+        });
+      }
+    }
+
+    // Add all queued commands with targets or targetUnits
+    for (const cmd of this.commandQueue) {
+      if (cmd.target) {
+        fullQueue.push({
+          type: cmd.type,
+          target: cmd.target
+        });
+      } else if (cmd.targetUnit) {
+        // Convert targetUnit to position for visualization
+        fullQueue.push({
+          type: cmd.type,
+          target: cmd.targetUnit.position.clone()
+        });
+      }
+    }
+
+    return fullQueue;
+  }
+
   // Movement commands
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
@@ -738,7 +779,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'move');
     }
@@ -749,6 +790,12 @@ export class Unit {
       this.setMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Move, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -757,7 +804,8 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Attack, targetUnit: target };
 
-    // Update path visualization (show path to target unit)
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
+    // For attack commands, we convert targetUnit to target position for visualization
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target.position, 'attack');
     }
@@ -768,6 +816,12 @@ export class Unit {
       this.setAttackCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Attack, targetUnit: target });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -812,7 +866,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'fast');
     }
@@ -823,6 +877,12 @@ export class Unit {
       this.setFastMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.FastMove, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -867,7 +927,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'reverse');
     }
@@ -878,6 +938,12 @@ export class Unit {
       this.setReverseCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Reverse, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -922,7 +988,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'attackMove');
     }
@@ -933,6 +999,12 @@ export class Unit {
       this.setAttackMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.AttackMove, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -943,7 +1015,7 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Garrison, target: buildingPos };
     this.targetPosition = buildingPos;
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, buildingPos, 'garrison');
     }
@@ -1010,7 +1082,7 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Mount, target: transportPos, targetUnit: transport };
     this.targetPosition = transportPos;
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, transportPos, 'mount');
     }
