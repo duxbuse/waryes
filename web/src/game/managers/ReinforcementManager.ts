@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
-import type { EntryPoint } from '../../data/types';
+import type { EntryPoint, QueuedReinforcement } from '../../data/types';
 
 export class ReinforcementManager {
   private readonly game: Game;
@@ -22,6 +22,13 @@ export class ReinforcementManager {
   // UI elements
   private reinforcementPanel: HTMLElement | null = null;
   private entryPointButtons: Map<string, HTMLButtonElement> = new Map();
+
+  // Waiting for destination click
+  private pendingUnitType: string | null = null;
+  private waitingForDestination = false;
+
+  // Path preview visualization
+  private previewPath: THREE.Line | null = null;
 
   constructor(game: Game) {
     this.game = game;
@@ -183,6 +190,7 @@ export class ReinforcementManager {
 
   /**
    * Queue a unit for spawning at selected entry point
+   * Enters waiting mode for destination click
    */
   queueUnit(unitType: string): boolean {
     if (!this.selectedEntryPoint) {
@@ -190,12 +198,202 @@ export class ReinforcementManager {
       return false;
     }
 
-    // Add to queue
-    this.selectedEntryPoint.queue.push(unitType);
-    console.log(`Queued ${unitType} at ${this.selectedEntryPoint.type} entry`);
+    // Enter waiting mode for destination click
+    this.pendingUnitType = unitType;
+    this.waitingForDestination = true;
+
+    console.log(`[REINFORCE] Waiting for destination click for ${unitType}. Use movement modifiers (A/R/F) before clicking.`);
+
+    // Hide panels to show the map
+    this.hide();
+    this.game.deploymentManager.hide();
+
+    return true;
+  }
+
+  /**
+   * Handle destination click for pending reinforcement
+   */
+  handleDestinationClick(worldPos: THREE.Vector3): void {
+    if (!this.waitingForDestination || !this.pendingUnitType || !this.selectedEntryPoint) {
+      return;
+    }
+
+    // Get movement modifiers from input manager
+    const movementMods = this.game.inputManager.movementModifiers;
+    let moveType: 'normal' | 'attack' | 'reverse' | 'fast' | null = 'normal';
+
+    if (movementMods.attackMove) {
+      moveType = 'attack';
+    } else if (movementMods.reverse) {
+      moveType = 'reverse';
+    } else if (movementMods.fast) {
+      moveType = 'fast';
+    }
+
+    // Add to queue with command
+    const reinforcement: QueuedReinforcement = {
+      unitType: this.pendingUnitType,
+      destination: { x: worldPos.x, z: worldPos.z },
+      moveType,
+    };
+
+    this.selectedEntryPoint.queue.push(reinforcement);
+
+    console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+
+    // Clear waiting state
+    this.pendingUnitType = null;
+    this.waitingForDestination = false;
+    this.clearPreviewPath();
+
+    this.updateUI();
+  }
+
+  /**
+   * Cancel waiting for destination
+   */
+  cancelDestinationWait(): void {
+    if (this.waitingForDestination) {
+      console.log('[REINFORCE] Cancelled destination wait');
+      this.pendingUnitType = null;
+      this.waitingForDestination = false;
+      this.clearPreviewPath();
+    }
+  }
+
+  /**
+   * Check if waiting for destination click
+   */
+  isWaitingForDestination(): boolean {
+    return this.waitingForDestination;
+  }
+
+  /**
+   * Find the closest player resupply point to a world position
+   */
+  findClosestResupplyPoint(worldPos: THREE.Vector3): EntryPoint | null {
+    if (this.entryPoints.length === 0) {
+      return null;
+    }
+
+    let closest: EntryPoint | null = null;
+    let closestDist = Infinity;
+
+    for (const ep of this.entryPoints) {
+      const dx = ep.x - worldPos.x;
+      const dz = ep.z - worldPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = ep;
+      }
+    }
+
+    return closest;
+  }
+
+  /**
+   * Queue a unit at a specific resupply point with destination
+   */
+  queueUnitAtResupplyPoint(
+    resupplyPointId: string,
+    unitType: string,
+    destination: { x: number; z: number } | null,
+    moveType: 'normal' | 'attack' | 'reverse' | 'fast' | null
+  ): boolean {
+    const ep = this.entryPoints.find(e => e.id === resupplyPointId);
+    if (!ep) {
+      console.warn(`[REINFORCE] Resupply point ${resupplyPointId} not found`);
+      return false;
+    }
+
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination,
+      moveType,
+    };
+
+    ep.queue.push(reinforcement);
+    console.log(`[REINFORCE] Queued ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
 
     this.updateUI();
     return true;
+  }
+
+  /**
+   * Update preview path from resupply point to mouse cursor
+   * Legacy method for old workflow
+   */
+  updatePreviewPath(mouseWorldPos: THREE.Vector3): void {
+    if (!this.waitingForDestination || !this.selectedEntryPoint) {
+      return;
+    }
+    this.updatePreviewPathFromPoint(this.selectedEntryPoint, mouseWorldPos);
+  }
+
+  /**
+   * Update preview path from a specific entry point to mouse cursor
+   */
+  updatePreviewPathFromPoint(entryPoint: EntryPoint, mouseWorldPos: THREE.Vector3): void {
+    // Remove old preview path
+    if (this.previewPath) {
+      this.game.scene.remove(this.previewPath);
+      this.previewPath.geometry.dispose();
+      (this.previewPath.material as THREE.Material).dispose();
+      this.previewPath = null;
+    }
+
+    // Get movement modifier color
+    const movementMods = this.game.inputManager.movementModifiers;
+    let color = 0x00ff00; // Default green for normal move
+    if (movementMods.attackMove) {
+      color = 0xff8800; // Orange for attack-move
+    } else if (movementMods.reverse) {
+      color = 0x00aaff; // Blue for reverse
+    } else if (movementMods.fast) {
+      color = 0x00ff88; // Cyan for fast move
+    }
+
+    // Create line from entry point to mouse position
+    const startPos = new THREE.Vector3(
+      entryPoint.x,
+      this.game.getElevationAt(entryPoint.x, entryPoint.z) + 0.5,
+      entryPoint.z
+    );
+    const endPos = new THREE.Vector3(
+      mouseWorldPos.x,
+      this.game.getElevationAt(mouseWorldPos.x, mouseWorldPos.z) + 0.5,
+      mouseWorldPos.z
+    );
+
+    const points = [startPos, endPos];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.6,
+      linewidth: 2,
+      depthWrite: false,
+      depthTest: true,
+    });
+
+    this.previewPath = new THREE.Line(geometry, material);
+    this.previewPath.renderOrder = 100; // Render on top
+    this.game.scene.add(this.previewPath);
+  }
+
+  /**
+   * Clear preview path visualization
+   */
+  clearPreviewPath(): void {
+    if (this.previewPath) {
+      this.game.scene.remove(this.previewPath);
+      this.previewPath.geometry.dispose();
+      (this.previewPath.material as THREE.Material).dispose();
+      this.previewPath = null;
+    }
   }
 
   /**
@@ -253,8 +451,8 @@ export class ReinforcementManager {
    * Spawn a unit from entry point queue
    */
   private spawnUnitFromQueue(ep: EntryPoint): void {
-    const unitType = ep.queue.shift();
-    if (!unitType) return;
+    const reinforcement = ep.queue.shift();
+    if (!reinforcement) return;
 
     // Spawn unit at entry point
     const spawnPos = new THREE.Vector3(ep.x, 0, ep.z);
@@ -262,25 +460,45 @@ export class ReinforcementManager {
     const unit = this.game.unitManager.spawnUnit({
       position: spawnPos,
       team: 'player',
-      unitType,
+      unitType: reinforcement.unitType,
     });
 
-    // Give spawned units 3 seconds of spawn protection
-    unit.setSpawnProtection(3);
-
-    console.log(`Spawned ${unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) with 3s spawn protection`);
+    console.log(`Spawned ${reinforcement.unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) - vulnerable immediately`);
 
     // Mark unit as no longer deployed in deployment manager so it can be called again
     const deck = this.game.deploymentManager.getDeck();
     if (deck) {
-      const du = this.game.deploymentManager['deployableUnits']?.find((u: {unitData: {id: string}}) => u.unitData.id === unitType);
+      const du = this.game.deploymentManager['deployableUnits']?.find((u: {unitData: {id: string}}) => u.unitData.id === reinforcement.unitType);
       if (du) {
         du.deployed = false;
       }
     }
 
-    // If rally point is set, move unit there automatically
-    if (ep.rallyPoint) {
+    // Apply movement command if destination was set
+    if (reinforcement.destination) {
+      const destPos = new THREE.Vector3(reinforcement.destination.x, 0, reinforcement.destination.z);
+
+      switch (reinforcement.moveType) {
+        case 'attack':
+          unit.setAttackMoveCommand(destPos);
+          console.log(`Unit auto-attack-moving to (${reinforcement.destination.x.toFixed(0)}, ${reinforcement.destination.z.toFixed(0)})`);
+          break;
+        case 'reverse':
+          unit.setReverseCommand(destPos);
+          console.log(`Unit auto-reversing to (${reinforcement.destination.x.toFixed(0)}, ${reinforcement.destination.z.toFixed(0)})`);
+          break;
+        case 'fast':
+          unit.setFastMoveCommand(destPos);
+          console.log(`Unit auto-fast-moving to (${reinforcement.destination.x.toFixed(0)}, ${reinforcement.destination.z.toFixed(0)})`);
+          break;
+        default:
+          unit.setMoveCommand(destPos);
+          console.log(`Unit auto-moving to (${reinforcement.destination.x.toFixed(0)}, ${reinforcement.destination.z.toFixed(0)})`);
+          break;
+      }
+    }
+    // Fallback to old rally point system if no destination was set
+    else if (ep.rallyPoint) {
       const rallyPos = new THREE.Vector3(ep.rallyPoint.x, 0, ep.rallyPoint.z);
       unit.setMoveCommand(rallyPos);
       console.log(`Unit auto-moving to rally point at (${ep.rallyPoint.x.toFixed(0)}, ${ep.rallyPoint.z.toFixed(0)})`);
@@ -346,8 +564,13 @@ export class ReinforcementManager {
       return false;
     }
 
-    // Add to queue
-    bestEntry.queue.push(unitType);
+    // Add to queue with no destination (will use rally point if set)
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination: null,
+      moveType: null,
+    };
+    bestEntry.queue.push(reinforcement);
     console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
 
     this.updateUI();

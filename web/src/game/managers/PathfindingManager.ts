@@ -23,7 +23,7 @@ interface PathNode {
 
 export class PathfindingManager {
   private readonly game: Game;
-  private navGrid: boolean[][] = []; // true = passable, false = blocked
+  private navGrid: number[][] = []; // Cost grid: 1.0 = normal, 2-5 = high cost, Infinity = impassable
   private gridSize = 4; // meters per grid cell
   private mapWidth = 0;
   private mapHeight = 0;
@@ -59,96 +59,188 @@ export class PathfindingManager {
     this.gridWidth = Math.ceil(this.mapWidth / this.gridSize);
     this.gridHeight = Math.ceil(this.mapHeight / this.gridSize);
 
-    // Initialize grid as all passable
+    // Initialize grid with default cost (1.0 = normal passable)
     this.navGrid = [];
     for (let z = 0; z < this.gridHeight; z++) {
       this.navGrid[z] = [];
       for (let x = 0; x < this.gridWidth; x++) {
-        this.navGrid[z]![x] = true;
+        this.navGrid[z]![x] = 1.0;
       }
     }
 
-    // Mark impassable areas based on terrain
+    // Calculate terrain costs based on slope and obstacles
     this.buildNavigationGrid();
   }
 
   /**
    * Build navigation grid by analyzing terrain
+   * Uses cost-based system with obstacle inflation to prevent stuck units
    */
   private buildNavigationGrid(): void {
     let passableCount = 0;
     let blockedCount = 0;
+    let highCostCount = 0;
 
+    // Step 1: Calculate base costs for each cell
     for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
       for (let gridX = 0; gridX < this.gridWidth; gridX++) {
         const worldX = (gridX * this.gridSize) - this.mapWidth / 2;
         const worldZ = (gridZ * this.gridSize) - this.mapHeight / 2;
 
-        // Check if this cell is passable
-        const passable = this.isCellPassable(worldX, worldZ);
-        this.navGrid[gridZ]![gridX] = passable;
+        // Get cell cost (1.0 = passable, Infinity = impassable, 2-5 = high cost)
+        const cost = this.getCellCost(worldX, worldZ);
+        this.navGrid[gridZ]![gridX] = cost;
 
-        if (passable) {
-          passableCount++;
-        } else {
+        if (cost === Infinity) {
           blockedCount++;
+        } else if (cost > 1.0) {
+          highCostCount++;
+        } else {
+          passableCount++;
+        }
+      }
+    }
+
+    // Step 2: Inflate obstacles - mark adjacent cells as high cost
+    // This prevents units from pathing too close to impassable terrain
+    const inflatedGrid = this.inflateObstacles();
+    this.navGrid = inflatedGrid;
+
+    // Recalculate stats after inflation
+    passableCount = 0;
+    blockedCount = 0;
+    highCostCount = 0;
+    for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
+      for (let gridX = 0; gridX < this.gridWidth; gridX++) {
+        const cost = this.navGrid[gridZ]![gridX]!;
+        if (cost === Infinity) {
+          blockedCount++;
+        } else if (cost > 1.0) {
+          highCostCount++;
+        } else {
+          passableCount++;
         }
       }
     }
 
     const totalCells = this.gridWidth * this.gridHeight;
     const passablePercent = ((passableCount / totalCells) * 100).toFixed(1);
-    console.log(`[PathfindingManager] Navigation grid built: ${passableCount}/${totalCells} cells passable (${passablePercent}%)`);
+    const highCostPercent = ((highCostCount / totalCells) * 100).toFixed(1);
+    console.log(`[PathfindingManager] Navigation grid built: ${passableCount}/${totalCells} normal (${passablePercent}%), ${highCostCount} high-cost (${highCostPercent}%), ${blockedCount} blocked`);
   }
 
   /**
-   * Check if a world position is passable
+   * Inflate obstacles by marking adjacent cells as high cost
+   * This creates a "danger zone" that pathfinding avoids unless necessary
    */
-  private isCellPassable(worldX: number, worldZ: number): boolean {
-    // Check terrain height and slope
-    const height = this.game.getElevationAt(worldX, worldZ);
+  private inflateObstacles(): number[][] {
+    const inflated: number[][] = [];
 
-    // Check slope in cardinal directions only (diagonal checks were too strict)
+    // Copy existing grid
+    for (let z = 0; z < this.gridHeight; z++) {
+      inflated[z] = [];
+      for (let x = 0; x < this.gridWidth; x++) {
+        inflated[z]![x] = this.navGrid[z]![x]!;
+      }
+    }
+
+    // Inflate around impassable cells
+    for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
+      for (let gridX = 0; gridX < this.gridWidth; gridX++) {
+        const cost = this.navGrid[gridZ]![gridX]!;
+
+        // If this cell is impassable, inflate neighbors
+        if (cost === Infinity) {
+          // Check 8 neighbors + 2-cell radius for graduated cost
+          for (let dz = -2; dz <= 2; dz++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              if (dx === 0 && dz === 0) continue; // Skip center
+
+              const nx = gridX + dx;
+              const nz = gridZ + dz;
+
+              // Check bounds
+              if (nx < 0 || nx >= this.gridWidth || nz < 0 || nz >= this.gridHeight) continue;
+
+              const neighborCost = inflated[nz]![nx]!;
+
+              // Don't inflate already-impassable cells
+              if (neighborCost === Infinity) continue;
+
+              // Calculate distance from obstacle
+              const dist = Math.sqrt(dx * dx + dz * dz);
+
+              // Graduated cost: closer to obstacle = higher cost
+              let inflationCost = 1.0;
+              if (dist <= 1.5) {
+                inflationCost = 5.0; // Adjacent cells: 5x cost
+              } else if (dist <= 2.5) {
+                inflationCost = 2.0; // 2 cells away: 2x cost
+              }
+
+              // Use maximum of existing cost or inflation cost
+              inflated[nz]![nx] = Math.max(neighborCost, inflationCost);
+            }
+          }
+        }
+      }
+    }
+
+    return inflated;
+  }
+
+  /**
+   * Calculate cost for a cell based on terrain and slope
+   * Returns 1.0 for normal terrain, 2-5 for rough/steep terrain, Infinity for impassable
+   */
+  private getCellCost(worldX: number, worldZ: number): number {
+    // Check terrain type first
+    const terrain = this.game.getTerrainAt(worldX, worldZ);
+    if (!terrain) {
+      // No terrain data - mark map edges as impassable
+      const gridPos = this.worldToGrid(worldX, worldZ);
+      const isEdge = gridPos.x === 0 || gridPos.x === this.gridWidth - 1 ||
+                     gridPos.z === 0 || gridPos.z === this.gridHeight - 1;
+      return isEdge ? Infinity : 1.0;
+    }
+
+    // Water and buildings are impassable
+    if (terrain.type === 'water' || terrain.type === 'river' || terrain.type === 'building') {
+      return Infinity;
+    }
+
+    // Check slope in all directions
+    const height = this.game.getElevationAt(worldX, worldZ);
     const sampleDist = this.gridSize / 2;
     const heightN = this.game.getElevationAt(worldX, worldZ + sampleDist);
     const heightS = this.game.getElevationAt(worldX, worldZ - sampleDist);
     const heightE = this.game.getElevationAt(worldX + sampleDist, worldZ);
     const heightW = this.game.getElevationAt(worldX - sampleDist, worldZ);
 
-    const MAX_SLOPE = 1.0; // 45 degrees
+    const MAX_SLOPE = 1.0; // 45 degrees - impassable beyond this
+    const HIGH_SLOPE = 0.7; // 35 degrees - high cost but passable
 
     const slopeN = Math.abs(heightN - height) / sampleDist;
     const slopeS = Math.abs(heightS - height) / sampleDist;
     const slopeE = Math.abs(heightE - height) / sampleDist;
     const slopeW = Math.abs(heightW - height) / sampleDist;
+    const maxSlope = Math.max(slopeN, slopeS, slopeE, slopeW);
 
-    if (slopeN > MAX_SLOPE || slopeS > MAX_SLOPE ||
-        slopeE > MAX_SLOPE || slopeW > MAX_SLOPE) {
-      return false;
+    // Impassable if slope exceeds maximum
+    if (maxSlope > MAX_SLOPE) {
+      return Infinity;
     }
 
-    // Check terrain type
-    const terrain = this.game.getTerrainAt(worldX, worldZ);
-    if (!terrain) {
-      // No terrain data - mark map edges as impassable
-      const gridPos = this.worldToGrid(worldX, worldZ);
-      return !(gridPos.x === 0 || gridPos.x === this.gridWidth - 1 ||
-               gridPos.z === 0 || gridPos.z === this.gridHeight - 1);
+    // High cost for steep terrain (0.7-1.0 slope = 35-45 degrees)
+    if (maxSlope > HIGH_SLOPE) {
+      const steepnessFactor = (maxSlope - HIGH_SLOPE) / (MAX_SLOPE - HIGH_SLOPE);
+      return 1.0 + steepnessFactor * 4.0; // Cost ranges from 1.0 to 5.0
     }
 
-    if (terrain) {
-      // Water is impassable for ground units
-      if (terrain.type === 'water' || terrain.type === 'river') {
-        return false;
-      }
-      // Buildings are impassable
-      if (terrain.type === 'building') {
-        return false;
-      }
-    }
-
-    return true;
+    // Normal cost for gentle terrain
+    return 1.0;
   }
+
 
   /**
    * Find path from start to goal using A*
@@ -254,9 +346,11 @@ export class PathfindingManager {
         const key = `${nx},${nz}`;
         if (closedSet.has(key)) continue;
 
-        // Calculate costs
+        // Calculate costs with terrain cost multiplier
         const isDiagonal = offset.x !== 0 && offset.z !== 0;
-        const moveCost = isDiagonal ? 1.414 : 1.0;
+        const baseCost = isDiagonal ? 1.414 : 1.0;
+        const terrainCost = this.navGrid[nz]?.[nx] ?? 1.0;
+        const moveCost = baseCost * terrainCost; // Apply terrain cost multiplier
         const g = current.g + moveCost;
         const h = this.heuristic(nx, nz, goalGrid.x, goalGrid.z);
         const f = g + h;
@@ -362,14 +456,15 @@ export class PathfindingManager {
   }
 
   /**
-   * Check if grid cell is passable
+   * Check if grid cell is passable (cost < Infinity)
    */
   private isGridPassable(gridX: number, gridZ: number): boolean {
     if (gridX < 0 || gridX >= this.gridWidth ||
         gridZ < 0 || gridZ >= this.gridHeight) {
       return false;
     }
-    return this.navGrid[gridZ]?.[gridX] ?? false;
+    const cost = this.navGrid[gridZ]?.[gridX] ?? Infinity;
+    return cost < Infinity;
   }
 
   /**
@@ -397,8 +492,8 @@ export class PathfindingManager {
     const grid = this.worldToGrid(worldX, worldZ);
     if (grid.x >= 0 && grid.x < this.gridWidth &&
         grid.z >= 0 && grid.z < this.gridHeight) {
-      const passable = this.isCellPassable(worldX, worldZ);
-      this.navGrid[grid.z]![grid.x] = passable;
+      const cost = this.getCellCost(worldX, worldZ);
+      this.navGrid[grid.z]![grid.x] = cost;
     }
   }
 

@@ -526,6 +526,12 @@ export interface DeploymentZone {
   maxZ: number;
 }
 
+export interface QueuedReinforcement {
+  unitType: string; // Unit ID to spawn
+  destination: { x: number; z: number } | null; // Where unit should move after spawning
+  moveType: 'normal' | 'attack' | 'reverse' | 'fast' | null; // Movement modifier
+}
+
 export interface EntryPoint {
   id: string;
   team: 'player' | 'enemy';
@@ -533,7 +539,7 @@ export interface EntryPoint {
   z: number;
   type: 'highway' | 'secondary' | 'dirt' | 'air';
   spawnRate: number; // seconds between spawns
-  queue: string[]; // unit IDs waiting to spawn
+  queue: QueuedReinforcement[]; // units waiting to spawn with their commands
   rallyPoint: { x: number; z: number } | null;
 }
 

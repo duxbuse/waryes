@@ -44,6 +44,10 @@ export class DeploymentManager {
   private ghostMesh: THREE.Mesh | null = null;
   private isPlacingUnit = false;
 
+  // Battle phase reinforcement waiting state
+  private waitingForReinforcementDestination = false;
+  private pendingReinforcementUnitIndex = -1;
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -776,7 +780,13 @@ export class DeploymentManager {
       .map(stack => {
         const allDeployed = stack.available === 0;
         const tooExpensive = stack.unitData.cost > this.credits;
-        const isSelected = this.selectedUnitTypeId === stack.unitData.id && this.isPlacingUnit;
+
+        // Check if this unit type is selected (setup phase or battle phase reinforcement)
+        const isSetupPlacement = this.selectedUnitTypeId === stack.unitData.id && this.isPlacingUnit;
+        const isBattleReinforcement = this.waitingForReinforcementDestination &&
+                                      this.pendingReinforcementUnitIndex !== -1 &&
+                                      this.deployableUnits[this.pendingReinforcementUnitIndex]?.unitData.id === stack.unitData.id;
+        const isSelected = isSetupPlacement || isBattleReinforcement;
 
         return `
           <div class="battle-unit-card ${allDeployed ? 'all-deployed' : ''} ${tooExpensive && !allDeployed ? 'too-expensive' : ''} ${isSelected ? 'selected' : ''}"
@@ -807,7 +817,7 @@ export class DeploymentManager {
   /**
    * Handle unit selection from the battle unit bar
    * - Setup phase: Start ghost placement mode (click to place)
-   * - Battle phase: Queue at auto-selected entry point
+   * - Battle phase: Enter waiting mode for destination click
    */
   private queueUnitFromBar(unitTypeId: string): void {
     // Find the first undeployed unit of this type
@@ -815,13 +825,14 @@ export class DeploymentManager {
       d => d.unitData.id === unitTypeId && !d.deployed
     );
 
-    if (duIndex === -1) return;
+    if (duIndex === -1) {
+      return;
+    }
 
     const du = this.deployableUnits[duIndex]!;
 
     // Check credits
     if (du.unitData.cost > this.credits) {
-      console.log('Not enough credits');
       return;
     }
 
@@ -835,21 +846,12 @@ export class DeploymentManager {
       return;
     }
 
-    // Battle phase: Queue using auto-selection
-    const success = this.game.reinforcementManager.queueUnitAuto(du.unitData.id);
-    if (success) {
-      // Deduct credits
-      this.credits -= du.unitData.cost;
+    // Battle phase: Enter waiting mode for destination click
+    this.waitingForReinforcementDestination = true;
+    this.pendingReinforcementUnitIndex = duIndex;
 
-      // Mark as deployed (can't queue same unit again until it spawns)
-      du.deployed = true;
-
-      // Re-render both the battle unit bar and update credits display
-      this.renderBattleUnitBar();
-      this.updateCreditsDisplay();
-
-      console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
-    }
+    // Re-render to show selection visual
+    this.renderBattleUnitBar();
   }
 
   /**
@@ -887,7 +889,138 @@ export class DeploymentManager {
     }
   }
 
+  /**
+   * Check if waiting for reinforcement destination click
+   */
+  isWaitingForReinforcementDestination(): boolean {
+    return this.waitingForReinforcementDestination;
+  }
+
+  /**
+   * Handle destination click for battle phase reinforcement
+   */
+  handleReinforcementDestinationClick(worldPos: THREE.Vector3): void {
+    if (!this.waitingForReinforcementDestination || this.pendingReinforcementUnitIndex === -1) {
+      return;
+    }
+
+    const du = this.deployableUnits[this.pendingReinforcementUnitIndex];
+    if (!du) {
+      this.cancelReinforcementWait();
+      return;
+    }
+
+    // Check credits one more time
+    if (du.unitData.cost > this.credits) {
+      this.cancelReinforcementWait();
+      return;
+    }
+
+    // Find closest resupply point to destination
+    const closestResupplyPoint = this.game.reinforcementManager.findClosestResupplyPoint(worldPos);
+    if (!closestResupplyPoint) {
+      this.cancelReinforcementWait();
+      return;
+    }
+
+    // Get movement modifiers
+    const movementMods = this.game.inputManager.movementModifiers;
+    let moveType: 'normal' | 'attack' | 'reverse' | 'fast' | null = 'normal';
+    if (movementMods.attackMove) {
+      moveType = 'attack';
+    } else if (movementMods.reverse) {
+      moveType = 'reverse';
+    } else if (movementMods.fast) {
+      moveType = 'fast';
+    }
+
+    // Queue at the closest resupply point
+    const success = this.game.reinforcementManager.queueUnitAtResupplyPoint(
+      closestResupplyPoint.id,
+      du.unitData.id,
+      { x: worldPos.x, z: worldPos.z },
+      moveType
+    );
+
+    if (success) {
+      // Deduct credits
+      this.credits -= du.unitData.cost;
+
+      // Mark as deployed
+      du.deployed = true;
+
+      // Update UI
+      this.renderBattleUnitBar();
+      this.updateCreditsDisplay();
+    }
+
+    // Check if shift is held for multi-placement
+    const shiftHeld = this.game.inputManager.modifiers.shift;
+    if (shiftHeld) {
+      // Find next undeployed unit of the same type
+      const unitTypeId = du.unitData.id;
+      const nextUnitIndex = this.deployableUnits.findIndex(
+        d => d.unitData.id === unitTypeId && !d.deployed
+      );
+
+      if (nextUnitIndex !== -1) {
+        // Found another unit of same type, keep waiting for next placement
+        this.pendingReinforcementUnitIndex = nextUnitIndex;
+        // Re-render to update unit count but keep selection
+        this.renderBattleUnitBar();
+      } else {
+        // No more units of this type available
+        this.waitingForReinforcementDestination = false;
+        this.pendingReinforcementUnitIndex = -1;
+        this.game.reinforcementManager.clearPreviewPath();
+        this.renderBattleUnitBar();
+      }
+    } else {
+      // Clear waiting state
+      this.waitingForReinforcementDestination = false;
+      this.pendingReinforcementUnitIndex = -1;
+      this.game.reinforcementManager.clearPreviewPath();
+      this.renderBattleUnitBar();
+    }
+  }
+
+  /**
+   * Cancel waiting for reinforcement destination
+   */
+  cancelReinforcementWait(): void {
+    if (this.waitingForReinforcementDestination) {
+      this.waitingForReinforcementDestination = false;
+      this.pendingReinforcementUnitIndex = -1;
+      // Clear the preview path
+      this.game.reinforcementManager.clearPreviewPath();
+      // Re-render to clear selection visual
+      this.renderBattleUnitBar();
+    }
+  }
+
+  /**
+   * Update reinforcement preview path
+   */
+  updateReinforcementPreviewPath(mouseWorldPos: THREE.Vector3): void {
+    if (!this.waitingForReinforcementDestination || this.pendingReinforcementUnitIndex === -1) {
+      return;
+    }
+
+    // Find closest resupply point to show path from
+    const closestResupplyPoint = this.game.reinforcementManager.findClosestResupplyPoint(mouseWorldPos);
+    if (!closestResupplyPoint) {
+      return;
+    }
+
+    // Update the reinforcement manager's preview path
+    this.game.reinforcementManager.updatePreviewPathFromPoint(
+      closestResupplyPoint,
+      mouseWorldPos
+    );
+  }
+
   dispose(): void {
     this.cancelPlacement();
+    this.cancelReinforcementWait();
   }
 }

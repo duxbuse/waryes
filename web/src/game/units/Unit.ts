@@ -132,8 +132,10 @@ export class Unit {
   private currentWaypointIndex = 0;
   private stuckTimer = 0; // Track if unit is stuck and needs rerouting
   private lastPosition = new THREE.Vector3();
+  private hasMovedOnce = false; // Track if unit has moved at least once (prevents false stuck detection on spawn)
   private lastPathfindingAttempt = 0; // PERFORMANCE: Timestamp of last pathfinding attempt
-  private readonly pathfindingCooldown = 3.0; // Cooldown between pathfinding retries (seconds)
+  private readonly pathfindingCooldown = 1.0; // Cooldown between pathfinding retries (seconds) - reduced from 3.0
+  private isEscaping = false; // Flag to indicate unit is executing escape maneuver
   // @ts-expect-error Planned feature - movement modes
   private movementMode: 'normal' | 'fast' | 'reverse' = 'normal';
 
@@ -188,6 +190,9 @@ export class Unit {
     this.mesh = new THREE.Group();
     this.mesh.position.copy(config.position);
     this.mesh.userData['unitId'] = this.id;
+
+    // Initialize lastPosition to starting position (for stuck detection)
+    this.lastPosition.copy(config.position);
 
     // Create body mesh (simple box for now)
     const { geometry, height } = this.createGeometry();
@@ -1535,6 +1540,38 @@ export class Unit {
       // If too close, push away
       if (dist < minDist && dist > 0.01) {
         toOther.normalize();
+
+        // TERRAIN AWARENESS: Validate push direction against terrain
+        // Don't push units into impassable terrain (cliffs, water, etc.)
+        if (this.shouldCheckTerrain()) {
+          const testDistance = 2.0; // Test 2m ahead
+          const testPos = this.position.clone().add(toOther.clone().multiplyScalar(testDistance));
+          const slope = this.calculateSlopeTo(testPos);
+
+          // If push direction leads to steep terrain, try perpendicular direction
+          if (slope > 1.0) {
+            // Try perpendicular directions (left and right)
+            const perpRight = new THREE.Vector3(-toOther.z, 0, toOther.x);
+            const perpLeft = new THREE.Vector3(toOther.z, 0, -toOther.x);
+
+            const testRight = this.position.clone().add(perpRight.clone().multiplyScalar(testDistance));
+            const testLeft = this.position.clone().add(perpLeft.clone().multiplyScalar(testDistance));
+
+            const slopeRight = this.calculateSlopeTo(testRight);
+            const slopeLeft = this.calculateSlopeTo(testLeft);
+
+            // Use the better perpendicular direction
+            if (slopeRight <= 1.0 && slopeRight <= slopeLeft) {
+              toOther.copy(perpRight);
+            } else if (slopeLeft <= 1.0) {
+              toOther.copy(perpLeft);
+            } else {
+              // Both perpendicular directions blocked - don't push
+              continue;
+            }
+          }
+        }
+
         // More aggressive push - squared falloff for stronger near-field
         const pushStrength = Math.pow((minDist - dist) / minDist, 2);
         separationForce.add(toOther.multiplyScalar(pushStrength * 2.0)); // 2x multiplier
@@ -1575,13 +1612,27 @@ export class Unit {
       return;
     }
 
-    // Check if stuck (not moving for 2 seconds)
+    // Check if stuck (not moving for 0.5 seconds - reduced from 2.0 for faster response)
     const distMoved = this.mesh.position.distanceTo(this.lastPosition);
     if (distMoved < 0.1) {
       this.stuckTimer += dt;
-      if (this.stuckTimer > 2.0 && this.currentCommand.target) {
+
+      // Fast response to stuck condition (but only after unit has moved at least once)
+      if (this.stuckTimer > 0.5 && this.currentCommand.target && this.hasMovedOnce) {
+        // Try local escape first (no pathfinding needed - faster and cheaper)
+        const escapeDir = this.findEscapeDirection();
+        if (escapeDir && !this.isEscaping) {
+          // Found a valid escape direction - move perpendicular to obstacle
+          this.isEscaping = true;
+          const escapeTarget = this.position.clone().add(escapeDir);
+          this.targetPosition = escapeTarget;
+          this.stuckTimer = 0;
+          this.waypoints = []; // Clear waypoints during escape
+          return;
+        }
+
+        // If escape failed or already escaping, try pathfinding reroute
         // CRITICAL PERFORMANCE: Only retry pathfinding if cooldown has passed
-        // This prevents stuck units from spamming expensive A* searches every frame
         const currentTime = performance.now() / 1000;
         const timeSinceLastAttempt = currentTime - this.lastPathfindingAttempt;
 
@@ -1609,6 +1660,7 @@ export class Unit {
             this.currentWaypointIndex = 0;
             this.targetPosition = this.waypoints[0]!.clone();
             this.stuckTimer = 0;
+            this.isEscaping = false; // Resume normal movement
           } else {
             // Completely stuck - give up
             this.completeCommand();
@@ -1619,6 +1671,8 @@ export class Unit {
       }
     } else {
       this.stuckTimer = 0;
+      this.isEscaping = false; // Resume normal movement when moving again
+      this.hasMovedOnce = true; // Mark that unit has moved at least once
       this.lastPosition.copy(this.mesh.position);
     }
 
@@ -1648,7 +1702,22 @@ export class Unit {
 
     // Normalize and apply speed
     direction.normalize();
-    const moveDistance = this.speed * dt;
+
+    // MOVEMENT SMOOTHING: Look ahead to next waypoint and slow down if approaching steep terrain
+    let speedMultiplier = 1.0;
+    if (this.waypoints.length > 0 && this.currentWaypointIndex < this.waypoints.length - 1 && this.shouldCheckTerrain()) {
+      // Look ahead to next waypoint
+      const nextWaypoint = this.waypoints[this.currentWaypointIndex + 1]!;
+      const slopeToNext = this.calculateSlopeTo(nextWaypoint);
+
+      // Slow down when approaching steep terrain (0.7-1.0 slope = 35-45 degrees)
+      if (slopeToNext > 0.7) {
+        const steepnessFactor = (slopeToNext - 0.7) / (1.0 - 0.7); // 0 to 1
+        speedMultiplier = 1.0 - (steepnessFactor * 0.5); // Reduce speed by up to 50%
+      }
+    }
+
+    const moveDistance = this.speed * dt * speedMultiplier;
 
     // Rotate towards target
     const targetAngle = Math.atan2(direction.x, direction.z);
@@ -1715,6 +1784,59 @@ export class Unit {
   private shouldCheckTerrain(): boolean {
     const category = this.unitData?.category ?? 'INF';
     return category !== 'HEL' && category !== 'AIR';
+  }
+
+  /**
+   * Calculate slope from current position to target position
+   * Returns slope value (0 = flat, 1.0 = 45 degrees, 2.0 = 63 degrees, etc.)
+   */
+  private calculateSlopeTo(targetPos: THREE.Vector3): number {
+    const currentHeight = this.game.getElevationAt(this.position.x, this.position.z);
+    const targetHeight = this.game.getElevationAt(targetPos.x, targetPos.z);
+    const horizontalDist = Math.sqrt(
+      Math.pow(targetPos.x - this.position.x, 2) +
+      Math.pow(targetPos.z - this.position.z, 2)
+    );
+
+    if (horizontalDist < 0.01) return 0; // Avoid division by zero
+
+    return Math.abs(targetHeight - currentHeight) / horizontalDist;
+  }
+
+  /**
+   * Find an escape direction when unit is stuck
+   * Samples 8 directions and returns first valid direction with acceptable slope
+   * Returns null if no valid escape direction found
+   */
+  private findEscapeDirection(): THREE.Vector3 | null {
+    // Sample 8 cardinal and diagonal directions
+    const directions = [
+      new THREE.Vector3(1, 0, 0),   // East
+      new THREE.Vector3(-1, 0, 0),  // West
+      new THREE.Vector3(0, 0, 1),   // South
+      new THREE.Vector3(0, 0, -1),  // North
+      new THREE.Vector3(1, 0, 1).normalize(),   // SE
+      new THREE.Vector3(-1, 0, 1).normalize(),  // SW
+      new THREE.Vector3(1, 0, -1).normalize(),  // NE
+      new THREE.Vector3(-1, 0, -1).normalize(), // NW
+    ];
+
+    const escapeDistance = 5; // Try to move 5m in escape direction
+    const MAX_SLOPE = 1.0; // 45 degrees
+
+    // Try each direction in order
+    for (const dir of directions) {
+      const testPos = this.position.clone().add(dir.clone().multiplyScalar(escapeDistance));
+      const slope = this.calculateSlopeTo(testPos);
+
+      // Valid if slope is acceptable
+      if (slope <= MAX_SLOPE) {
+        return dir.multiplyScalar(escapeDistance);
+      }
+    }
+
+    // No valid escape direction found
+    return null;
   }
 
   private processAttack(dt: number): void {

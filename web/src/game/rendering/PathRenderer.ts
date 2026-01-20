@@ -47,7 +47,7 @@ export class PathRenderer {
   private readonly PATH_HEIGHT_OFFSET = 0.5; // 0.5m above terrain
 
   // Fade animation settings
-  private readonly FADE_DURATION = 2.5; // Duration in seconds before path fades out completely
+  private readonly FADE_DURATION = 8.0; // Duration in seconds before path fades out completely
   private readonly INITIAL_OPACITY = 0.8; // Starting opacity for paths
 
   // Command types that should use dashed lines

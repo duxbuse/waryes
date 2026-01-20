@@ -43,7 +43,7 @@
  */
 
 import * as THREE from 'three';
-import type { Game } from '../../core/Game';
+import { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import { UnitCommand } from '../units/Unit';
 import type { CaptureZone } from '../../data/types';
@@ -386,7 +386,9 @@ export class AIManager {
       this.allocateUnitsToObjectives();
       const t2 = performance.now();
       strategicTime = t2 - t0;
-      console.log(`[AI PROFILE] Strategic update: ${strategicTime.toFixed(1)}ms (assessment: ${(t1-t0).toFixed(1)}ms, allocation: ${(t2-t1).toFixed(1)}ms)`);
+      if (Game.verbose) {
+        console.log(`[AI PROFILE] Strategic update: ${strategicTime.toFixed(1)}ms (assessment: ${(t1-t0).toFixed(1)}ms, allocation: ${(t2-t1).toFixed(1)}ms)`);
+      }
       this.lastStrategicUpdate = currentTime;
     }
 
@@ -397,7 +399,9 @@ export class AIManager {
         const t0 = performance.now();
         this.updateFlankingOpportunities(this.cachedCpuUnits[0].team);
         flankingTime = performance.now() - t0;
-        console.log(`[AI PROFILE] Flanking update: ${flankingTime.toFixed(1)}ms`);
+        if (Game.verbose) {
+          console.log(`[AI PROFILE] Flanking update: ${flankingTime.toFixed(1)}ms`);
+        }
       }
       this.lastFlankingUpdate = currentTime;
     }
@@ -456,7 +460,7 @@ export class AIManager {
     const loopTime = performance.now() - loopStart;
     const totalTime = performance.now() - updateStart;
 
-    if (totalTime > 10 || decisionsCount > 0) {
+    if (Game.verbose && (totalTime > 10 || decisionsCount > 0)) {
       console.log(`[AI PROFILE] Total: ${totalTime.toFixed(1)}ms | Loop: ${loopTime.toFixed(1)}ms | Decisions: ${decisionsCount} (${decisionsTime.toFixed(1)}ms) | Units: ${cpuUnits.length}`);
     }
   }

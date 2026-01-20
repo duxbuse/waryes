@@ -143,7 +143,14 @@ export class InputManager {
   private onMouseUp(event: MouseEvent): void {
     if (event.button === 0) {
       // Left mouse release
-      if (this.state.isDragging) {
+
+      // Check if waiting for reinforcement destination (takes priority)
+      if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
+        const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
+        if (worldPos) {
+          this.game.deploymentManager.handleReinforcementDestinationClick(worldPos);
+        }
+      } else if (this.state.isDragging) {
         // Finish box selection
         this.finishBoxSelection();
       } else {
@@ -156,6 +163,15 @@ export class InputManager {
       this.hideSelectionBox();
     } else if (event.button === 2) {
       // Right click - check if it was a drag (formation) or click (command)
+
+      // Check if waiting for reinforcement destination - right-click cancels
+      if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
+        this.game.deploymentManager.cancelReinforcementWait();
+        this.state.isRightMouseDown = false;
+        this.state.isRightDragging = false;
+        return;
+      }
+
       if (this.state.isRightDragging) {
         this.handleFormationDrag(event);
         this.clearFormationPreview(); // Clear ghosts after formation is set
@@ -170,6 +186,19 @@ export class InputManager {
   private onMouseMove(event: MouseEvent): void {
     this.state.mouseX = event.clientX;
     this.state.mouseY = event.clientY;
+
+    // Update reinforcement path preview if waiting for destination
+    if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
+      const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
+      if (worldPos) {
+        this.game.deploymentManager.updateReinforcementPreviewPath(worldPos);
+      }
+    } else if (this.game.reinforcementManager.isWaitingForDestination()) {
+      const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
+      if (worldPos) {
+        this.game.reinforcementManager.updatePreviewPath(worldPos);
+      }
+    }
 
     // Check for left drag start
     if (this.state.isLeftMouseDown && !this.state.isDragging) {
@@ -252,6 +281,16 @@ export class InputManager {
     // Handle specific keys
     switch (event.code) {
       case 'Escape':
+        // Cancel reinforcement destination wait first (new workflow)
+        if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
+          this.game.deploymentManager.cancelReinforcementWait();
+          break;
+        }
+        // Cancel reinforcement destination wait first (old workflow)
+        if (this.game.reinforcementManager.isWaitingForDestination()) {
+          this.game.reinforcementManager.cancelDestinationWait();
+          break;
+        }
         // During battle phases, ESC toggles pause menu
         if (this.game.phase === GamePhase.Setup || this.game.phase === GamePhase.Battle) {
           this.game.togglePause();
@@ -424,6 +463,12 @@ export class InputManager {
   }
 
   private handleRightClick(event: MouseEvent): void {
+    // Check if waiting for reinforcement destination (old workflow) - right-click cancels
+    if (this.game.reinforcementManager.isWaitingForDestination()) {
+      this.game.reinforcementManager.cancelDestinationWait();
+      return;
+    }
+
     const selectedUnits = this.game.selectionManager.getSelectedUnits();
     if (selectedUnits.length === 0) return;
 
@@ -795,6 +840,10 @@ export class InputManager {
 
   get modifiers(): InputState['modifiers'] {
     return { ...this.state.modifiers };
+  }
+
+  get movementModifiers(): InputState['movementModifiers'] {
+    return { ...this.state.movementModifiers };
   }
 
   get isLOSPreviewActive(): boolean {
