@@ -92,6 +92,18 @@
       }
     },
     {
+      "unitId": "sdf_bastion_mbt_rotary",
+      "maxCards": 4,
+      "notes": "Anti-infantry variant",
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 2,
+        "veteran": 4
+      }
+    },
+    {
       "unitId": "sdf_behemoth",
       "maxCards": 1,
       "availability": {
@@ -191,6 +203,97 @@
     {
       "unitId": "sdf_nova_fighter_asf",
       "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_stormtrooper",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_transport_truck",
+        "sdf_armored_transport"
+      ],
+      "notes": "Elite infantry",
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_militia",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "notes": "Cheap screening infantry",
+      "availability": {
+        "trained": 16,
+        "legend": 0,
+        "rookie": 24,
+        "elite": 0,
+        "veteran": 12
+      }
+    },
+    {
+      "unitId": "sdf_armored_transport",
+      "maxCards": 4,
+      "notes": "Armored logistics",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_centurion_apc",
+      "maxCards": 3,
+      "notes": "Armed transport",
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_barrage_launcher",
+      "maxCards": 2,
+      "notes": "Mobile artillery",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_falcon_gunship_at",
+      "maxCards": 2,
+      "notes": "Anti-tank helicopter",
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_falcon_gunship_rotary",
+      "maxCards": 2,
+      "notes": "Anti-infantry helicopter",
       "availability": {
         "trained": 2,
         "legend": 0,
