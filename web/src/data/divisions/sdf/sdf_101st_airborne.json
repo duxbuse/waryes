@@ -244,6 +244,106 @@
         "elite": 0,
         "veteran": 8
       }
+    },
+    {
+      "unitId": "sdf_sniper_team",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_engineer",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_hwt_heavy_bolter",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 0,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_hwt_missile",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 4,
+        "elite": 0,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_nova_fighter_strike",
+      "maxCards": 3,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_nova_fighter_asf",
+      "maxCards": 3,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_vortex_missile",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "sdf_barrage_launcher",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
     }
   ]
 }
