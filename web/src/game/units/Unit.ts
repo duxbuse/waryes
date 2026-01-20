@@ -131,6 +131,8 @@ export class Unit {
   private currentWaypointIndex = 0;
   private stuckTimer = 0; // Track if unit is stuck and needs rerouting
   private lastPosition = new THREE.Vector3();
+  private lastPathfindingAttempt = 0; // PERFORMANCE: Timestamp of last pathfinding attempt
+  private readonly pathfindingCooldown = 3.0; // Cooldown between pathfinding retries (seconds)
   // @ts-expect-error Planned feature - movement modes
   private movementMode: 'normal' | 'fast' | 'reverse' = 'normal';
 
@@ -1438,33 +1440,42 @@ export class Unit {
     if (distMoved < 0.1) {
       this.stuckTimer += dt;
       if (this.stuckTimer > 2.0 && this.currentCommand.target) {
-        // Try to reroute silently
+        // CRITICAL PERFORMANCE: Only retry pathfinding if cooldown has passed
+        // This prevents stuck units from spamming expensive A* searches every frame
+        const currentTime = performance.now() / 1000;
+        const timeSinceLastAttempt = currentTime - this.lastPathfindingAttempt;
 
-        let path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
+        if (timeSinceLastAttempt >= this.pathfindingCooldown) {
+          this.lastPathfindingAttempt = currentTime;
 
-        if (!path || path.length === 0) {
-          // Direct repath failed - try finding nearest reachable position
-          const fallback = this.game.pathfindingManager.findNearestReachablePosition(
-            this.position,
-            this.currentCommand.target,
-            50
-          );
+          // Try to reroute silently
+          let path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
 
-          if (fallback) {
-            path = this.game.pathfindingManager.findPath(this.position, fallback);
+          if (!path || path.length === 0) {
+            // Direct repath failed - try finding nearest reachable position
+            const fallback = this.game.pathfindingManager.findNearestReachablePosition(
+              this.position,
+              this.currentCommand.target,
+              50
+            );
+
+            if (fallback) {
+              path = this.game.pathfindingManager.findPath(this.position, fallback);
+            }
+          }
+
+          if (path && path.length > 0) {
+            this.waypoints = path;
+            this.currentWaypointIndex = 0;
+            this.targetPosition = this.waypoints[0]!.clone();
+            this.stuckTimer = 0;
+          } else {
+            // Completely stuck - give up
+            this.completeCommand();
+            return;
           }
         }
-
-        if (path && path.length > 0) {
-          this.waypoints = path;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
-          this.stuckTimer = 0;
-        } else {
-          // Completely stuck - give up
-          this.completeCommand();
-          return;
-        }
+        // If cooldown not passed, do nothing - wait for next attempt
       }
     } else {
       this.stuckTimer = 0;

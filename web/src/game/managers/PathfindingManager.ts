@@ -30,8 +30,21 @@ export class PathfindingManager {
   private gridWidth = 0;
   private gridHeight = 0;
 
+  // CRITICAL PERFORMANCE: Pathfinding budget to prevent frame rate collapse
+  // Limit A* searches per frame to maintain 60 FPS
+  private pathfindingCallsThisFrame = 0;
+  private readonly MAX_PATHFINDING_PER_FRAME = 5; // Max 5 A* searches per frame (~20-50ms total)
+
   constructor(game: Game) {
     this.game = game;
+  }
+
+  /**
+   * Reset pathfinding budget at start of each frame
+   * Called by Game.fixedUpdate()
+   */
+  resetFrameBudget(): void {
+    this.pathfindingCallsThisFrame = 0;
   }
 
   /**
@@ -141,6 +154,14 @@ export class PathfindingManager {
    * Find path from start to goal using A*
    */
   findPath(start: THREE.Vector3, goal: THREE.Vector3): THREE.Vector3[] | null {
+    // CRITICAL PERFORMANCE: Check pathfinding budget to prevent frame rate collapse
+    // If budget exhausted, return null and let unit try again next frame
+    if (this.pathfindingCallsThisFrame >= this.MAX_PATHFINDING_PER_FRAME) {
+      // Budget exhausted - defer pathfinding to next frame
+      return null;
+    }
+    this.pathfindingCallsThisFrame++;
+
     // Convert world coordinates to grid coordinates
     const startGrid = this.worldToGrid(start.x, start.z);
     const goalGrid = this.worldToGrid(goal.x, goal.z);
@@ -390,6 +411,12 @@ export class PathfindingManager {
     goal: THREE.Vector3,
     maxRadius: number = 50
   ): THREE.Vector3 | null {
+    // CRITICAL PERFORMANCE: Check pathfinding budget
+    // This method calls findPath internally, so check budget before expensive work
+    if (this.pathfindingCallsThisFrame >= this.MAX_PATHFINDING_PER_FRAME) {
+      return null; // Budget exhausted
+    }
+
     const goalGrid = this.worldToGrid(goal.x, goal.z);
     const maxSteps = Math.ceil(maxRadius / this.gridSize);
 

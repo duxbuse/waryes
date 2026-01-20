@@ -720,36 +720,130 @@ export class AIManager {
       }
     }
 
-    // Allocate units to zones based on priority
+    // STRATEGIC: Categorize zones by SPATIAL POSITION (not ownership)
+    // Calculate friendly and enemy average positions to determine "sides" of the map
+    const avgFriendlyPos = VectorPool.acquire().set(0, 0, 0);
+    const avgEnemyPos = VectorPool.acquire().set(0, 0, 0);
+
+    for (const unit of this.cachedFriendlyUnits) {
+      avgFriendlyPos.add(unit.position);
+    }
+    if (this.cachedFriendlyUnits.length > 0) {
+      avgFriendlyPos.divideScalar(this.cachedFriendlyUnits.length);
+    }
+
+    for (const unit of this.cachedEnemyUnits) {
+      avgEnemyPos.add(unit.position);
+    }
+    if (this.cachedEnemyUnits.length > 0) {
+      avgEnemyPos.divideScalar(this.cachedEnemyUnits.length);
+    }
+
+    const backfieldZones: ZoneAssessment[] = [];
+    const contestedZones: ZoneAssessment[] = [];
+    const frontlineZones: ZoneAssessment[] = [];
+
     for (const assessment of this.zoneAssessments) {
+      const zonePos = VectorPool.acquire().set(assessment.zone.x, 0, assessment.zone.z);
+      const distToFriendly = zonePos.distanceTo(avgFriendlyPos);
+      const distToEnemy = zonePos.distanceTo(avgEnemyPos);
+      VectorPool.release(zonePos);
+
+      // Categorize by spatial position
+      // Backfield: Much closer to friendly side (>30m difference)
+      // Frontline: Much closer to enemy side (>30m difference)
+      // Contested: In the middle (within 30m difference)
+
+      if (distToFriendly < distToEnemy - 30) {
+        // Zone is on our side of the map - backfield
+        backfieldZones.push(assessment);
+      } else if (distToEnemy < distToFriendly - 30) {
+        // Zone is on enemy side of the map - frontline (deep strike)
+        frontlineZones.push(assessment);
+      } else {
+        // Zone is in the middle - contested ground
+        contestedZones.push(assessment);
+      }
+    }
+
+    VectorPool.release(avgFriendlyPos);
+    VectorPool.release(avgEnemyPos);
+
+    // STRATEGIC ALLOCATION:
+    // 1. Secure backfield zones first (1-2 units each for quick capture)
+    // 2. Contest middle zones (2-3 units each)
+    // 3. Mass units at frontline (flexible allocation based on threat)
+
+    // Phase 1: Assign minimal units to backfield zones for quick capture
+    for (const assessment of backfieldZones) {
       if (availableUnits.length === 0) break;
 
-      // Determine how many units to assign
-      let unitsNeeded = 0;
-
-      if (assessment.needsDefense) {
-        // Need at least enough to counter enemy presence
-        unitsNeeded = Math.ceil(assessment.enemyPresence + 1) - Math.floor(assessment.friendlyPresence);
-      } else if (assessment.needsCapture) {
-        // Need more units to capture
-        unitsNeeded = Math.max(1, Math.ceil(assessment.enemyPresence * 1.5 + 1) - Math.floor(assessment.friendlyPresence));
-      }
-
-      unitsNeeded = Math.min(unitsNeeded, Math.ceil(availableUnits.length / 2)); // Don't commit more than half
-
-      if (unitsNeeded <= 0) continue;
-
-      // Select combined arms group instead of just nearest units
+      // Only need 1-2 units for uncontested zones
+      const unitsNeeded = assessment.needsCapture ? 2 : 1;
       const selectedUnits = this.selectCombinedArmsGroup(availableUnits, assessment, unitsNeeded);
 
-      // Assign selected units to this objective
       for (const unit of selectedUnits) {
         const state = this.aiStates.get(unit.id);
         if (state) {
           state.assignedObjective = assessment.zone.id;
           state.targetZone = assessment.zone;
+          const idx = availableUnits.indexOf(unit);
+          if (idx > -1) availableUnits.splice(idx, 1);
+        }
+      }
+    }
 
-          // Remove from available pool
+    // Phase 2: Assign units to contested middle zones (moderate force)
+    for (const assessment of contestedZones) {
+      if (availableUnits.length === 0) break;
+
+      // 2-4 units for contested zones depending on situation
+      let unitsNeeded = assessment.needsCapture ? 3 : 2;
+      if (assessment.enemyPresence > 0) {
+        unitsNeeded = Math.max(unitsNeeded, Math.ceil(assessment.enemyPresence * 1.2));
+      }
+      unitsNeeded = Math.min(unitsNeeded, 4); // Cap at 4 units per contested zone
+
+      const selectedUnits = this.selectCombinedArmsGroup(availableUnits, assessment, unitsNeeded);
+
+      for (const unit of selectedUnits) {
+        const state = this.aiStates.get(unit.id);
+        if (state) {
+          state.assignedObjective = assessment.zone.id;
+          state.targetZone = assessment.zone;
+          const idx = availableUnits.indexOf(unit);
+          if (idx > -1) availableUnits.splice(idx, 1);
+        }
+      }
+    }
+
+    // Phase 3: Commit remaining units to frontline zones (main force)
+    for (const assessment of frontlineZones) {
+      if (availableUnits.length === 0) break;
+
+      // Flexible allocation - commit force based on threat
+      let unitsNeeded = 3; // Base frontline force
+
+      if (assessment.needsDefense) {
+        // Under attack - reinforce
+        unitsNeeded = Math.max(4, Math.ceil(assessment.enemyPresence * 1.5));
+      } else if (assessment.needsCapture && assessment.enemyPresence > 0) {
+        // Contested capture - strong force needed
+        unitsNeeded = Math.max(4, Math.ceil(assessment.enemyPresence * 1.3));
+      }
+
+      // Don't commit more than available or more than 8 units per zone
+      unitsNeeded = Math.min(unitsNeeded, availableUnits.length, 8);
+
+      if (unitsNeeded <= 0) continue;
+
+      const selectedUnits = this.selectCombinedArmsGroup(availableUnits, assessment, unitsNeeded);
+
+      for (const unit of selectedUnits) {
+        const state = this.aiStates.get(unit.id);
+        if (state) {
+          state.assignedObjective = assessment.zone.id;
+          state.targetZone = assessment.zone;
           const idx = availableUnits.indexOf(unit);
           if (idx > -1) availableUnits.splice(idx, 1);
         }
@@ -759,7 +853,7 @@ export class AIManager {
     // Allocate fast units to flanking maneuvers (before roaming assignment)
     this.allocateFlankers(availableUnits);
 
-    // Remaining units become roaming attackers
+    // Remaining units become roaming attackers (reserve/mobile force)
     for (const unit of availableUnits) {
       const state = this.aiStates.get(unit.id);
       if (state) {
@@ -1435,8 +1529,63 @@ export class AIManager {
   }
 
   private findStrategicTarget(unit: Unit, state: AIUnitState): THREE.Vector3 | null {
-    // If we have an assigned zone, go there
+    // STRATEGIC: Check if unit completed backfield objective and should move to frontline
     if (state.targetZone) {
+      // Check if this is a backfield zone that we've already captured
+      const isBackfieldCaptured = state.targetZone.owner === unit.team;
+
+      if (isBackfieldCaptured) {
+        // Zone captured! Check if there are frontline zones that need support
+        const captureZones = this.game.economyManager.getCaptureZones();
+        const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+
+        // Find contested or enemy zones (frontline)
+        let bestFrontlineZone: CaptureZone | null = null;
+        let bestScore = -Infinity;
+
+        for (const zone of captureZones) {
+          // Only consider zones that need our presence
+          if (zone.owner === unit.team) continue; // Skip our secure zones
+
+          // Assess if this is a frontline zone
+          const zonePos = VectorPool.acquire().set(zone.x, 0, zone.z);
+          const nearbyEnemies = this.game.unitManager.getUnitsInRadius(zonePos, 100, enemyTeam);
+          VectorPool.release(zonePos);
+
+          const isContested = nearbyEnemies.length > 0 || zone.owner === enemyTeam;
+
+          if (isContested) {
+            // This is a frontline zone
+            const distance = Math.sqrt(
+              Math.pow(unit.position.x - zone.x, 2) +
+              Math.pow(unit.position.z - zone.z, 2)
+            );
+
+            let score = zone.pointsPerTick * 10 - distance * 0.1;
+
+            // Prefer zones with enemy presence (active combat)
+            if (nearbyEnemies.length > 0) {
+              score += 30;
+            }
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestFrontlineZone = zone;
+            }
+          }
+        }
+
+        // If we found a frontline zone, reassign to it
+        if (bestFrontlineZone) {
+          state.targetZone = bestFrontlineZone;
+          const zoneY = this.game.getElevationAt(bestFrontlineZone.x, bestFrontlineZone.z);
+          return new THREE.Vector3(bestFrontlineZone.x, zoneY, bestFrontlineZone.z);
+        }
+
+        // No frontline zones found, keep current zone (defend it)
+      }
+
+      // Still moving to assigned zone or defending it
       const zoneY = this.game.getElevationAt(state.targetZone.x, state.targetZone.z);
       return new THREE.Vector3(state.targetZone.x, zoneY, state.targetZone.z);
     }
