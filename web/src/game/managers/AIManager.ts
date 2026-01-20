@@ -29,12 +29,17 @@
  *
  * ### Hard - Aggressive AI for Veterans
  * - Vision: Respects fog of war (only sees visible units) - FAIR PLAY
- * - Targeting: Optimal target selection (best targets always chosen)
- * - Tactics: All features enabled (flanking, combined arms, focus fire)
- * - Retreat: 25% health threshold (standard tactical retreat)
+ * - Targeting: Optimal target selection with enhanced focus fire coordination
+ * - Tactics: Enhanced tactical execution (more flankers, larger coordinated assaults)
+ * - Aggression: More willing to attack (aggressive even when slightly outnumbered)
+ * - Engagement: 100m engagement range vs 80m (proactive engagement)
+ * - Focus Fire: Stronger coordination bonuses (45 max vs 30 for medium)
+ * - Flanking: 3 flankers + 6 frontal units (vs 2+4 for medium)
+ * - Zone Priority: Strongly prefers attacking enemy zones (aggressive capture)
+ * - Retreat: 25% health threshold (same as medium)
  * - Decision Speed: 1 second between decisions (fast reactions)
  * - Resources: Same income as player (no bonuses) - FAIR PLAY
- * - **Hard AI wins through better execution, NOT cheating**
+ * - **Hard AI wins through better tactics and execution, NOT cheating**
  */
 
 import * as THREE from 'three';
@@ -133,6 +138,12 @@ export class AIManager {
   private readonly suppressionThresholdForRetreat = 70; // High suppression triggers retreat
   private readonly flankingSpeed = 15; // Minimum speed required for flanking maneuvers
   private readonly flankWaypointDistance = 60; // Distance of waypoint from unit's start position (for curved path)
+
+  // Hard difficulty tactical parameters (more aggressive, better coordination)
+  private readonly hardDifficultyAggressionBonus = 1.5; // 50% more aggressive on Hard
+  private readonly hardDifficultyFlankersPerOpportunity = 3; // Assign 3 flankers instead of 2
+  private readonly hardDifficultyFrontalUnits = 6; // Assign 6 frontal units instead of 4
+  private readonly hardDifficultyEngageRange = 100; // Longer engagement range (vs 80 on Easy/Medium)
 
   // Difficulty-dependent retreat thresholds
   private readonly retreatThresholds: Record<AIDifficulty, number> = {
@@ -443,8 +454,22 @@ export class AIManager {
     const enemyTeam = referenceUnit.team === 'enemy' ? 'player' : 'enemy';
     const enemyZones = zones.filter(z => z.owner === enemyTeam).length;
 
-    const isWinning = friendlyStrength > enemyStrength * 1.2 || friendlyZones > enemyZones;
-    const shouldBeAggressive = isWinning || friendlyStrength > enemyStrength;
+    // Hard difficulty: More aggressive threshold (attacks even when slightly outnumbered)
+    // Medium: Only aggressive when winning or equal
+    // Easy: Same as medium (but other mechanics make it easier)
+    let isWinning: boolean;
+    let shouldBeAggressive: boolean;
+
+    if (this.difficulty === 'hard') {
+      // Hard AI: More willing to fight (considers winning with less advantage)
+      isWinning = friendlyStrength > enemyStrength * 1.1 || friendlyZones > enemyZones;
+      // Hard AI: Aggressive even when slightly behind (down to 0.85x enemy strength)
+      shouldBeAggressive = isWinning || friendlyStrength > enemyStrength * 0.85;
+    } else {
+      // Easy/Medium: More conservative aggression thresholds
+      isWinning = friendlyStrength > enemyStrength * 1.2 || friendlyZones > enemyZones;
+      shouldBeAggressive = isWinning || friendlyStrength > enemyStrength;
+    }
 
     return {
       totalEnemyStrength: enemyStrength,
@@ -668,8 +693,11 @@ export class AIManager {
     for (const opportunity of this.flankingOpportunities) {
       if (fastUnits.length === 0) break;
 
-      // Assign 1-2 fast units per flanking opportunity (flankers)
-      const flankersToAssign = Math.min(2, fastUnits.length);
+      // Hard difficulty: More units committed to flanking (3 flankers + 6 frontal)
+      // Medium/Easy: Standard commitment (2 flankers + 4 frontal)
+      const flankersToAssign = this.difficulty === 'hard'
+        ? Math.min(this.hardDifficultyFlankersPerOpportunity, fastUnits.length)
+        : Math.min(2, fastUnits.length);
 
       for (let i = 0; i < flankersToAssign; i++) {
         const unit = fastUnits[i];
@@ -693,10 +721,13 @@ export class AIManager {
         }
       }
 
-      // Assign 2-4 slow units for coordinated frontal assault
+      // Assign slow units for coordinated frontal assault
       // Only assign frontal units if we have flankers assigned
       if (opportunity.assignedUnits.size > 0 && slowUnits.length > 0) {
-        const frontalUnitsToAssign = Math.min(4, slowUnits.length);
+        // Hard difficulty: More frontal assault units (6 instead of 4)
+        const frontalUnitsToAssign = this.difficulty === 'hard'
+          ? Math.min(this.hardDifficultyFrontalUnits, slowUnits.length)
+          : Math.min(4, slowUnits.length);
 
         for (let i = 0; i < frontalUnitsToAssign; i++) {
           const unit = slowUnits[i];
@@ -989,7 +1020,9 @@ export class AIManager {
     }
 
     // Priority 3: Attack nearby enemies
-    const bestTarget = this.selectBestTarget(unit, this.engageRange);
+    // Hard difficulty: Longer engagement range (100m vs 80m)
+    const range = this.difficulty === 'hard' ? this.hardDifficultyEngageRange : this.engageRange;
+    const bestTarget = this.selectBestTarget(unit, range);
     if (bestTarget) {
       this.orderAttack(unit, state, bestTarget);
       return;
@@ -1107,7 +1140,13 @@ export class AIManager {
    * Calculate focus fire bonus for targets already being attacked
    * Encourages coordinated fire on high-value targets
    *
-   * Returns:
+   * Hard difficulty: Stronger focus fire (better coordination)
+   * - 0 points if no allies are attacking this target
+   * - +20 points if 1 ally is attacking (strong concentration)
+   * - +35 points if 2 allies are attacking (+15 for second)
+   * - +45 points if 3+ allies are attacking (+10 for third+, capped at 45)
+   *
+   * Medium/Easy difficulty: Standard focus fire
    * - 0 points if no allies are attacking this target
    * - +15 points if 1 ally is attacking (concentrate fire)
    * - +25 points if 2 allies are attacking (+10 for second)
@@ -1127,7 +1166,16 @@ export class AIManager {
       }
     }
 
-    // Calculate bonus with diminishing returns
+    // Hard difficulty: Stronger focus fire bonuses (better coordination)
+    if (this.difficulty === 'hard') {
+      if (attackerCount === 0) return 0;
+      if (attackerCount === 1) return 20;
+      if (attackerCount === 2) return 35;
+      // Cap at 45 for 3+ attackers (harder to overwhelm with focus fire)
+      return 45;
+    }
+
+    // Easy/Medium: Standard focus fire
     if (attackerCount === 0) return 0;
     if (attackerCount === 1) return 15;
     if (attackerCount === 2) return 25;
@@ -1303,14 +1351,29 @@ export class AIManager {
       // Score based on points value and proximity
       let score = zone.pointsPerTick * 10 - distance * 0.1;
 
-      // Prefer neutral zones (easier to capture)
-      if (zone.owner === 'neutral') {
-        score += 20;
-      }
-
-      // Aggressive AI prefers attacking enemy zones
-      if (this.threatAssessment.shouldBeAggressive && zone.owner === enemyTeam) {
-        score += 15;
+      // Hard difficulty: Strongly prefers attacking enemy zones (aggressive)
+      // Medium/Easy: Prefers neutral zones (more conservative)
+      if (this.difficulty === 'hard') {
+        // Hard AI: Prioritize enemy zones for aggressive play
+        if (zone.owner === enemyTeam) {
+          score += 30; // Higher bonus for enemy zones
+        }
+        if (zone.owner === 'neutral') {
+          score += 10; // Lower bonus for neutral zones (less priority)
+        }
+        // Hard AI: Always aggressive, no threshold check needed
+        if (zone.owner === enemyTeam) {
+          score += 15; // Additional aggression bonus
+        }
+      } else {
+        // Easy/Medium: Prefer neutral zones (easier to capture)
+        if (zone.owner === 'neutral') {
+          score += 20;
+        }
+        // Only attack enemy zones if AI is feeling aggressive
+        if (this.threatAssessment.shouldBeAggressive && zone.owner === enemyTeam) {
+          score += 15;
+        }
       }
 
       if (score > bestScore) {
@@ -1374,7 +1437,9 @@ export class AIManager {
       opportunity.flankersInPosition = true;
 
       // Engage enemies
-      const bestTarget = this.selectBestTarget(unit, this.engageRange);
+      // Hard difficulty: Longer engagement range (100m vs 80m)
+      const range = this.difficulty === 'hard' ? this.hardDifficultyEngageRange : this.engageRange;
+      const bestTarget = this.selectBestTarget(unit, range);
 
       if (bestTarget) {
         this.orderAttack(unit, state, bestTarget);
@@ -1451,7 +1516,9 @@ export class AIManager {
 
     if (distToCluster < 30) {
       // Close to cluster - engage enemies
-      const bestTarget = this.selectBestTarget(unit, this.engageRange);
+      // Hard difficulty: Longer engagement range (100m vs 80m)
+      const range = this.difficulty === 'hard' ? this.hardDifficultyEngageRange : this.engageRange;
+      const bestTarget = this.selectBestTarget(unit, range);
 
       if (bestTarget) {
         this.orderAttack(unit, state, bestTarget);
