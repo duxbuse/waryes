@@ -54,6 +54,8 @@ interface FlankingOpportunity {
   availableFlankers: Unit[];
   priority: number;
   assignedUnits: Set<string>; // Unit IDs assigned to this flank
+  frontalUnits: Set<string>; // Unit IDs assigned to frontal assault (INF, TNK)
+  flankersInPosition: boolean; // True when flankers are near their positions
 }
 
 interface ThreatAssessment {
@@ -437,6 +439,8 @@ export class AIManager {
         availableFlankers: opp.availableFlankers,
         priority: opp.priority,
         assignedUnits: new Set<string>(),
+        frontalUnits: new Set<string>(),
+        flankersInPosition: false,
       };
 
       this.flankingOpportunities.push(flankingOpp);
@@ -600,8 +604,9 @@ export class AIManager {
   }
 
   /**
-   * Allocate fast units to flanking maneuvers
-   * Removes assigned flankers from the availableUnits array
+   * Allocate units to coordinated flanking maneuvers
+   * Assigns fast units to flank and slow units to frontal assault
+   * Removes assigned units from the availableUnits array
    */
   private allocateFlankers(availableUnits: Unit[]): void {
     // Only proceed if we have flanking opportunities
@@ -613,16 +618,21 @@ export class AIManager {
       u.unitData.speed > this.flankingSpeed
     );
 
-    if (fastUnits.length === 0) return;
+    // Get slow units for frontal assault (INF, TNK, ART)
+    const slowUnits = availableUnits.filter(u =>
+      (u.unitData.category === 'INF' || u.unitData.category === 'TNK' || u.unitData.category === 'ART')
+    );
 
-    // Assign fast units to flanking opportunities (highest priority first)
+    if (fastUnits.length === 0) return; // Need flankers for coordination
+
+    // Assign units to flanking opportunities (highest priority first)
     for (const opportunity of this.flankingOpportunities) {
       if (fastUnits.length === 0) break;
 
-      // Assign 1-2 fast units per flanking opportunity
-      const unitsToAssign = Math.min(2, fastUnits.length);
+      // Assign 1-2 fast units per flanking opportunity (flankers)
+      const flankersToAssign = Math.min(2, fastUnits.length);
 
-      for (let i = 0; i < unitsToAssign; i++) {
+      for (let i = 0; i < flankersToAssign; i++) {
         const unit = fastUnits[i];
         if (!unit) continue;
 
@@ -641,6 +651,34 @@ export class AIManager {
 
           const fastIdx = fastUnits.indexOf(unit);
           if (fastIdx > -1) fastUnits.splice(fastIdx, 1);
+        }
+      }
+
+      // Assign 2-4 slow units for coordinated frontal assault
+      // Only assign frontal units if we have flankers assigned
+      if (opportunity.assignedUnits.size > 0 && slowUnits.length > 0) {
+        const frontalUnitsToAssign = Math.min(4, slowUnits.length);
+
+        for (let i = 0; i < frontalUnitsToAssign; i++) {
+          const unit = slowUnits[i];
+          if (!unit) continue;
+
+          const state = this.aiStates.get(unit.id);
+          if (state) {
+            // Assign to frontal assault objective (same flank ID but different role)
+            state.assignedObjective = `${opportunity.id}-frontal`;
+            state.targetZone = null;
+
+            // Track assignment
+            opportunity.frontalUnits.add(unit.id);
+
+            // Remove from available pools
+            const availableIdx = availableUnits.indexOf(unit);
+            if (availableIdx > -1) availableUnits.splice(availableIdx, 1);
+
+            const slowIdx = slowUnits.indexOf(unit);
+            if (slowIdx > -1) slowUnits.splice(slowIdx, 1);
+          }
         }
       }
     }
@@ -866,8 +904,14 @@ export class AIManager {
     // Priority 2: Handle assigned objective
     if (state.assignedObjective && state.assignedObjective !== 'roam') {
       // Check if this is a flanking objective
-      if (state.assignedObjective.startsWith('flank-')) {
+      if (state.assignedObjective.startsWith('flank-') && !state.assignedObjective.endsWith('-frontal')) {
         this.executeFlanking(unit, state);
+        return;
+      }
+
+      // Check if this is a frontal assault objective (coordinated with flankers)
+      if (state.assignedObjective.endsWith('-frontal')) {
+        this.executeFrontalAssault(unit, state);
         return;
       }
 
@@ -1259,7 +1303,10 @@ export class AIManager {
     const distToFlank = unit.position.distanceTo(targetFlankPos);
 
     if (distToFlank < 10) {
-      // At flank position - engage enemies
+      // At flank position - mark flankers as in position
+      opportunity.flankersInPosition = true;
+
+      // Engage enemies
       const bestTarget = this.selectBestTarget(unit, this.engageRange);
 
       if (bestTarget) {
@@ -1273,6 +1320,85 @@ export class AIManager {
       // Not at flank yet - move with curved path
       const curvedPath = this.calculateCurvedFlankPath(unit, targetFlankPos, opportunity.flankPositions.center);
       this.orderMove(unit, state, curvedPath);
+    }
+  }
+
+  /**
+   * Execute coordinated frontal assault
+   * Slow units (INF, TNK, ART) wait for flankers to get into position, then attack
+   */
+  private executeFrontalAssault(unit: Unit, state: AIUnitState): void {
+    // Extract the flank ID from the frontal objective (e.g., "flank-0-frontal" -> "flank-0")
+    const flankId = state.assignedObjective?.replace('-frontal', '') ?? '';
+    const opportunity = this.flankingOpportunities.find(opp => opp.id === flankId);
+
+    if (!opportunity) {
+      // Flanking opportunity no longer exists, revert to roaming
+      state.assignedObjective = 'roam';
+      state.behavior = 'idle';
+      return;
+    }
+
+    // Check if enemy cluster still exists (units still alive)
+    const aliveEnemies = opportunity.cluster.filter(u => u.health > 0);
+    if (aliveEnemies.length === 0) {
+      // Cluster destroyed, clear objective
+      state.assignedObjective = null;
+      state.behavior = 'idle';
+      return;
+    }
+
+    // Timing coordination: Check if flankers are in position
+    // If not, hold position (wait for flankers)
+    if (!opportunity.flankersInPosition) {
+      // Check distance to cluster - if close, wait; if far, advance slowly
+      const distToCluster = unit.position.distanceTo(opportunity.flankPositions.center);
+
+      if (distToCluster < 60) {
+        // Close enough - hold position and wait for flankers
+        state.behavior = 'defending';
+        state.targetUnit = null;
+        state.targetPosition = null;
+        return;
+      } else {
+        // Still far away - advance slowly toward cluster (but stop at 60m)
+        // Calculate position 60m from cluster
+        const direction = VectorPool.acquire();
+        direction.copy(unit.position).sub(opportunity.flankPositions.center).normalize();
+        const waitPosition = VectorPool.acquire();
+        waitPosition.copy(opportunity.flankPositions.center).add(direction.multiplyScalar(60));
+        waitPosition.y = this.game.getElevationAt(waitPosition.x, waitPosition.z);
+
+        const finalWaitPos = new THREE.Vector3(waitPosition.x, waitPosition.y, waitPosition.z);
+
+        VectorPool.release(direction);
+        VectorPool.release(waitPosition);
+
+        this.orderMove(unit, state, finalWaitPos);
+        return;
+      }
+    }
+
+    // Flankers are in position - execute frontal assault
+    const distToCluster = unit.position.distanceTo(opportunity.flankPositions.center);
+
+    if (distToCluster < 30) {
+      // Close to cluster - engage enemies
+      const bestTarget = this.selectBestTarget(unit, this.engageRange);
+
+      if (bestTarget) {
+        this.orderAttack(unit, state, bestTarget);
+      } else {
+        // No targets in range, hold position
+        state.behavior = 'defending';
+      }
+    } else {
+      // Not at cluster yet - advance toward front line (direct frontal approach)
+      const frontLinePos = opportunity.flankPositions.frontLine.clone();
+      frontLinePos.add(opportunity.flankPositions.center);
+      frontLinePos.y = this.game.getElevationAt(frontLinePos.x, frontLinePos.z);
+
+      this.orderMove(unit, state, frontLinePos);
     }
   }
 

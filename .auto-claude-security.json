@@ -128,8 +128,6 @@
     "zsh"
   ],
   "stack_commands": [
-    "bun",
-    "composer",
     "ipython",
     "jupyter",
     "node",
@@ -137,7 +135,6 @@
     "npm",
     "npx",
     "pdb",
-    "php",
     "pip",
     "pip3",
     "pipx",
@@ -154,8 +151,7 @@
     "languages": [
       "python",
       "javascript",
-      "typescript",
-      "php"
+      "typescript"
     ],
     "package_managers": [],
     "frameworks": [],
@@ -172,8 +168,7 @@
     "cargo_aliases": [],
     "shell_scripts": []
   },
-  "project_dir": "C:\\Users\\duxbu\\Documents\\code\\waryes",
-  "created_at": "2026-01-19T19:33:21.186909",
-  "project_hash": "5a0a57c53fa27cf66e5f8083807c8942",
-  "inherited_from": "C:\\Users\\duxbu\\Documents\\code\\waryes"
+  "project_dir": "C:\\Users\\duxbu\\Documents\\code\\waryes\\.auto-claude\\worktrees\\tasks\\016-intelligent-ai-that-doesn-t-cheat",
+  "created_at": "2026-01-20T10:22:32.799924",
+  "project_hash": "e012baab7a2a9293bda8d6610bde137e"
 }
