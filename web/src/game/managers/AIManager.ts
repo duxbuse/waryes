@@ -14,6 +14,7 @@ import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import type { CaptureZone } from '../../data/types';
 import { VectorPool } from '../utils/VectorPool';
+import { gameRNG } from '../utils/DeterministicRNG';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -98,12 +99,19 @@ export class AIManager {
 
   // Strategic parameters
   private readonly engageRange = 80;
-  private readonly retreatHealthThreshold = 0.25;
+  private readonly retreatHealthThreshold = 0.25; // Base threshold (medium/hard)
   private readonly smokeCooldown = 15; // seconds between smoke deployments
   private readonly damageThresholdForSmoke = 0.15; // 15% health lost triggers smoke
   private readonly suppressionThresholdForRetreat = 70; // High suppression triggers retreat
   private readonly flankingSpeed = 15; // Minimum speed required for flanking maneuvers
   private readonly flankWaypointDistance = 60; // Distance of waypoint from unit's start position (for curved path)
+
+  // Difficulty-dependent retreat thresholds
+  private readonly retreatThresholds: Record<AIDifficulty, number> = {
+    easy: 0.40,    // Easy AI retreats earlier (40% health) - more cautious, easier to beat
+    medium: 0.25,  // Normal retreat threshold (25% health)
+    hard: 0.25,    // Hard AI also retreats at 25% (same as medium)
+  };
 
   // Strategic state
   private lastStrategicUpdate = 0;
@@ -609,6 +617,9 @@ export class AIManager {
    * Removes assigned units from the availableUnits array
    */
   private allocateFlankers(availableUnits: Unit[]): void {
+    // Easy AI does not use flanking maneuvers (simpler tactics, easier to beat)
+    if (this.difficulty === 'easy') return;
+
     // Only proceed if we have flanking opportunities
     if (this.flankingOpportunities.length === 0) return;
 
@@ -838,8 +849,11 @@ export class AIManager {
       }
     }
 
-    // Emergency retreat for very low health
-    if (unit.health / unit.maxHealth <= this.retreatHealthThreshold &&
+    // Emergency retreat for low health (threshold depends on difficulty)
+    // Easy: 40% health (retreats earlier, more cautious)
+    // Medium/Hard: 25% health (fights longer)
+    const retreatThreshold = this.retreatThresholds[this.difficulty] ?? 0.25;
+    if (unit.health / unit.maxHealth <= retreatThreshold &&
       state.behavior !== 'retreating') {
       // Deploy smoke before retreating
       if (currentTime - state.lastSmokeTime >= this.smokeCooldown) {
@@ -1137,6 +1151,31 @@ export class AIManager {
       if (score > bestScore) {
         bestScore = score;
         bestTarget = enemy;
+      }
+    }
+
+    // Easy AI: 30% chance to pick a suboptimal target (makes mistakes)
+    // This makes the AI less accurate and easier to beat for beginners
+    if (this.difficulty === 'easy' && bestTarget && enemyUnits.length > 1) {
+      const shouldMakeMistake = gameRNG.next() < 0.30; // 30% chance
+
+      if (shouldMakeMistake) {
+        // Pick a random enemy instead of the best target
+        const validEnemies = [];
+        for (const enemy of enemyUnits) {
+          if (enemy.health <= 0) continue;
+
+          // Skip fog of war check on easy (sees all units)
+          const distance = unit.position.distanceTo(enemy.position);
+          if (distance <= range) {
+            validEnemies.push(enemy);
+          }
+        }
+
+        if (validEnemies.length > 0) {
+          const randomIndex = Math.floor(gameRNG.next() * validEnemies.length);
+          bestTarget = validEnemies[randomIndex] ?? bestTarget;
+        }
       }
     }
 
