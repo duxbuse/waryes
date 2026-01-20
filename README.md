@@ -187,7 +187,6 @@ The current prototype is missing several planned features:
 - ❌ Path visualization (can't see unit routes)
 - ❌ Formation controls (no line drawing)
 - ❌ Tactical view icons (no zoom-out icons)
-- ❌ Unit status UI (no health/morale bars)
 - ❌ Fog of war (all units always visible)
 - ❌ Functional minimap
 - ❌ Battle reinforcements (must deploy all units in setup)
