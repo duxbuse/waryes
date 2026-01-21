@@ -38,7 +38,7 @@ import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
 import { BatchedUnitUIRenderer } from '../game/rendering/BatchedUnitUIRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
 import { LAYERS } from '../game/utils/LayerConstants';
-import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell } from '../data/types';
+import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell, EntryPoint } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
@@ -56,6 +56,8 @@ export enum GamePhase {
 }
 
 export class Game {
+  // Debug flags
+  public static verbose = false; // Enable verbose logging (AI profiling, detailed logs)
   // Three.js core
   public readonly renderer: THREE.WebGLRenderer;
   public readonly scene: THREE.Scene;
@@ -453,6 +455,10 @@ export class Game {
   private fixedUpdate(dt: number): void {
     if (this._isPaused) return;
 
+    // CRITICAL PERFORMANCE: Reset pathfinding budget at start of each frame
+    // This prevents pathfinding from consuming entire frame budget
+    this.pathfindingManager.resetFrameBudget();
+
     if (this._phase === GamePhase.Battle) {
       const t0 = performance.now();
       this.unitManager.fixedUpdate(dt);
@@ -500,7 +506,7 @@ export class Game {
       this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
       t5 = performance.now();
 
-      this.pathRenderer?.update(); // Update path lines as units move
+      this.pathRenderer?.update(dt); // Update path lines as units move
       this.instancedUnitRenderer?.update(); // Update instanced unit rendering
       this.batchedUIRenderer?.update(); // Update batched UI rendering (health/morale bars)
       t6 = performance.now();
@@ -817,8 +823,19 @@ export class Game {
     // Initialize economy with capture zones
     this.economyManager.initialize(this.currentMap.captureZones);
 
-    // Initialize reinforcement manager with entry points
-    this.reinforcementManager.initialize(this.currentMap.entryPoints);
+    // Initialize reinforcement manager with resupply points converted to entry points
+    // Convert resupply points to entry point format for spawning
+    const entryPointsFromResupply: EntryPoint[] = this.currentMap.resupplyPoints.map((rp) => ({
+      id: rp.id,
+      team: rp.team,
+      x: rp.x,
+      z: rp.z,
+      type: 'secondary' as const, // Medium spawn rate
+      spawnRate: 3, // 3 seconds between spawns (reasonable for mid-battle reinforcements)
+      queue: [], // Start with empty queue
+      rallyPoint: null, // No rally point initially
+    }));
+    this.reinforcementManager.initialize(entryPointsFromResupply);
 
     // Initialize building manager with map buildings
     this.buildingManager.initialize(this.currentMap.buildings);
@@ -1110,6 +1127,10 @@ export class Game {
 
     // Clear pre-order path visualizations (dashed lines)
     this.pathRenderer?.clearAllPreOrderPaths();
+
+    // Initialize AI strategy and queue initial movements
+    // This ensures AI units have orders ready and begin moving immediately
+    this.aiManager.initializeBattle();
 
     // Start battle
     console.log('[Game] Starting battle...');

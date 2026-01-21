@@ -7,11 +7,12 @@ import * as THREE from 'three';
 import { Unit, UnitCommand, type UnitConfig } from '../../src/game/units/Unit';
 import type { Game } from '../../src/core/Game';
 
-// Mock the Game class
-const mockGame = {
+// Mock the Game class with all required managers
+const createMockGame = () => ({
   unitManager: {
     destroyUnit: vi.fn(),
     getAllUnits: vi.fn().mockReturnValue([]),
+    getUnitsInRadius: vi.fn().mockReturnValue([]),
   },
   selectionManager: {
     removeFromSelection: vi.fn(),
@@ -20,6 +21,11 @@ const mockGame = {
     add: vi.fn(),
     remove: vi.fn(),
   },
+  pathfindingManager: {
+    findPath: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+    findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
+  },
+  getElevationAt: vi.fn().mockReturnValue(0),
 } as unknown as Game;
 
 const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
@@ -40,6 +46,7 @@ const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
 describe('Unit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGame = createMockGame();
   });
 
   describe('initialization', () => {
@@ -171,6 +178,11 @@ describe('Unit', () => {
         position: new THREE.Vector3(0, 0, 0),
         speed: 10,
       });
+
+      // Mock pathfinding to return a direct path to target
+      (mockGame.pathfindingManager.findPath as ReturnType<typeof vi.fn>).mockReturnValue([
+        new THREE.Vector3(100, 0, 0),
+      ]);
 
       unit.setFrozen(false);
       unit.setMoveCommand(new THREE.Vector3(100, 0, 0));

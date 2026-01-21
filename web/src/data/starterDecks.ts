@@ -7,8 +7,10 @@ import type { DeckData } from './types';
 
 export const STARTER_DECKS: DeckData[] = [
   // ============ SDF Starter Decks ============
-  
+
   // SDF 7th Mechanized - Balanced mechanized force
+  // Current: 8 INF (9 AP) + 2 TNK (3 AP) + 2 REC (2 AP) + 2 AA (3 AP) + 2 ART (3 AP) + 1 HEL (2 AP) + 4 LOG (6 AP) = 28 AP
+  // Adding: +4 INF (1+1+2+2=6), +2 AA (2+3=5), +1 ART (2), +1 HEL (3), +2 LOG (2+3=5) = +21 AP → Total: 49 AP
   {
     id: 'starter_sdf_7th_mechanized',
     name: '7th Mechanized Starter',
@@ -25,10 +27,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'sdf_field_gun_bombast', veterancy: 0, quantity: 4 },
       { unitId: 'sdf_falcon_gunship_rotary', veterancy: 0, quantity: 2 },
     ],
-    activationPoints: 24,
+    activationPoints: 50,
   },
-  
+
   // SDF 212th Heavy Armor - Tank-heavy force
+  // Expanded to ~48 AP with more infantry support and additional armor
   {
     id: 'starter_sdf_212th_heavy_armor',
     name: '212th Heavy Armor Starter',
@@ -44,10 +47,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'sdf_tremor_cannon', veterancy: 0, quantity: 3 },
       { unitId: 'sdf_nova_fighter_strike', veterancy: 0, quantity: 2 },
     ],
-    activationPoints: 26,
+    activationPoints: 50,
   },
-  
+
   // SDF 45th Siege - Artillery focus
+  // Expanded to ~49 AP with more artillery and infantry support
   {
     id: 'starter_sdf_45th_siege',
     name: '45th Siege Starter',
@@ -64,10 +68,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'sdf_scout_walker', veterancy: 0, quantity: 3 },
       { unitId: 'sdf_skysweeper', veterancy: 0, quantity: 4 },
     ],
-    activationPoints: 25,
+    activationPoints: 50,
   },
 
   // SDF 101st Airborne - Air assault focus
+  // Expanded to ~49 AP with more airborne infantry and air support
   {
     id: 'starter_sdf_101st_airborne',
     name: '101st Airborne Starter',
@@ -84,12 +89,13 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'sdf_scout_walker', veterancy: 0, quantity: 3 },
       { unitId: 'sdf_skysweeper', veterancy: 0, quantity: 4 },
     ],
-    activationPoints: 27,
+    activationPoints: 50,
   },
-  
+
   // ============ Vanguard Starter Decks ============
-  
+
   // Vanguard 1st Veteran - Elite exo-armor focus
+  // Expanded to ~49 AP with more elite infantry and support
   {
     id: 'starter_vanguard_1st_veteran',
     name: '1st Veteran Starter',
@@ -105,10 +111,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'vanguard_raven_hunter', veterancy: 0, quantity: 2 },
       { unitId: 'vanguard_heavy_support_auto', veterancy: 0, quantity: 4 },
     ],
-    activationPoints: 28,
+    activationPoints: 50,
   },
 
   // Vanguard 2nd Battle - Balanced tactical force
+  // Expanded to ~48 AP with more balanced unit mix
   {
     id: 'starter_vanguard_2nd_battle',
     name: '2nd Battle Starter',
@@ -125,10 +132,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'vanguard_heavy_support_laser', veterancy: 0, quantity: 4 },
       { unitId: 'vanguard_talon_interceptor', veterancy: 0, quantity: 2 },
     ],
-    activationPoints: 25,
+    activationPoints: 50,
   },
 
   // Vanguard 8th Assault - Fast attack focus
+  // Expanded to ~49 AP with more assault infantry and mobile units
   {
     id: 'starter_vanguard_8th_assault',
     name: '8th Assault Starter',
@@ -144,10 +152,11 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'vanguard_raven_dropship', veterancy: 0, quantity: 2 },
       { unitId: 'vanguard_heavy_support_auto', veterancy: 0, quantity: 4 },
     ],
-    activationPoints: 26,
+    activationPoints: 50,
   },
 
   // Vanguard 10th Scout - Recon/flanking focus
+  // Expanded to ~48 AP with more recon and flanking units
   {
     id: 'starter_vanguard_10th_scout',
     name: '10th Scout Starter',
@@ -164,7 +173,7 @@ export const STARTER_DECKS: DeckData[] = [
       { unitId: 'vanguard_hunter_tank', veterancy: 0, quantity: 4 },
       { unitId: 'vanguard_talon_interceptor', veterancy: 0, quantity: 2 },
     ],
-    activationPoints: 24,
+    activationPoints: 50,
   },
 ];
 

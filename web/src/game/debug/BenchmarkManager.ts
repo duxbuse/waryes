@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GamePhase } from '../../core/Game';
 import { ScreenType } from '../../core/ScreenManager';
 
-interface BenchmarkStats {
+export interface BenchmarkStats {
     minFps: number;
     maxFps: number;
     avgFps: number;
@@ -12,9 +12,15 @@ interface BenchmarkStats {
     samples: number[];
 }
 
+export interface BenchmarkResults extends BenchmarkStats {
+    isComplete: boolean;
+    isRunning: boolean;
+}
+
 export class BenchmarkManager {
     private game: Game;
-    private isRunning = false;
+    private running = false;
+    private hasCompleted = false;
     private timeElapsed = 0;
     private maxDuration = 30; // 30 seconds test
     private stats: BenchmarkStats = {
@@ -38,10 +44,11 @@ export class BenchmarkManager {
      * Start the benchmark scenario
      */
     public async startBenchmark(): Promise<void> {
-        if (this.isRunning) return;
+        if (this.running) return;
 
         console.log('BENCHMARK: Starting performance benchmark...');
-        this.isRunning = true;
+        this.running = true;
+        this.hasCompleted = false;
         this.timeElapsed = 0;
         this.frameCount = 0;
         this.lastFpsSampleTime = 0;
@@ -98,7 +105,7 @@ export class BenchmarkManager {
      * Update benchmark logic (called from Game loop)
      */
     public update(dt: number): void {
-        if (!this.isRunning) return;
+        if (!this.running) return;
 
         this.timeElapsed += dt;
         this.frameCount++;
@@ -126,7 +133,8 @@ export class BenchmarkManager {
      * Stop benchmark and report
      */
     public stopBenchmark(): void {
-        this.isRunning = false;
+        this.running = false;
+        this.hasCompleted = true;
 
         // Calculate average
         const sum = this.stats.samples.reduce((a, b) => a + b, 0);
@@ -144,6 +152,32 @@ export class BenchmarkManager {
 
         // Display on screen
         this.showResults();
+    }
+
+    /**
+     * Get current benchmark status
+     * @returns True if benchmark is currently running
+     */
+    public isBenchmarkRunning(): boolean {
+        return this.running;
+    }
+
+    /**
+     * Get benchmark results for programmatic access
+     * Returns a copy of the stats to prevent external mutation
+     * @returns BenchmarkResults containing FPS stats and status
+     */
+    public getResults(): BenchmarkResults {
+        return {
+            minFps: this.stats.minFps === Infinity ? 0 : this.stats.minFps,
+            maxFps: this.stats.maxFps,
+            avgFps: this.stats.avgFps,
+            totalFrames: this.stats.totalFrames,
+            duration: this.stats.duration,
+            samples: [...this.stats.samples],
+            isComplete: this.hasCompleted,
+            isRunning: this.running
+        };
     }
 
     private spawnBenchmarkUnits(): void {

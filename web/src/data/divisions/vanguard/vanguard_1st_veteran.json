@@ -176,6 +176,128 @@
         "elite": 0,
         "veteran": 8
       }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_laser",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_recon_sniper",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_hunter_tank_laser",
+      "maxCards": 1,
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_missile_tank",
+      "maxCards": 2,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "vanguard_raven_dropship",
+      "maxCards": 1,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_titan_bomber",
+      "maxCards": 1,
+      "availability": {
+        "trained": 1,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 0,
+        "veteran": 0
+      }
+    },
+    {
+      "unitId": "vanguard_talon_strike",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_star_fighter",
+      "maxCards": 1,
+      "availability": {
+        "trained": 1,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 0,
+        "veteran": 1
+      }
     }
   ]
 }

@@ -16,7 +16,7 @@ function createDefaultDeck(): DeckData {
     return { ...starterDeck, id: 'default_deck', name: 'Quick Start Deck' };
   }
 
-  // Fallback to hardcoded valid SDF units
+  // Fallback to hardcoded valid SDF units (matches 7th Mechanized starter deck)
   return {
     id: 'default_deck',
     name: 'Quick Start Deck',
@@ -26,9 +26,14 @@ function createDefaultDeck(): DeckData {
       { unitId: 'sdf_trooper', veterancy: 0 },
       { unitId: 'sdf_militia', veterancy: 0 },
       { unitId: 'sdf_hwt_heavy_bolter', veterancy: 0 },
+      { unitId: 'sdf_hwt_missile', veterancy: 0 },
       { unitId: 'sdf_bastion_mbt', veterancy: 0 },
+      { unitId: 'sdf_scout_walker', veterancy: 0 },
+      { unitId: 'sdf_skysweeper', veterancy: 0 },
+      { unitId: 'sdf_field_gun_bombast', veterancy: 0 },
+      { unitId: 'sdf_falcon_gunship_rotary', veterancy: 0 },
     ],
-    activationPoints: 10,
+    activationPoints: 24,
   };
 }
 
@@ -747,38 +752,37 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         }
       });
     });
-  }
 
-  // Your text deck select
-  const yourDeckSelect = element.querySelector('#your-deck-select') as HTMLSelectElement;
-  if (yourDeckSelect) {
-    yourDeckSelect.addEventListener('change', (e) => {
-      const target = e.target as HTMLSelectElement;
-      const value = target.value;
+    // Your deck select (must be set up after rendering team slots)
+    const yourDeckSelect = element.querySelector('#your-deck-select') as HTMLSelectElement;
+    if (yourDeckSelect) {
+      yourDeckSelect.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        const value = target.value;
 
-      if (!value) {
-        selectedDeck = null;
-      } else if (value === 'default') {
-        selectedDeck = createDefaultDeck();
-      } else {
-        // Check starter decks
-        const starter = STARTER_DECKS.find(d => d.id === value);
-        if (starter) {
-          selectedDeck = starter;
+        if (!value) {
+          selectedDeck = null;
+        } else if (value === 'default') {
+          selectedDeck = createDefaultDeck();
         } else {
-          // Check saved decks
-          const savedDecks = loadSavedDecks();
-          const saved = savedDecks.find(d => d.id === value);
-          if (saved) {
-            selectedDeck = saved;
+          // Check starter decks
+          const starter = STARTER_DECKS.find(d => d.id === value);
+          if (starter) {
+            selectedDeck = starter;
+          } else {
+            // Check saved decks
+            const savedDecks = loadSavedDecks();
+            const saved = savedDecks.find(d => d.id === value);
+            if (saved) {
+              selectedDeck = saved;
+            }
           }
         }
-      }
-      renderDeckPreview();
-      // We don't need to re-render slots just for this update as the select state matches
-    });
+        renderDeckPreview();
+        updateStartButton();
+      });
+    }
   }
-
 
   function renderDeckPreview(): void {
     const preview = element.querySelector('#deck-preview')!;

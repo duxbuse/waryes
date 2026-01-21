@@ -12,11 +12,14 @@
 import * as THREE from 'three';
 import type { Unit } from '../units/Unit';
 import type { Game } from '../../core/Game';
+import { VectorPool } from '../utils/VectorPool';
 
 interface PathData {
   line: THREE.Mesh | THREE.Line; // Can be Mesh (ribbon) or Line (fallback)
   unit: Unit;
   target: THREE.Vector3;
+  fadeTimer: number; // Time remaining before path fades out completely (in seconds)
+  initialOpacity: number; // Initial opacity value to fade from
 }
 
 export class PathRenderer {
@@ -43,14 +46,174 @@ export class PathRenderer {
   // Height offset above terrain for visibility
   private readonly PATH_HEIGHT_OFFSET = 0.5; // 0.5m above terrain
 
+  // Fade animation settings
+  private readonly FADE_DURATION = 8.0; // Duration in seconds before path fades out completely
+  private readonly INITIAL_OPACITY = 0.8; // Starting opacity for paths
+
+  // Command types that should use dashed lines
+  private readonly DASHED_COMMAND_TYPES = ['attack', 'attackMove', 'hunt'];
+
   constructor(scene: THREE.Scene, game: Game) {
     this.scene = scene;
     this.game = game;
   }
 
   /**
+   * Helper method to create a path segment (solid or dashed based on command type)
+   */
+  private createPathSegment(
+    startPos: THREE.Vector3,
+    endPos: THREE.Vector3,
+    commandType: string,
+    color: number
+  ): THREE.Mesh | THREE.Group {
+    const isDashed = this.DASHED_COMMAND_TYPES.includes(commandType);
+
+    if (!isDashed) {
+      // Create solid ribbon
+      return this.createSolidRibbon(startPos, endPos, color);
+    } else {
+      // Create dashed ribbon
+      return this.createDashedRibbon(startPos, endPos, color);
+    }
+  }
+
+  /**
+   * Create a solid ribbon segment
+   * Samples terrain height along the path to ensure the ribbon follows terrain contours
+   */
+  private createSolidRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Mesh {
+    const pathWidth = 0.3;
+    const totalDistance = startPos.distanceTo(endPos);
+
+    // Sample terrain at regular intervals (every 2 meters, minimum 2 samples)
+    const sampleInterval = 2.0;
+    const numSamples = Math.max(2, Math.ceil(totalDistance / sampleInterval) + 1);
+
+    // Build vertices by sampling terrain along the path
+    const vertices: number[] = [];
+    const indices: number[] = [];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / (numSamples - 1);
+      const samplePos = VectorPool.acquire();
+      samplePos.lerpVectors(startPos, endPos, t);
+
+      // Sample terrain height at this point
+      const terrainHeight = this.game.getElevationAt(samplePos.x, samplePos.z);
+      samplePos.y = terrainHeight + this.PATH_HEIGHT_OFFSET;
+
+      // Calculate perpendicular direction for ribbon width
+      const direction = VectorPool.acquire();
+      direction.subVectors(endPos, startPos).normalize();
+      const perpendicular = VectorPool.acquire();
+      perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+
+      // Add two vertices (left and right edges of ribbon)
+      vertices.push(
+        samplePos.x - perpendicular.x, samplePos.y, samplePos.z - perpendicular.z,
+        samplePos.x + perpendicular.x, samplePos.y, samplePos.z + perpendicular.z
+      );
+
+      // Create triangle indices for this segment (except for the last sample)
+      if (i < numSamples - 1) {
+        const baseIndex = i * 2;
+        indices.push(
+          baseIndex, baseIndex + 1, baseIndex + 2,
+          baseIndex + 1, baseIndex + 3, baseIndex + 2
+        );
+      }
+    }
+
+    const ribbonVertices = new Float32Array(vertices);
+    const ribbonIndices = new Uint16Array(indices);
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(ribbonVertices, 3));
+    geometry.setIndex(new THREE.BufferAttribute(ribbonIndices, 1));
+
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: this.INITIAL_OPACITY,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 100;
+    return mesh;
+  }
+
+  /**
+   * Create a dashed ribbon segment
+   * More subtle than pre-order dashes (shorter dash/gap)
+   * Samples terrain height along each dash to follow terrain contours
+   */
+  private createDashedRibbon(startPos: THREE.Vector3, endPos: THREE.Vector3, color: number): THREE.Group {
+    const pathWidth = 0.3;
+    const direction = VectorPool.acquire();
+    direction.subVectors(endPos, startPos).normalize();
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+
+    // Dash pattern - more subtle than pre-order (shorter dashes)
+    const segmentLength = 1.5; // Length of each dash (shorter than pre-order's 2)
+    const gapLength = 0.75; // Length of each gap (shorter than pre-order's 1)
+    const totalDistance = startPos.distanceTo(endPos);
+    const dashPattern = segmentLength + gapLength;
+    const numDashes = Math.floor(totalDistance / dashPattern);
+
+    const lineGroup = new THREE.Group();
+
+    for (let i = 0; i < numDashes; i++) {
+      const t1 = (i * dashPattern) / totalDistance;
+      const t2 = Math.min((i * dashPattern + segmentLength) / totalDistance, 1);
+
+      const p1 = VectorPool.acquire();
+      p1.lerpVectors(startPos, endPos, t1);
+      const p2 = VectorPool.acquire();
+      p2.lerpVectors(startPos, endPos, t2);
+
+      // Sample terrain height at start and end of this dash
+      const terrainHeight1 = this.game.getElevationAt(p1.x, p1.z);
+      const terrainHeight2 = this.game.getElevationAt(p2.x, p2.z);
+      p1.y = terrainHeight1 + this.PATH_HEIGHT_OFFSET;
+      p2.y = terrainHeight2 + this.PATH_HEIGHT_OFFSET;
+
+      const segmentVertices = new Float32Array([
+        p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
+        p1.x + perpendicular.x, p1.y, p1.z + perpendicular.z,
+        p2.x - perpendicular.x, p2.y, p2.z - perpendicular.z,
+        p2.x + perpendicular.x, p2.y, p2.z + perpendicular.z,
+      ]);
+
+      const segmentIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+
+      const segmentGeometry = new THREE.BufferGeometry();
+      segmentGeometry.setAttribute('position', new THREE.BufferAttribute(segmentVertices, 3));
+      segmentGeometry.setIndex(new THREE.BufferAttribute(segmentIndices, 1));
+
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: this.INITIAL_OPACITY,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+
+      const mesh = new THREE.Mesh(segmentGeometry, material);
+      mesh.renderOrder = 100;
+      lineGroup.add(mesh);
+    }
+
+    return lineGroup;
+  }
+
+  /**
    * Update path visualization for a unit
    * Only shows paths for player-owned units (not enemies or AI allies)
+   * For single commands (non-queued), only shows the path line without waypoint markers
    */
   updatePath(unit: Unit, targetPosition: THREE.Vector3 | null, commandType: string = 'move'): void {
     // Remove existing path
@@ -61,50 +224,20 @@ export class PathRenderer {
     // Only show paths for player-owned units
     if (unit.ownerId !== 'player') return;
 
-    // Create path line
-    const points = [
-      unit.position.clone(),
-      targetPosition.clone(),
-    ];
-
     // Sample terrain elevation and lift path above it for visibility
-    points.forEach(p => {
-      const terrainHeight = this.game.getElevationAt(p.x, p.z);
-      p.y = terrainHeight + this.PATH_HEIGHT_OFFSET;
-    });
+    const startPos = unit.position.clone();
+    const endPos = targetPosition.clone();
+
+    const startTerrainHeight = this.game.getElevationAt(startPos.x, startPos.z);
+    const endTerrainHeight = this.game.getElevationAt(endPos.x, endPos.z);
+
+    startPos.y = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
+    endPos.y = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
 
     const color = this.PATH_COLORS[commandType as keyof typeof this.PATH_COLORS] ?? this.PATH_COLORS.move;
 
-    // Create a visible ribbon/tube for the path since linewidth doesn't work in WebGL
-    const pathWidth = 0.3; // Width of the path ribbon in meters
-    const direction = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
-
-    // Create a ribbon geometry (quad strip along the path)
-    const ribbonVertices = new Float32Array([
-      // First segment
-      points[0].x - perpendicular.x, points[0].y, points[0].z - perpendicular.z,
-      points[0].x + perpendicular.x, points[0].y, points[0].z + perpendicular.z,
-      points[1].x - perpendicular.x, points[1].y, points[1].z - perpendicular.z,
-      points[1].x + perpendicular.x, points[1].y, points[1].z + perpendicular.z,
-    ]);
-
-    const ribbonIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(ribbonVertices, 3));
-    geometry.setIndex(new THREE.BufferAttribute(ribbonIndices, 1));
-
-    const material = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-
-    const line = new THREE.Mesh(geometry, material);
-    line.renderOrder = 100; // Render on top
+    // Create path segment (solid or dashed based on command type)
+    const line = this.createPathSegment(startPos, endPos, commandType, color);
     this.scene.add(line);
 
     // Store path data with unit reference for dynamic updates
@@ -112,10 +245,91 @@ export class PathRenderer {
       line,
       unit,
       target: targetPosition.clone(),
+      fadeTimer: this.FADE_DURATION,
+      initialOpacity: this.INITIAL_OPACITY,
     }]);
 
-    // Create waypoint marker at destination
-    this.createWaypoint(unit.id, targetPosition, color);
+    // Note: No waypoint marker for single commands (per spec: "Waypoint markers shown at each queued destination")
+    // Waypoint markers are only shown for multi-waypoint queued commands (updatePathQueue)
+  }
+
+  /**
+   * Update path queue visualization for a unit with multiple waypoints
+   * Shows connected path segments for all queued commands
+   * Only shows paths for player-owned units (not enemies or AI allies)
+   */
+  updatePathQueue(unit: Unit, commandQueue: Array<{ type: string; target?: THREE.Vector3 }>): void {
+    // Remove existing path
+    this.clearPath(unit.id);
+
+    // Only show paths for player-owned units
+    if (unit.ownerId !== 'player') return;
+
+    // Build list of waypoints from command queue
+    const waypoints: Array<{ position: THREE.Vector3; commandType: string }> = [];
+
+    // Add all commands with target positions
+    for (const command of commandQueue) {
+      if (command.target) {
+        waypoints.push({
+          position: command.target.clone(),
+          commandType: command.type,
+        });
+      }
+    }
+
+    // No waypoints to render
+    if (waypoints.length === 0) return;
+
+    const pathDataList: PathData[] = [];
+
+    // Create path segments between consecutive waypoints
+    let startPos = unit.position.clone();
+
+    for (let i = 0; i < waypoints.length; i++) {
+      const waypoint = waypoints[i];
+      const endPos = waypoint.position.clone();
+      const commandType = waypoint.commandType;
+
+      // Sample terrain elevation and lift path above it for visibility
+      const startTerrainHeight = this.game.getElevationAt(startPos.x, startPos.z);
+      const endTerrainHeight = this.game.getElevationAt(endPos.x, endPos.z);
+
+      const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
+      const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+
+      const adjustedStart = VectorPool.acquire();
+      adjustedStart.set(startPos.x, startY, startPos.z);
+      const adjustedEnd = VectorPool.acquire();
+      adjustedEnd.set(endPos.x, endY, endPos.z);
+
+      // Get color for this command type
+      const color = this.PATH_COLORS[commandType as keyof typeof this.PATH_COLORS] ?? this.PATH_COLORS.move;
+
+      // Create path segment (solid or dashed based on command type)
+      const line = this.createPathSegment(adjustedStart, adjustedEnd, commandType, color);
+      this.scene.add(line);
+
+      // Store path data for this segment
+      pathDataList.push({
+        line,
+        unit,
+        target: endPos,
+        fadeTimer: this.FADE_DURATION,
+        initialOpacity: this.INITIAL_OPACITY,
+      });
+
+      // Create waypoint marker at this destination
+      this.createWaypoint(unit.id, endPos, color);
+
+      // Next segment starts where this one ends
+      startPos = endPos;
+    }
+
+    // Store all path segments for this unit
+    if (pathDataList.length > 0) {
+      this.pathData.set(unit.id, pathDataList);
+    }
   }
 
   /**
@@ -142,8 +356,10 @@ export class PathRenderer {
 
     // Create a visible ribbon for pre-order path
     const pathWidth = 0.25; // Slightly thinner than regular paths
-    const direction = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
+    const direction = VectorPool.acquire();
+    direction.subVectors(points[1], points[0]).normalize();
+    const perpendicular = VectorPool.acquire();
+    perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
 
     // Create dashed ribbon by creating multiple small segments
     const segmentLength = 2; // Length of each dash
@@ -158,8 +374,10 @@ export class PathRenderer {
       const t1 = (i * dashPattern) / totalDistance;
       const t2 = Math.min((i * dashPattern + segmentLength) / totalDistance, 1);
 
-      const p1 = new THREE.Vector3().lerpVectors(points[0], points[1], t1);
-      const p2 = new THREE.Vector3().lerpVectors(points[0], points[1], t2);
+      const p1 = VectorPool.acquire();
+      p1.lerpVectors(points[0], points[1], t1);
+      const p2 = VectorPool.acquire();
+      p2.lerpVectors(points[0], points[1], t2);
 
       const segmentVertices = new Float32Array([
         p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
@@ -273,8 +491,21 @@ export class PathRenderer {
     if (data) {
       data.forEach(d => {
         this.scene.remove(d.line);
-        d.line.geometry.dispose();
-        (d.line.material as THREE.Material).dispose();
+
+        // Dispose geometry and materials for both Mesh and Group types
+        if (d.line instanceof THREE.Mesh) {
+          // Solid ribbon
+          d.line.geometry.dispose();
+          (d.line.material as THREE.Material).dispose();
+        } else if (d.line instanceof THREE.Group) {
+          // Dashed ribbon - dispose all children
+          d.line.children.forEach(child => {
+            if (child instanceof THREE.Mesh) {
+              child.geometry.dispose();
+              (child.material as THREE.Material).dispose();
+            }
+          });
+        }
       });
       this.pathData.delete(unitId);
     }
@@ -293,46 +524,138 @@ export class PathRenderer {
 
   /**
    * Update all paths (shrink as units move)
+   * For multi-segment paths, only the first segment shrinks. When the unit reaches
+   * the first waypoint, that segment is removed and the next segment becomes active.
+   * Also handles fade-out animation over time.
    */
-  update(): void {
-    // Update each path ribbon to start from unit's current position
-    for (const [_unitId, dataList] of this.pathData) {
-      for (const data of dataList) {
-        const { line, unit, target } = data;
+  update(dt: number = 1/60): void {
+    // Update each unit's path queue
+    for (const [unitId, dataList] of this.pathData) {
+      if (dataList.length === 0) continue;
 
-        if (line instanceof THREE.Mesh) {
-          // Update ribbon geometry
-          const positions = line.geometry.attributes.position as THREE.BufferAttribute;
-          if (positions && positions.count === 4) {
-            // Ribbon has 4 vertices
-            const pathWidth = 0.3;
+      // Get the first segment (active segment unit is moving toward)
+      const firstSegment = dataList[0];
+      const unit = firstSegment.unit;
+      const target = firstSegment.target;
 
-            // Sample terrain heights
-            const startTerrainHeight = this.game.getElevationAt(unit.position.x, unit.position.z);
-            const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
-            const endTerrainHeight = this.game.getElevationAt(target.x, target.z);
-            const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+      // Update fade timer for all segments
+      let allSegmentsFaded = true;
+      for (const segment of dataList) {
+        segment.fadeTimer -= dt;
 
-            // Calculate perpendicular direction
-            const dx = target.x - unit.position.x;
-            const dz = target.z - unit.position.z;
-            const length = Math.sqrt(dx * dx + dz * dz);
-            if (length > 0.01) {
-              const dirX = dx / length;
-              const dirZ = dz / length;
-              const perpX = -dirZ * (pathWidth / 2);
-              const perpZ = dirX * (pathWidth / 2);
+        // Calculate opacity based on remaining fade time
+        const fadeProgress = Math.max(0, segment.fadeTimer / this.FADE_DURATION);
+        const newOpacity = segment.initialOpacity * fadeProgress;
 
-              // Update all 4 vertices of the ribbon
-              positions.setXYZ(0, unit.position.x - perpX, startY, unit.position.z - perpZ);
-              positions.setXYZ(1, unit.position.x + perpX, startY, unit.position.z + perpZ);
-              positions.setXYZ(2, target.x - perpX, endY, target.z - perpZ);
-              positions.setXYZ(3, target.x + perpX, endY, target.z + perpZ);
-              positions.needsUpdate = true;
+        // Update opacity for both Mesh (solid) and Group (dashed) lines
+        if (segment.line instanceof THREE.Mesh) {
+          // Solid ribbon - single material
+          (segment.line.material as THREE.MeshBasicMaterial).opacity = newOpacity;
+        } else if (segment.line instanceof THREE.Group) {
+          // Dashed ribbon - multiple meshes in group
+          segment.line.children.forEach(child => {
+            if (child instanceof THREE.Mesh) {
+              (child.material as THREE.MeshBasicMaterial).opacity = newOpacity;
             }
+          });
+        }
+
+        if (segment.fadeTimer > 0) {
+          allSegmentsFaded = false;
+        }
+      }
+
+      // If all segments have faded out, remove the entire path
+      if (allSegmentsFaded) {
+        this.clearPath(unitId);
+        continue;
+      }
+
+      // Check if unit has reached the first waypoint
+      const distanceToTarget = Math.sqrt(
+        Math.pow(unit.position.x - target.x, 2) +
+        Math.pow(unit.position.z - target.z, 2)
+      );
+
+      // If unit reached waypoint (within 2 meter threshold), remove first segment
+      if (distanceToTarget < 2) {
+        // Remove the first segment's line
+        this.scene.remove(firstSegment.line);
+
+        // Dispose geometry and materials for both Mesh and Group types
+        if (firstSegment.line instanceof THREE.Mesh) {
+          // Solid ribbon
+          firstSegment.line.geometry.dispose();
+          (firstSegment.line.material as THREE.Material).dispose();
+        } else if (firstSegment.line instanceof THREE.Group) {
+          // Dashed ribbon - dispose all children
+          firstSegment.line.children.forEach(child => {
+            if (child instanceof THREE.Mesh) {
+              child.geometry.dispose();
+              (child.material as THREE.Material).dispose();
+            }
+          });
+        }
+
+        // Remove the first waypoint marker
+        const markers = this.waypointMarkers.get(unitId);
+        if (markers && markers.length > 0) {
+          const marker = markers.shift()!; // Remove first marker
+          this.scene.remove(marker);
+          marker.geometry.dispose();
+          (marker.material as THREE.Material).dispose();
+        }
+
+        // Remove first segment from array
+        dataList.shift();
+
+        // If no more segments, remove the unit from pathData
+        if (dataList.length === 0) {
+          this.pathData.delete(unitId);
+          if (markers && markers.length === 0) {
+            this.waypointMarkers.delete(unitId);
+          }
+        }
+        continue; // Skip to next unit
+      }
+
+      // Update only the first segment (active path) to shrink from unit's current position
+      // Note: Only solid ribbons (Mesh) shrink dynamically. Dashed ribbons (Group) are static
+      // and only fade out or get removed when waypoint is reached.
+      const line = firstSegment.line;
+      if (line instanceof THREE.Mesh) {
+        // Update solid ribbon geometry
+        const positions = line.geometry.attributes.position as THREE.BufferAttribute;
+        if (positions && positions.count === 4) {
+          // Ribbon has 4 vertices
+          const pathWidth = 0.3;
+
+          // Sample terrain heights
+          const startTerrainHeight = this.game.getElevationAt(unit.position.x, unit.position.z);
+          const startY = startTerrainHeight + this.PATH_HEIGHT_OFFSET;
+          const endTerrainHeight = this.game.getElevationAt(target.x, target.z);
+          const endY = endTerrainHeight + this.PATH_HEIGHT_OFFSET;
+
+          // Calculate perpendicular direction
+          const dx = target.x - unit.position.x;
+          const dz = target.z - unit.position.z;
+          const length = Math.sqrt(dx * dx + dz * dz);
+          if (length > 0.01) {
+            const dirX = dx / length;
+            const dirZ = dz / length;
+            const perpX = -dirZ * (pathWidth / 2);
+            const perpZ = dirX * (pathWidth / 2);
+
+            // Update all 4 vertices of the ribbon
+            positions.setXYZ(0, unit.position.x - perpX, startY, unit.position.z - perpZ);
+            positions.setXYZ(1, unit.position.x + perpX, startY, unit.position.z + perpZ);
+            positions.setXYZ(2, target.x - perpX, endY, target.z - perpZ);
+            positions.setXYZ(3, target.x + perpX, endY, target.z + perpZ);
+            positions.needsUpdate = true;
           }
         }
       }
+      // Dashed ribbons (Group) don't shrink - they remain static and fade out
     }
   }
 

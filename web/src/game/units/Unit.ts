@@ -73,7 +73,8 @@ export class Unit {
   // Combat
   private weapons: WeaponSlot[] = [];
   private weaponAmmo: number[] = []; // Current ammo per weapon slot (index matches weapons array)
-  private fireCooldown: number = 0;
+  private weaponCooldowns: number[] = []; // Current cooldown per weapon slot (index matches weapons array)
+  private weaponDamageDealt: number[] = []; // Total damage dealt per weapon slot (index matches weapons array)
   private fireRate: number = 1; // shots per second base (mutable for veterancy)
 
   // Kill tracking
@@ -131,6 +132,10 @@ export class Unit {
   private currentWaypointIndex = 0;
   private stuckTimer = 0; // Track if unit is stuck and needs rerouting
   private lastPosition = new THREE.Vector3();
+  private hasMovedOnce = false; // Track if unit has moved at least once (prevents false stuck detection on spawn)
+  private lastPathfindingAttempt = 0; // PERFORMANCE: Timestamp of last pathfinding attempt
+  private readonly pathfindingCooldown = 1.0; // Cooldown between pathfinding retries (seconds) - reduced from 3.0
+  private isEscaping = false; // Flag to indicate unit is executing escape maneuver
   // @ts-expect-error Planned feature - movement modes
   private movementMode: 'normal' | 'fast' | 'reverse' = 'normal';
 
@@ -175,6 +180,8 @@ export class Unit {
 
     // Initialize weapon ammo from weapon slots
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
+    this.weaponDamageDealt = this.weapons.map(() => 0);
 
     // Apply veterancy bonuses
     this.applyVeterancyBonuses();
@@ -183,6 +190,9 @@ export class Unit {
     this.mesh = new THREE.Group();
     this.mesh.position.copy(config.position);
     this.mesh.userData['unitId'] = this.id;
+
+    // Initialize lastPosition to starting position (for stuck detection)
+    this.lastPosition.copy(config.position);
 
     // Create body mesh (simple box for now)
     const { geometry, height } = this.createGeometry();
@@ -392,12 +402,73 @@ export class Unit {
     return maxRange || 20; // Default range
   }
 
+  /**
+   * Check if ANY weapon can fire (wrapper for backward compatibility)
+   */
   canFire(): boolean {
-    return this.fireCooldown <= 0 && !this._isRouting && this._suppression < 80;
+    if (this._isRouting || this._suppression >= 80) return false;
+    // Check if any weapon has cooled down
+    for (let i = 0; i < this.weaponCooldowns.length; i++) {
+      if (this.weaponCooldowns[i] <= 0) return true;
+    }
+    return false;
   }
 
+  /**
+   * Reset fire cooldown for all weapons (legacy method for backward compatibility)
+   * @deprecated Use resetWeaponCooldown(weaponIndex, weaponId) instead
+   */
   resetFireCooldown(): void {
-    this.fireCooldown = 1 / this.fireRate;
+    // Reset all weapon cooldowns based on their individual rates of fire
+    for (let i = 0; i < this.weapons.length; i++) {
+      const weapon = getWeaponById(this.weapons[i]!.weaponId);
+      if (weapon && weapon.rateOfFire > 0) {
+        this.weaponCooldowns[i] = 60 / weapon.rateOfFire;
+      }
+    }
+  }
+
+  // Per-weapon cooldown management
+  /**
+   * Get current cooldown for a weapon slot
+   */
+  getWeaponCooldown(weaponIndex: number): number {
+    return this.weaponCooldowns[weaponIndex] ?? 0;
+  }
+
+  /**
+   * Check if a specific weapon can fire (checks cooldown, routing, suppression)
+   */
+  canWeaponFire(weaponIndex: number): boolean {
+    const cooldown = this.weaponCooldowns[weaponIndex] ?? 0;
+    return cooldown <= 0 && !this._isRouting && this._suppression < 80;
+  }
+
+  /**
+   * Reset cooldown for a specific weapon based on its rate of fire
+   */
+  resetWeaponCooldown(weaponIndex: number, weaponId: string): void {
+    const weapon = getWeaponById(weaponId);
+    if (weapon && weapon.rateOfFire > 0) {
+      // Convert rate of fire (rounds per minute) to cooldown (seconds)
+      this.weaponCooldowns[weaponIndex] = 60 / weapon.rateOfFire;
+    }
+  }
+
+  /**
+   * Get total damage dealt by a weapon slot
+   */
+  getWeaponDamageDealt(weaponIndex: number): number {
+    return this.weaponDamageDealt[weaponIndex] ?? 0;
+  }
+
+  /**
+   * Add damage to a weapon's damage tracking
+   */
+  addWeaponDamage(weaponIndex: number, damage: number): void {
+    if (weaponIndex >= 0 && weaponIndex < this.weaponDamageDealt.length) {
+      this.weaponDamageDealt[weaponIndex] += damage;
+    }
   }
 
   // Weapon ammunition management
@@ -447,6 +518,7 @@ export class Unit {
    */
   resupplyAllWeapons(): void {
     this.weaponAmmo = this.weapons.map(w => w.maxAmmo);
+    this.weaponCooldowns = this.weapons.map(() => 0);
   }
 
   /**
@@ -628,6 +700,48 @@ export class Unit {
     this.targetPosition = null;
   }
 
+  /**
+   * Build full command queue for path visualization
+   * Includes current command + all queued commands
+   */
+  private buildFullCommandQueue(): Array<{ type: string; target?: THREE.Vector3 }> {
+    const fullQueue: Array<{ type: string; target?: THREE.Vector3 }> = [];
+
+    // Add current command if it has a target or targetUnit
+    if (this.currentCommand.type !== UnitCommand.None) {
+      if (this.currentCommand.target) {
+        fullQueue.push({
+          type: this.currentCommand.type,
+          target: this.currentCommand.target
+        });
+      } else if (this.currentCommand.targetUnit) {
+        // Convert targetUnit to position for visualization
+        fullQueue.push({
+          type: this.currentCommand.type,
+          target: this.currentCommand.targetUnit.position.clone()
+        });
+      }
+    }
+
+    // Add all queued commands with targets or targetUnits
+    for (const cmd of this.commandQueue) {
+      if (cmd.target) {
+        fullQueue.push({
+          type: cmd.type,
+          target: cmd.target
+        });
+      } else if (cmd.targetUnit) {
+        // Convert targetUnit to position for visualization
+        fullQueue.push({
+          type: cmd.type,
+          target: cmd.targetUnit.position.clone()
+        });
+      }
+    }
+
+    return fullQueue;
+  }
+
   // Movement commands
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
@@ -672,7 +786,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'move');
     }
@@ -683,6 +797,12 @@ export class Unit {
       this.setMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Move, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -691,7 +811,8 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Attack, targetUnit: target };
 
-    // Update path visualization (show path to target unit)
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
+    // For attack commands, we convert targetUnit to target position for visualization
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target.position, 'attack');
     }
@@ -702,6 +823,12 @@ export class Unit {
       this.setAttackCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Attack, targetUnit: target });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -746,7 +873,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'fast');
     }
@@ -757,6 +884,12 @@ export class Unit {
       this.setFastMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.FastMove, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -801,7 +934,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'reverse');
     }
@@ -812,6 +945,12 @@ export class Unit {
       this.setReverseCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.Reverse, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -856,7 +995,7 @@ export class Unit {
       }
     }
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'attackMove');
     }
@@ -867,6 +1006,12 @@ export class Unit {
       this.setAttackMoveCommand(target);
     } else {
       this.commandQueue.push({ type: UnitCommand.AttackMove, target: target.clone() });
+
+      // Update path visualization with full queue
+      if (this.game.pathRenderer) {
+        const fullQueue = this.buildFullCommandQueue();
+        this.game.pathRenderer.updatePathQueue(this, fullQueue);
+      }
     }
   }
 
@@ -877,7 +1022,7 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Garrison, target: buildingPos };
     this.targetPosition = buildingPos;
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, buildingPos, 'garrison');
     }
@@ -944,7 +1089,7 @@ export class Unit {
     this.currentCommand = { type: UnitCommand.Mount, target: transportPos, targetUnit: transport };
     this.targetPosition = transportPos;
 
-    // Update path visualization
+    // Update path visualization with single command (not full queue - that's only for shift-queue)
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, transportPos, 'mount');
     }
@@ -999,9 +1144,11 @@ export class Unit {
   fixedUpdate(dt: number): void {
     if (this._isFrozen) return;
 
-    // Update fire cooldown
-    if (this.fireCooldown > 0) {
-      this.fireCooldown -= dt;
+    // Update weapon cooldowns
+    for (let i = 0; i < this.weaponCooldowns.length; i++) {
+      if (this.weaponCooldowns[i] > 0) {
+        this.weaponCooldowns[i] -= dt;
+      }
     }
 
     // Recover suppression over time (with veterancy bonus)
@@ -1393,6 +1540,38 @@ export class Unit {
       // If too close, push away
       if (dist < minDist && dist > 0.01) {
         toOther.normalize();
+
+        // TERRAIN AWARENESS: Validate push direction against terrain
+        // Don't push units into impassable terrain (cliffs, water, etc.)
+        if (this.shouldCheckTerrain()) {
+          const testDistance = 2.0; // Test 2m ahead
+          const testPos = this.position.clone().add(toOther.clone().multiplyScalar(testDistance));
+          const slope = this.calculateSlopeTo(testPos);
+
+          // If push direction leads to steep terrain, try perpendicular direction
+          if (slope > 1.0) {
+            // Try perpendicular directions (left and right)
+            const perpRight = new THREE.Vector3(-toOther.z, 0, toOther.x);
+            const perpLeft = new THREE.Vector3(toOther.z, 0, -toOther.x);
+
+            const testRight = this.position.clone().add(perpRight.clone().multiplyScalar(testDistance));
+            const testLeft = this.position.clone().add(perpLeft.clone().multiplyScalar(testDistance));
+
+            const slopeRight = this.calculateSlopeTo(testRight);
+            const slopeLeft = this.calculateSlopeTo(testLeft);
+
+            // Use the better perpendicular direction
+            if (slopeRight <= 1.0 && slopeRight <= slopeLeft) {
+              toOther.copy(perpRight);
+            } else if (slopeLeft <= 1.0) {
+              toOther.copy(perpLeft);
+            } else {
+              // Both perpendicular directions blocked - don't push
+              continue;
+            }
+          }
+        }
+
         // More aggressive push - squared falloff for stronger near-field
         const pushStrength = Math.pow((minDist - dist) / minDist, 2);
         separationForce.add(toOther.multiplyScalar(pushStrength * 2.0)); // 2x multiplier
@@ -1433,41 +1612,67 @@ export class Unit {
       return;
     }
 
-    // Check if stuck (not moving for 2 seconds)
+    // Check if stuck (not moving for 0.5 seconds - reduced from 2.0 for faster response)
     const distMoved = this.mesh.position.distanceTo(this.lastPosition);
     if (distMoved < 0.1) {
       this.stuckTimer += dt;
-      if (this.stuckTimer > 2.0 && this.currentCommand.target) {
-        // Try to reroute silently
 
-        let path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
-
-        if (!path || path.length === 0) {
-          // Direct repath failed - try finding nearest reachable position
-          const fallback = this.game.pathfindingManager.findNearestReachablePosition(
-            this.position,
-            this.currentCommand.target,
-            50
-          );
-
-          if (fallback) {
-            path = this.game.pathfindingManager.findPath(this.position, fallback);
-          }
-        }
-
-        if (path && path.length > 0) {
-          this.waypoints = path;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
+      // Fast response to stuck condition (but only after unit has moved at least once)
+      if (this.stuckTimer > 0.5 && this.currentCommand.target && this.hasMovedOnce) {
+        // Try local escape first (no pathfinding needed - faster and cheaper)
+        const escapeDir = this.findEscapeDirection();
+        if (escapeDir && !this.isEscaping) {
+          // Found a valid escape direction - move perpendicular to obstacle
+          this.isEscaping = true;
+          const escapeTarget = this.position.clone().add(escapeDir);
+          this.targetPosition = escapeTarget;
           this.stuckTimer = 0;
-        } else {
-          // Completely stuck - give up
-          this.completeCommand();
+          this.waypoints = []; // Clear waypoints during escape
           return;
         }
+
+        // If escape failed or already escaping, try pathfinding reroute
+        // CRITICAL PERFORMANCE: Only retry pathfinding if cooldown has passed
+        const currentTime = performance.now() / 1000;
+        const timeSinceLastAttempt = currentTime - this.lastPathfindingAttempt;
+
+        if (timeSinceLastAttempt >= this.pathfindingCooldown) {
+          this.lastPathfindingAttempt = currentTime;
+
+          // Try to reroute silently
+          let path = this.game.pathfindingManager.findPath(this.position, this.currentCommand.target);
+
+          if (!path || path.length === 0) {
+            // Direct repath failed - try finding nearest reachable position
+            const fallback = this.game.pathfindingManager.findNearestReachablePosition(
+              this.position,
+              this.currentCommand.target,
+              50
+            );
+
+            if (fallback) {
+              path = this.game.pathfindingManager.findPath(this.position, fallback);
+            }
+          }
+
+          if (path && path.length > 0) {
+            this.waypoints = path;
+            this.currentWaypointIndex = 0;
+            this.targetPosition = this.waypoints[0]!.clone();
+            this.stuckTimer = 0;
+            this.isEscaping = false; // Resume normal movement
+          } else {
+            // Completely stuck - give up
+            this.completeCommand();
+            return;
+          }
+        }
+        // If cooldown not passed, do nothing - wait for next attempt
       }
     } else {
       this.stuckTimer = 0;
+      this.isEscaping = false; // Resume normal movement when moving again
+      this.hasMovedOnce = true; // Mark that unit has moved at least once
       this.lastPosition.copy(this.mesh.position);
     }
 
@@ -1497,7 +1702,22 @@ export class Unit {
 
     // Normalize and apply speed
     direction.normalize();
-    const moveDistance = this.speed * dt;
+
+    // MOVEMENT SMOOTHING: Look ahead to next waypoint and slow down if approaching steep terrain
+    let speedMultiplier = 1.0;
+    if (this.waypoints.length > 0 && this.currentWaypointIndex < this.waypoints.length - 1 && this.shouldCheckTerrain()) {
+      // Look ahead to next waypoint
+      const nextWaypoint = this.waypoints[this.currentWaypointIndex + 1]!;
+      const slopeToNext = this.calculateSlopeTo(nextWaypoint);
+
+      // Slow down when approaching steep terrain (0.7-1.0 slope = 35-45 degrees)
+      if (slopeToNext > 0.7) {
+        const steepnessFactor = (slopeToNext - 0.7) / (1.0 - 0.7); // 0 to 1
+        speedMultiplier = 1.0 - (steepnessFactor * 0.5); // Reduce speed by up to 50%
+      }
+    }
+
+    const moveDistance = this.speed * dt * speedMultiplier;
 
     // Rotate towards target
     const targetAngle = Math.atan2(direction.x, direction.z);
@@ -1566,6 +1786,59 @@ export class Unit {
     return category !== 'HEL' && category !== 'AIR';
   }
 
+  /**
+   * Calculate slope from current position to target position
+   * Returns slope value (0 = flat, 1.0 = 45 degrees, 2.0 = 63 degrees, etc.)
+   */
+  private calculateSlopeTo(targetPos: THREE.Vector3): number {
+    const currentHeight = this.game.getElevationAt(this.position.x, this.position.z);
+    const targetHeight = this.game.getElevationAt(targetPos.x, targetPos.z);
+    const horizontalDist = Math.sqrt(
+      Math.pow(targetPos.x - this.position.x, 2) +
+      Math.pow(targetPos.z - this.position.z, 2)
+    );
+
+    if (horizontalDist < 0.01) return 0; // Avoid division by zero
+
+    return Math.abs(targetHeight - currentHeight) / horizontalDist;
+  }
+
+  /**
+   * Find an escape direction when unit is stuck
+   * Samples 8 directions and returns first valid direction with acceptable slope
+   * Returns null if no valid escape direction found
+   */
+  private findEscapeDirection(): THREE.Vector3 | null {
+    // Sample 8 cardinal and diagonal directions
+    const directions = [
+      new THREE.Vector3(1, 0, 0),   // East
+      new THREE.Vector3(-1, 0, 0),  // West
+      new THREE.Vector3(0, 0, 1),   // South
+      new THREE.Vector3(0, 0, -1),  // North
+      new THREE.Vector3(1, 0, 1).normalize(),   // SE
+      new THREE.Vector3(-1, 0, 1).normalize(),  // SW
+      new THREE.Vector3(1, 0, -1).normalize(),  // NE
+      new THREE.Vector3(-1, 0, -1).normalize(), // NW
+    ];
+
+    const escapeDistance = 5; // Try to move 5m in escape direction
+    const MAX_SLOPE = 1.0; // 45 degrees
+
+    // Try each direction in order
+    for (const dir of directions) {
+      const testPos = this.position.clone().add(dir.clone().multiplyScalar(escapeDistance));
+      const slope = this.calculateSlopeTo(testPos);
+
+      // Valid if slope is acceptable
+      if (slope <= MAX_SLOPE) {
+        return dir.multiplyScalar(escapeDistance);
+      }
+    }
+
+    // No valid escape direction found
+    return null;
+  }
+
   private processAttack(dt: number): void {
     const target = this.currentCommand.targetUnit;
     if (!target || target.health <= 0) {
@@ -1575,7 +1848,7 @@ export class Unit {
 
     // Move towards target if out of range
     const distance = this.mesh.position.distanceTo(target.position);
-    const attackRange = 20; // TODO: Get from weapon data
+    const attackRange = this.getMaxWeaponRange();
 
     if (distance > attackRange) {
       // Move closer

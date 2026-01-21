@@ -173,6 +173,155 @@
         "elite": 0,
         "veteran": 8
       }
+    },
+    {
+      "unitId": "vanguard_infantry",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_exo_armor_kinetic",
+      "maxCards": 2,
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_exo_armor_shock",
+      "maxCards": 2,
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_iron_walker_assault",
+      "maxCards": 2,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_swift_skimmer_auto",
+      "maxCards": 3,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_swift_skimmer_missile",
+      "maxCards": 2,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_hunter_tank",
+      "maxCards": 2,
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_talon_interceptor",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_talon_strike",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_raven_hunter",
+      "maxCards": 2,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_titan_dropship",
+      "maxCards": 1,
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 3,
+        "elite": 0,
+        "veteran": 1
+      }
+    },
+    {
+      "unitId": "vanguard_apc",
+      "maxCards": 3,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
     }
   ]
 }
