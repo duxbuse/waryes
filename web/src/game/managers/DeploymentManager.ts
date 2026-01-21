@@ -11,8 +11,9 @@ import { GAME_CONSTANTS } from '../../data/types';
 export interface DeployableUnit {
   deckUnit: DeckUnit;
   unitData: UnitData;
-  deployed: boolean;
-  deployedUnitId: string | undefined;
+  totalQuantity: number;      // Total units available from this card
+  deployedCount: number;       // How many have been deployed
+  deployedUnitIds: string[];  // IDs of all deployed units from this card
 }
 
 // Grouped unit type for stacked display
@@ -62,8 +63,9 @@ export class DeploymentManager {
       return {
         deckUnit,
         unitData: unitData!,
-        deployed: false,
-        deployedUnitId: undefined,
+        totalQuantity: deckUnit.quantity || 1,  // Use quantity from card, default to 1
+        deployedCount: 0,                       // None deployed yet
+        deployedUnitIds: [],                    // Empty array
       };
     }).filter(du => du.unitData !== undefined);
 
@@ -311,8 +313,8 @@ export class DeploymentManager {
     for (const du of this.deployableUnits) {
       const cat = du.unitData.category;
       const existing = categoryCounts.get(cat) ?? { total: 0, deployed: 0 };
-      existing.total++;
-      if (du.deployed) existing.deployed++;
+      existing.total += du.totalQuantity;
+      existing.deployed += du.deployedCount;
       categoryCounts.set(cat, existing);
     }
 
@@ -381,11 +383,11 @@ export class DeploymentManager {
       }
       const stack = stacks.get(typeId)!;
       stack.indices.push(index);
-      if (du.deployed) {
-        stack.deployed++;
-      } else {
-        stack.available++;
-      }
+
+      // Sum up quantities from this card
+      const remainingFromCard = du.totalQuantity - du.deployedCount;
+      stack.available += remainingFromCard;
+      stack.deployed += du.deployedCount;
     });
 
     return Array.from(stacks.values());
@@ -409,9 +411,9 @@ export class DeploymentManager {
    * Select a unit by its type ID - finds the first available unit of that type
    */
   private selectUnitByType(unitTypeId: string): void {
-    // Find the first undeployed unit of this type
+    // Find the first card with available units of this type
     const index = this.deployableUnits.findIndex(
-      du => du.unitData.id === unitTypeId && !du.deployed
+      du => du.unitData.id === unitTypeId && du.deployedCount < du.totalQuantity
     );
 
     if (index === -1) return;
@@ -426,13 +428,16 @@ export class DeploymentManager {
 
     // In battle phase, queue for reinforcement instead of placing
     if (this.game.phase === 'battle') {
+      // Check if card has units available
+      if (du.deployedCount >= du.totalQuantity) return;
+
       const success = this.game.reinforcementManager.queueUnit(du.unitData.id);
       if (success) {
         // Deduct credits
         this.credits -= du.unitData.cost;
 
-        // Mark as deployed (can't queue same unit again unless it spawns)
-        du.deployed = true;
+        // Track deployment
+        du.deployedCount++;
         this.renderUI();
 
         console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
@@ -605,7 +610,8 @@ export class DeploymentManager {
 
   private deployUnit(index: number, position: THREE.Vector3, continueAfter: boolean = false): void {
     const du = this.deployableUnits[index];
-    if (!du || du.deployed) return;
+    // Check if card has units available
+    if (!du || du.deployedCount >= du.totalQuantity) return;
 
     // Check credits
     if (du.unitData.cost > this.credits) return;
@@ -621,22 +627,29 @@ export class DeploymentManager {
       name: du.unitData.name,
     });
 
-    // Mark as deployed
-    du.deployed = true;
-    du.deployedUnitId = unit.id;
+    // Track deployment
+    du.deployedCount++;
+    du.deployedUnitIds.push(unit.id);
 
     // Deduct credits
     this.credits -= du.unitData.cost;
 
     // Check if we should continue placing more units of the same type
     if (continueAfter && this.selectedUnitTypeId) {
-      // Find the next undeployed unit of the same type
+      // Check if current card still has units available
+      if (du.deployedCount < du.totalQuantity && du.unitData.cost <= this.credits) {
+        // Continue with same card
+        this.renderUI();
+        return;
+      }
+
+      // Find the next card with available units of the same type
       const nextIndex = this.deployableUnits.findIndex(
-        d => d.unitData.id === this.selectedUnitTypeId && !d.deployed
+        d => d.unitData.id === this.selectedUnitTypeId && d.deployedCount < d.totalQuantity
       );
 
       if (nextIndex !== -1 && this.deployableUnits[nextIndex]!.unitData.cost <= this.credits) {
-        // Continue placing
+        // Continue placing from next card
         this.selectedUnitIndex = nextIndex;
         this.renderUI();
         return;
@@ -671,10 +684,14 @@ export class DeploymentManager {
 
   // Called when a deployed unit is sold
   onUnitSold(unitId: string, refund: number): void {
-    const du = this.deployableUnits.find(d => d.deployedUnitId === unitId);
+    const du = this.deployableUnits.find(d => d.deployedUnitIds.includes(unitId));
     if (du) {
-      du.deployed = false;
-      du.deployedUnitId = undefined;
+      // Remove the unit ID from the array
+      const index = du.deployedUnitIds.indexOf(unitId);
+      if (index !== -1) {
+        du.deployedUnitIds.splice(index, 1);
+        du.deployedCount--;
+      }
       this.credits += refund;
       this.renderUI();
     }
@@ -810,9 +827,9 @@ export class DeploymentManager {
    * - Battle phase: Queue at auto-selected entry point
    */
   private queueUnitFromBar(unitTypeId: string): void {
-    // Find the first undeployed unit of this type
+    // Find the first card with available units of this type
     const duIndex = this.deployableUnits.findIndex(
-      d => d.unitData.id === unitTypeId && !d.deployed
+      d => d.unitData.id === unitTypeId && d.deployedCount < d.totalQuantity
     );
 
     if (duIndex === -1) return;
@@ -841,8 +858,8 @@ export class DeploymentManager {
       // Deduct credits
       this.credits -= du.unitData.cost;
 
-      // Mark as deployed (can't queue same unit again until it spawns)
-      du.deployed = true;
+      // Track deployment
+      du.deployedCount++;
 
       // Re-render both the battle unit bar and update credits display
       this.renderBattleUnitBar();

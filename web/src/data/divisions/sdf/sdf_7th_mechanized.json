@@ -67,11 +67,11 @@
         "sdf_centurion_apc"
       ],
       "availability": {
-        "trained": 12,
+        "trained": 5,
         "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
+        "rookie": 10,
+        "elite": 3,
+        "veteran": 4
       }
     },
     {
@@ -81,9 +81,9 @@
         "sdf_centurion_apc"
       ],
       "availability": {
-        "trained": 18,
+        "trained": 8,
         "legend": 0,
-        "rookie": 24,
+        "rookie": 10,
         "elite": 0,
         "veteran": 0
       }
@@ -95,11 +95,11 @@
         "sdf_centurion_apc"
       ],
       "availability": {
-        "trained": 12,
+        "trained": 4,
         "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
+        "rookie": 8,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
@@ -109,37 +109,15 @@
         "sdf_centurion_apc"
       ],
       "availability": {
-        "trained": 12,
+        "trained": 4,
         "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
+        "rookie": 8,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
       "unitId": "sdf_bastion_mbt",
-      "maxCards": 2,
-      "availability": {
-        "trained": 12,
-        "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
-      }
-    },
-    {
-      "unitId": "sdf_bastion_mbt_rotary",
-      "maxCards": 2,
-      "availability": {
-        "trained": 3,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 1,
-        "veteran": 2
-      }
-    },
-    {
-      "unitId": "sdf_scout_walker",
       "maxCards": 2,
       "availability": {
         "trained": 4,
@@ -150,25 +128,47 @@
       }
     },
     {
+      "unitId": "sdf_bastion_mbt_rotary",
+      "maxCards": 2,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_scout_walker",
+      "maxCards": 2,
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 5,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
       "unitId": "sdf_skysweeper",
       "maxCards": 3,
       "availability": {
-        "trained": 12,
+        "trained": 4,
         "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
       "unitId": "sdf_field_gun_bombast",
       "maxCards": 3,
       "availability": {
-        "trained": 12,
+        "trained": 4,
         "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
@@ -177,9 +177,9 @@
       "availability": {
         "trained": 3,
         "legend": 0,
-        "rookie": 4,
-        "elite": 0,
-        "veteran": 2
+        "rookie": 5,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
@@ -189,8 +189,8 @@
         "trained": 2,
         "legend": 0,
         "rookie": 3,
-        "elite": 0,
-        "veteran": 1
+        "elite": 2,
+        "veteran": 2
       }
     },
     {
@@ -200,8 +200,8 @@
         "trained": 2,
         "legend": 0,
         "rookie": 3,
-        "elite": 0,
-        "veteran": 1
+        "elite": 2,
+        "veteran": 2
       }
     }
   ]

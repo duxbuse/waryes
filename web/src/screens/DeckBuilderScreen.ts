@@ -20,6 +20,17 @@ function getTotalAvailability(avail: UnitAvailability): number {
   return avail.rookie + avail.trained + avail.veteran + avail.elite + avail.legend;
 }
 
+// Helper to get quantity based on veterancy level
+function getQuantityForVeterancy(avail: UnitAvailability, veterancy: number): number {
+  switch (veterancy) {
+    case 0: return avail.trained;  // Trained
+    case 1: return avail.veteran;  // Veteran
+    case 2: return avail.elite;    // Elite
+    case 3: return avail.legend;   // Legend
+    default: return avail.trained;
+  }
+}
+
 
 export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen {
   let currentFactionId = FACTIONS[0]?.id ?? '';
@@ -903,7 +914,9 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     if (unit.canBeTransported) {
       showTransportPopup(unitId);
     } else {
-      deckUnits.push({ unitId, veterancy: 0 });
+      // Get quantity based on veterancy level (0 = trained)
+      const quantity = getQuantityForVeterancy(rosterEntry.availability, 0);
+      deckUnits.push({ unitId, veterancy: 0, quantity });
       renderDeckStrip();
       renderUnitLibrary();
       updateStats();
@@ -938,11 +951,20 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     options.querySelectorAll('.transport-option').forEach(opt => {
       opt.addEventListener('click', () => {
         const transportId = (opt as HTMLElement).dataset['transportId']!;
-        deckUnits.push({ unitId, veterancy: 0, transportId });
+
+        // Get quantity for the unit being added
+        const available = getAvailableUnitsForDivision(currentDivisionId);
+        const rosterEntry = available.get(unitId);
+        const quantity = rosterEntry ? getQuantityForVeterancy(rosterEntry.availability, 0) : 1;
+
+        deckUnits.push({ unitId, veterancy: 0, quantity, transportId });
+
         // Also add the transport if not already added
         const transportInDeck = deckUnits.some(du => du.unitId === transportId);
         if (!transportInDeck) {
-          deckUnits.push({ unitId: transportId, veterancy: 0 });
+          const transportRoster = available.get(transportId);
+          const transportQty = transportRoster ? getQuantityForVeterancy(transportRoster.availability, 0) : 1;
+          deckUnits.push({ unitId: transportId, veterancy: 0, quantity: transportQty });
         }
         popup.classList.add('hidden');
         renderDeckStrip();
@@ -1133,7 +1155,12 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       const popup = element.querySelector('#transport-popup')!;
       const unitId = popup.getAttribute('data-adding-unit');
       if (unitId) {
-        deckUnits.push({ unitId, veterancy: 0 });
+        // Get quantity for the unit
+        const available = getAvailableUnitsForDivision(currentDivisionId);
+        const rosterEntry = available.get(unitId);
+        const quantity = rosterEntry ? getQuantityForVeterancy(rosterEntry.availability, 0) : 1;
+
+        deckUnits.push({ unitId, veterancy: 0, quantity });
         renderDeckStrip();
         renderUnitLibrary();
         updateStats();

@@ -128,6 +128,7 @@ export interface DivisionData {
 export interface DeckUnit {
   unitId: string;
   veterancy: number; // 0, 1, 2 (trained, hardened, elite)
+  quantity: number; // Number of units this card provides (default based on veterancy)
   transportId?: string;
 }
 
