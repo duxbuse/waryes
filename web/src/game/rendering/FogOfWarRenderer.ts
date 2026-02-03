@@ -94,8 +94,8 @@ export class FogOfWarRenderer {
     const planeGeometry = new THREE.PlaneGeometry(map.width, map.height);
     this.fogPlane = new THREE.Mesh(planeGeometry, this.fogMaterial);
 
-    // Position plane at map center, slightly above terrain
-    this.fogPlane.position.set(map.width / 2, 50, map.height / 2);
+    // Position plane at map center (map uses centered coordinates: -width/2 to +width/2)
+    this.fogPlane.position.set(0, 50, 0);
     this.fogPlane.rotation.x = -Math.PI / 2; // Face down
     this.fogPlane.renderOrder = 1000; // Render on top of everything
 
@@ -135,7 +135,8 @@ export class FogOfWarRenderer {
 
       void main() {
         // Convert world position to UV coordinates (0-1 range)
-        vec2 uv = vWorldPos / vec2(mapWidth, mapHeight);
+        // Map uses centered coordinates (-width/2 to +width/2), so offset to (0 to width)
+        vec2 uv = (vWorldPos + vec2(mapWidth * 0.5, mapHeight * 0.5)) / vec2(mapWidth, mapHeight);
 
         // Sample fog texture
         float visibilityState = texture2D(fogTexture, uv).r * 255.0;
@@ -181,13 +182,9 @@ export class FogOfWarRenderer {
     for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
       for (let gridX = 0; gridX < this.gridWidth; gridX++) {
         // Convert grid coordinates to world coordinates (center of cell)
-        const worldX = gridX * this.cellSize + this.cellSize / 2;
-        const worldZ = gridZ * this.cellSize + this.cellSize / 2;
-
-        // Clamp to map bounds
-        if (worldX >= map.width || worldZ >= map.height) {
-          continue;
-        }
+        // Map uses centered coordinates: -width/2 to +width/2
+        const worldX = (gridX * this.cellSize) - (map.width / 2) + (this.cellSize / 2);
+        const worldZ = (gridZ * this.cellSize) - (map.height / 2) + (this.cellSize / 2);
 
         // Query visibility state from FogOfWarManager
         const visibilityState = fogManager.getVisibilityState(worldX, worldZ);
