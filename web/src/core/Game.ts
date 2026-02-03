@@ -37,6 +37,7 @@ import { PathRenderer } from '../game/rendering/PathRenderer';
 import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
 import { BatchedUnitUIRenderer } from '../game/rendering/BatchedUnitUIRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
+import { FogOfWarRenderer } from '../game/rendering/FogOfWarRenderer';
 import { LAYERS } from '../game/utils/LayerConstants';
 import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell, EntryPoint } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
@@ -90,6 +91,7 @@ export class Game {
   public instancedUnitRenderer: InstancedUnitRenderer | null = null;
   public batchedUIRenderer: BatchedUnitUIRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
+  public fogOfWarRenderer: FogOfWarRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
 
   // Game state
@@ -542,6 +544,9 @@ export class Game {
 
       this.fogOfWarManager.update(dt);
       t12 = performance.now();
+
+      // Update fog of war renderer (visual overlay)
+      this.fogOfWarRenderer?.update(dt);
 
       this.multiplayerBattleSync.update(dt);
       t13 = performance.now();
@@ -1119,6 +1124,12 @@ export class Game {
     // Initialize fog of war
     this.fogOfWarManager.initialize();
 
+    // Initialize fog of war renderer
+    if (!this.fogOfWarRenderer) {
+      this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+    }
+    this.fogOfWarRenderer.initialize();
+
     // Initialize pathfinding
     this.pathfindingManager.initialize();
 
@@ -1462,6 +1473,12 @@ export class Game {
 
     if (this.mapRenderer) {
       this.mapRenderer.clear();
+    }
+
+    // Clean up fog of war renderer
+    if (this.fogOfWarRenderer) {
+      this.fogOfWarRenderer.dispose();
+      this.fogOfWarRenderer = null;
     }
 
     this.currentMap = null;
