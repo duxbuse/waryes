@@ -123,6 +123,7 @@ export class FogOfWarRenderer {
 
   /**
    * Fragment shader - samples fog texture and renders appropriate fog state
+   * Uses smoothstep for subtle transitions between visibility states
    */
   private getFragmentShader(): string {
     return `
@@ -138,24 +139,29 @@ export class FogOfWarRenderer {
         // Map uses centered coordinates (-width/2 to +width/2), so offset to (0 to width)
         vec2 uv = (vWorldPos + vec2(mapWidth * 0.5, mapHeight * 0.5)) / vec2(mapWidth, mapHeight);
 
-        // Sample fog texture
+        // Sample fog texture (values: 0 = unexplored, 1 = explored, 2 = visible)
         float visibilityState = texture2D(fogTexture, uv).r * 255.0;
 
-        // Determine fog color and alpha based on visibility state
-        vec4 fogColor;
+        // Define fog states
+        // Unexplored: Black, fully opaque (alpha = 1.0)
+        // Explored: Black, semi-transparent (alpha = 0.5)
+        // Visible: Fully transparent (alpha = 0.0)
 
-        if (visibilityState < 0.5) {
-          // Unexplored (0) - Black, fully opaque
-          fogColor = vec4(0.0, 0.0, 0.0, 1.0);
-        } else if (visibilityState < 1.5) {
-          // Explored (1) - Gray shroud, semi-transparent
-          fogColor = vec4(0.0, 0.0, 0.0, 0.5);
-        } else {
-          // Visible (2) - Fully transparent
-          fogColor = vec4(0.0, 0.0, 0.0, 0.0);
-        }
+        // Calculate alpha value with smooth transitions
+        float alpha = 1.0; // Default: unexplored (fully opaque)
 
-        gl_FragColor = fogColor;
+        // Smooth transition from unexplored (0) to explored (1)
+        // When state goes from 0 to 1, alpha transitions from 1.0 to 0.5
+        float unexploredToExplored = smoothstep(0.0, 1.0, visibilityState);
+        alpha = mix(1.0, 0.5, unexploredToExplored);
+
+        // Smooth transition from explored (1) to visible (2)
+        // When state goes from 1 to 2, alpha transitions from 0.5 to 0.0
+        float exploredToVisible = smoothstep(1.0, 2.0, visibilityState);
+        alpha = mix(alpha, 0.0, exploredToVisible);
+
+        // Output: Black color with calculated alpha
+        gl_FragColor = vec4(0.0, 0.0, 0.0, alpha);
       }
     `;
   }
