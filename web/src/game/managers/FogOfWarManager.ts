@@ -469,11 +469,11 @@ export class FogOfWarManager {
         // Check if within effective vision circle
         const distSq = (worldX - unitPos.x) ** 2 + (worldZ - unitPos.z) ** 2;
         if (distSq <= effectiveVisionRadius ** 2) {
+          const dist = Math.sqrt(distSq);
           const key = this.getCellKey(worldX, worldZ);
 
           // OPTIMIZATION: Skip expensive LOS check for cells very close to unit
           // Cells within 60m are almost always visible (most combat happens <100m)
-          const dist = Math.sqrt(distSq);
           if (dist < 60) {
             // Close cells are automatically visible (no LOS check needed)
             teamVision.set(key, true);

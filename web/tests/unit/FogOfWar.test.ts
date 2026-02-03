@@ -43,20 +43,38 @@ const createMockUnitData = (optics: 'Poor' | 'Normal' | 'Good' | 'Very Good' | '
 const createMockUnit = (
   position: THREE.Vector3,
   team: 'player' | 'enemy' = 'player',
-  optics: 'Poor' | 'Normal' | 'Good' | 'Very Good' | 'Exceptional' = 'Normal'
-): Unit => ({
-  id: `unit_${Math.random()}`,
-  name: 'Test Unit',
-  unitType: 'infantry',
-  team,
-  position: position.clone(),
-  health: 100,
-  maxHealth: 100,
-  data: createMockUnitData(optics),
-  mesh: {
-    visible: true,
-  },
-} as unknown as Unit);
+  optics: 'Poor' | 'Normal' | 'Good' | 'Very Good' | 'Exceptional' = 'Normal',
+  mockGame?: Game
+): Unit => {
+  const pos = position.clone();
+
+  // If mockGame is provided, set Y coordinate to terrain elevation
+  // This matches real game behavior where units are positioned at terrain height
+  if (mockGame && mockGame.currentMap) {
+    const map = mockGame.currentMap;
+    const gridX = Math.floor((pos.x + map.width / 2) / map.cellSize);
+    const gridZ = Math.floor((pos.z + map.height / 2) / map.cellSize);
+    const cols = map.terrain[0]?.length || 0;
+    const rows = map.terrain.length;
+    if (gridX >= 0 && gridX < cols && gridZ >= 0 && gridZ < rows) {
+      pos.y = map.terrain[gridZ][gridX].elevation;
+    }
+  }
+
+  return {
+    id: `unit_${Math.random()}`,
+    name: 'Test Unit',
+    unitType: 'infantry',
+    team,
+    position: pos,
+    health: 100,
+    maxHealth: 100,
+    data: createMockUnitData(optics),
+    mesh: {
+      visible: true,
+    },
+  } as unknown as Unit;
+};
 
 // Mock terrain map with controllable elevation
 const createMockMap = (getElevationFn: (x: number, z: number) => number) => {
@@ -120,7 +138,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
 
     it('should have base vision radius on flat terrain', () => {
       // Normal optics = 150m vision radius
-      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -134,7 +152,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
 
     it('should have correct base vision for different optics ratings', () => {
       // Poor optics = 100m vision radius
-      const poorUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Poor');
+      const poorUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Poor', mockGame);
       mockGame.unitManager.addUnit(poorUnit);
 
       fogManager.forceImmediateUpdate();
@@ -144,10 +162,12 @@ describe('FogOfWarManager - Elevation Bonus', () => {
       expect(fogManager.isVisible(110, 0)).toBe(false);
 
       // Clear and test Good optics = 200m vision radius
-      (mockGame.unitManager as any).getAllUnits = vi.fn(() => []);
+      // Need to create a fresh mock game to properly reset the unit manager
+      mockGame = createMockGame(() => 0);
+      fogManager = new FogOfWarManager(mockGame);
       fogManager.initialize();
 
-      const goodUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Good');
+      const goodUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Good', mockGame);
       mockGame.unitManager.addUnit(goodUnit);
 
       fogManager.forceImmediateUpdate();
@@ -172,7 +192,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     it('should grant vision bonus when unit is at higher elevation', () => {
       // Unit at x=100 has elevation = 10m
       // Base vision radius = 150m (Normal optics)
-      const unit = createMockUnit(new THREE.Vector3(100, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(100, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -204,7 +224,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     it('should not apply negative bonus when unit is at lower elevation', () => {
       // Unit at x=-100 has elevation = -10m (lower)
       // Looking at x=50 (higher elevation = 5m)
-      const unit = createMockUnit(new THREE.Vector3(-100, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(-100, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -222,33 +242,36 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should cap elevation bonus at 50% of base vision range', () => {
-      // Create extreme elevation difference
+      // Create extreme elevation difference with gradual slope
       // Unit at very high elevation
       mockGame = createMockGame((x: number, z: number) => {
-        if (x > 0) return 100; // Very high plateau at x > 0
-        return 0; // Sea level at x <= 0
+        // Gradual slope from -500 (elevation -50m) to +500 (elevation +100m)
+        // This avoids cliff faces that would block LOS
+        return Math.max(-50, Math.min(100, x / 5));
       });
       fogManager = new FogOfWarManager(mockGame);
       fogManager.initialize();
 
-      // Unit at x=50 (elevation 100m) looking at x=-200 (elevation 0m)
+      // Unit at x=250 (elevation 50m) looking at x=30 (elevation 6m)
       // Base vision = 150m (Normal optics)
       // Max bonus = 150 * 0.5 = 75m
-      // Elevation difference = 100 - 0 = 100m
-      // Uncapped bonus = 100 * 2.0 = 200m
-      // Capped bonus = min(200, 75) = 75m
+      // Distance = 220m
+      // Elevation difference = 50 - 6 = 44m
+      // Uncapped bonus = 44 * 2.0 = 88m
+      // Capped bonus = min(88, 75) = 75m
       // Effective vision = 150 + 75 = 225m
+      // 220m < 225m, so should be visible
 
-      const unit = createMockUnit(new THREE.Vector3(50, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(250, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
 
-      // Cell at x=-170 (distance 220m) should be visible (within 225m effective range)
-      expect(fogManager.isVisible(-170, 0)).toBe(true);
+      // Cell at x=30 (distance 220m) should be visible (within 225m effective range)
+      expect(fogManager.isVisible(30, 0)).toBe(true);
 
-      // Cell at x=-180 (distance 230m) should NOT be visible (beyond 225m cap)
-      expect(fogManager.isVisible(-180, 0)).toBe(false);
+      // Cell at x=15 (distance 235m) should NOT be visible (beyond 225m cap)
+      expect(fogManager.isVisible(15, 0)).toBe(false);
     });
 
     it('should calculate elevation bonus per-cell based on target elevation', () => {
@@ -258,7 +281,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
       fogManager.initialize();
 
       // Unit at x=0 (elevation 0m)
-      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -301,7 +324,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should return Unexplored for never-seen areas', () => {
-      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -311,7 +334,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should return Visible for currently visible areas', () => {
-      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -321,7 +344,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should return Explored for previously visible areas after unit moves away', () => {
-      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const unit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
       mockGame.unitManager.addUnit(unit);
 
       fogManager.forceImmediateUpdate();
@@ -346,8 +369,8 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should hide enemy units outside vision', () => {
-      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
-      const enemyUnit = createMockUnit(new THREE.Vector3(300, 0, 0), 'enemy', 'Normal');
+      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
+      const enemyUnit = createMockUnit(new THREE.Vector3(300, 0, 0), 'enemy', 'Normal', mockGame);
 
       mockGame.unitManager.addUnit(playerUnit);
       mockGame.unitManager.addUnit(enemyUnit);
@@ -360,8 +383,8 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should reveal enemy units within vision', () => {
-      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
-      const enemyUnit = createMockUnit(new THREE.Vector3(100, 0, 0), 'enemy', 'Normal');
+      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
+      const enemyUnit = createMockUnit(new THREE.Vector3(100, 0, 0), 'enemy', 'Normal', mockGame);
 
       mockGame.unitManager.addUnit(playerUnit);
       mockGame.unitManager.addUnit(enemyUnit);
@@ -374,7 +397,7 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should always show player units', () => {
-      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
+      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
 
       mockGame.unitManager.addUnit(playerUnit);
 
@@ -402,8 +425,8 @@ describe('FogOfWarManager - Elevation Bonus', () => {
     });
 
     it('should show all units when disabled', () => {
-      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal');
-      const enemyUnit = createMockUnit(new THREE.Vector3(500, 0, 0), 'enemy', 'Normal');
+      const playerUnit = createMockUnit(new THREE.Vector3(0, 0, 0), 'player', 'Normal', mockGame);
+      const enemyUnit = createMockUnit(new THREE.Vector3(500, 0, 0), 'enemy', 'Normal', mockGame);
 
       mockGame.unitManager.addUnit(playerUnit);
       mockGame.unitManager.addUnit(enemyUnit);
