@@ -101,6 +101,11 @@ export class CombatManager {
       ? VectorPool.acquire().set(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
       : attacker.position;
 
+    // Detect garrisoned attacker
+    if (isGarrisoned) {
+      console.log(`[CombatManager] Garrisoned attacker detected: ${attacker.name} firing from building at (${attacker.garrisonedBuilding.x}, ${attacker.garrisonedBuilding.z})`);
+    }
+
     const distance = attackerPos.distanceTo(target.position);
 
     // Out of range
@@ -364,7 +369,9 @@ export class CombatManager {
   private getTargetCover(target: Unit): number {
     // Check if target is in a building
     if (target.isGarrisoned && target.garrisonedBuilding) {
-      return target.garrisonedBuilding.stealthBonus ?? 0.5;
+      const stealthBonus = target.garrisonedBuilding.stealthBonus ?? 0.5;
+      console.log(`[CombatManager] Garrisoned target detected: ${target.name} in building with ${(stealthBonus * 100).toFixed(0)}% stealth bonus`);
+      return stealthBonus;
     }
 
     // Get terrain at target position
@@ -482,6 +489,7 @@ export class CombatManager {
 
     // If attacker is garrisoned, check from multiple points of the building
     if (from.isGarrisoned && from.garrisonedBuilding) {
+      console.log(`[CombatManager] Checking line of sight from garrisoned unit: ${from.name} in building at (${from.garrisonedBuilding.x}, ${from.garrisonedBuilding.z})`);
       const b = from.garrisonedBuilding;
       const points = [
         VectorPool.acquire().set(b.x, 2, b.z), // Center
