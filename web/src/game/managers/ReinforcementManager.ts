@@ -111,10 +111,15 @@ export class ReinforcementManager {
       btn.innerHTML = `
         <div style="display: flex; justify-content: space-between;">
           <span>${typeName} Entry</span>
-          <span style="color: ${queueCount > 0 ? '#ffd700' : '#666'};">Queue: ${queueCount}</span>
+          <span class="queue-count" style="color: ${queueCount > 0 ? '#ffd700' : '#666'};">Queue: ${queueCount}</span>
         </div>
-        <div style="font-size: 10px; color: #888; margin-top: 2px;">
-          Spawn rate: ${ep.spawnRate}s
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+          <div style="font-size: 10px; color: #888;">
+            Spawn rate: ${ep.spawnRate}s
+          </div>
+          <div class="spawn-timer" style="font-size: 10px; font-weight: bold; color: #4a9eff;">
+            Ready
+          </div>
         </div>
       `;
 
@@ -424,15 +429,44 @@ export class ReinforcementManager {
    * Update reinforcement UI
    */
   private updateUI(): void {
-    // Update queue counts on buttons
+    // Update queue counts and spawn timers on buttons
     this.entryPointButtons.forEach((btn, id) => {
       const ep = this.entryPoints.find(e => e.id === id);
       if (ep) {
+        // Update queue count
         const queueCount = ep.queue.length;
-        const spans = btn.querySelectorAll('span');
-        if (spans.length >= 2) {
-          spans[1]!.textContent = `Queue: ${queueCount}`;
-          spans[1]!.style.color = queueCount > 0 ? '#ffd700' : '#666';
+        const queueSpan = btn.querySelector('.queue-count');
+        if (queueSpan) {
+          queueSpan.textContent = `Queue: ${queueCount}`;
+          (queueSpan as HTMLElement).style.color = queueCount > 0 ? '#ffd700' : '#666';
+        }
+
+        // Update spawn timer display
+        const timerSpan = btn.querySelector('.spawn-timer');
+        if (timerSpan) {
+          const currentTimer = this.spawnTimers.get(ep.id) || 0;
+
+          if (queueCount === 0) {
+            // No queue, show "Ready"
+            timerSpan.textContent = 'Ready';
+            (timerSpan as HTMLElement).style.color = '#4a9eff';
+          } else if (currentTimer <= 0) {
+            // Timer expired, ready to spawn
+            timerSpan.textContent = 'Spawning...';
+            (timerSpan as HTMLElement).style.color = '#00ff00';
+          } else {
+            // Show countdown
+            const seconds = Math.ceil(currentTimer);
+            timerSpan.textContent = `${seconds}s`;
+            // Color based on remaining time
+            if (currentTimer < 2) {
+              (timerSpan as HTMLElement).style.color = '#00ff88'; // Cyan - almost ready
+            } else if (currentTimer < 5) {
+              (timerSpan as HTMLElement).style.color = '#ffd700'; // Gold - soon
+            } else {
+              (timerSpan as HTMLElement).style.color = '#ff8800'; // Orange - waiting
+            }
+          }
         }
       }
     });
@@ -447,6 +481,8 @@ export class ReinforcementManager {
     if (totalQueued > 0) {
       console.log(`[REINFORCE] Update called, dt=${dt.toFixed(3)}, total queued: ${totalQueued}`);
     }
+
+    let timersChanged = false;
 
     for (const ep of this.entryPoints) {
       // Skip if queue is empty
@@ -465,9 +501,16 @@ export class ReinforcementManager {
 
         // Reset timer
         this.spawnTimers.set(ep.id, ep.spawnRate);
+        timersChanged = true;
       } else {
         this.spawnTimers.set(ep.id, newTimer);
+        timersChanged = true;
       }
+    }
+
+    // Update UI if panel is visible and timers changed
+    if (timersChanged && this.reinforcementPanel && this.reinforcementPanel.style.display !== 'none') {
+      this.updateUI();
     }
   }
 
