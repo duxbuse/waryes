@@ -222,6 +222,8 @@ export class Game {
     this.audioManager = new AudioManager();
     this.soundLibrary = new SoundLibrary();
     this.spatialAudioManager = new SpatialAudioManager(this.audioListener, this.soundLibrary, this.camera);
+    // Initialize audio manager with spatial audio capabilities
+    this.audioManager.initializeSpatialAudio(this.soundLibrary, this.spatialAudioManager);
     this.screenManager = new ScreenManager();
     // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);

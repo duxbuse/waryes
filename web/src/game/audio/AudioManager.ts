@@ -5,6 +5,12 @@
  * Can be extended to load audio files in the future
  */
 
+import * as THREE from 'three';
+import type { WeaponData, AudioCategory } from '../../data/types';
+import type { SoundLibrary } from './SoundLibrary';
+import type { SpatialAudioManager } from './SpatialAudioManager';
+import { getSoundById } from '../../data/audioManifest';
+
 export type SoundEffect =
   | 'weapon_fire'
   | 'explosion'
@@ -21,6 +27,10 @@ export class AudioManager {
   private sfxVolume: number = 0.4;
   private enabled: boolean = true;
 
+  // References to other audio systems
+  private soundLibrary?: SoundLibrary;
+  private spatialAudioManager?: SpatialAudioManager;
+
   // Sound throttling to prevent audio from homogenizing
   private lastPlayTimes: Map<SoundEffect, number> = new Map();
   private minTimeBetweenSounds: Map<SoundEffect, number> = new Map([
@@ -34,9 +44,28 @@ export class AudioManager {
     ['button_click', 0.05],
   ]);
 
+  // Per-weapon-category throttling
+  private weaponCategoryLastPlayTimes: Map<AudioCategory, number> = new Map();
+  private weaponCategoryThrottleLimits: Map<AudioCategory, number> = new Map([
+    ['machinegun', 0.03],   // Machine guns: 0.03s (33 sounds/sec max)
+    ['rifle', 0.05],        // Rifles: 0.05s (20 sounds/sec max)
+    ['cannon', 0.1],        // Cannons: 0.1s (10 sounds/sec max)
+    ['artillery', 0.2],     // Artillery: 0.2s (5 sounds/sec max)
+    ['missile', 0.15],      // Missiles: 0.15s (6.7 sounds/sec max)
+    ['launcher', 0.15],     // Launchers: 0.15s (6.7 sounds/sec max)
+  ]);
+
   constructor() {
     // Create audio context on first user interaction (browser policy)
     this.initAudioContext();
+  }
+
+  /**
+   * Initialize audio systems (called by Game after audio managers are created)
+   */
+  initializeSpatialAudio(soundLibrary: SoundLibrary, spatialAudioManager: SpatialAudioManager): void {
+    this.soundLibrary = soundLibrary;
+    this.spatialAudioManager = spatialAudioManager;
   }
 
   private initAudioContext(): void {
@@ -103,6 +132,96 @@ export class AudioManager {
         this.playButtonClick(now);
         break;
     }
+  }
+
+  /**
+   * Play a weapon-specific sound at a 3D position
+   * Maps weapon categories to specific sounds with spatial audio
+   * @param weaponData - Weapon data containing audio category
+   * @param position - 3D world position where the sound should play
+   */
+  playWeaponSound(weaponData: WeaponData, position: THREE.Vector3): void {
+    if (!this.enabled || !this.spatialAudioManager || !this.soundLibrary) {
+      return;
+    }
+
+    // Determine audio category from weapon data
+    // If weaponData has a soundId, use that; otherwise infer from weapon properties
+    let audioCategory: AudioCategory | undefined;
+    let soundId: string | undefined = weaponData.soundId;
+
+    // If no explicit soundId, try to infer audio category from weapon properties
+    if (!soundId) {
+      // Infer audio category from weapon characteristics
+      // This is a fallback - weapons should ideally specify their soundId
+      if (weaponData.rateOfFire > 300) {
+        audioCategory = 'machinegun';
+      } else if (weaponData.rateOfFire > 100) {
+        audioCategory = 'rifle';
+      } else if (weaponData.damage > 100) {
+        audioCategory = 'cannon';
+      } else if (weaponData.name.toLowerCase().includes('missile')) {
+        audioCategory = 'missile';
+      } else if (weaponData.name.toLowerCase().includes('artillery')) {
+        audioCategory = 'artillery';
+      } else {
+        audioCategory = 'launcher';
+      }
+
+      // Map audio category to sound ID
+      soundId = this.mapAudioCategoryToSoundId(audioCategory);
+    }
+
+    // Extract audio category from soundId for throttling
+    // This handles both explicit soundIds and inferred ones
+    if (soundId) {
+      if (soundId === 'rifle_fire') audioCategory = 'rifle';
+      else if (soundId === 'machinegun_fire') audioCategory = 'machinegun';
+      else if (soundId === 'cannon_fire') audioCategory = 'cannon';
+      else if (soundId === 'missile_launch') audioCategory = 'missile';
+      else if (soundId === 'artillery_fire') audioCategory = 'artillery';
+      else if (soundId === 'launcher_fire') audioCategory = 'launcher';
+    }
+
+    // Check throttling for this weapon category
+    if (audioCategory && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const lastPlayTime = this.weaponCategoryLastPlayTimes.get(audioCategory) ?? 0;
+      const throttleLimit = this.weaponCategoryThrottleLimits.get(audioCategory) ?? 0.05;
+
+      if (now - lastPlayTime < throttleLimit) {
+        return; // Skip this sound, playing too frequently
+      }
+
+      this.weaponCategoryLastPlayTimes.set(audioCategory, now);
+    }
+
+    // Get the sound configuration from the manifest
+    const soundEffect = getSoundById(soundId!);
+    if (!soundEffect || !soundEffect.config) {
+      console.warn(`AudioManager: No sound configuration found for "${soundId}"`);
+      return;
+    }
+
+    // Play the sound at the 3D position with spatial audio
+    this.spatialAudioManager.playSoundAt(soundId!, position, soundEffect.config);
+  }
+
+  /**
+   * Map audio category to sound ID
+   * @param category - Audio category
+   * @returns Sound ID string
+   */
+  private mapAudioCategoryToSoundId(category: AudioCategory): string {
+    const mapping: Record<AudioCategory, string> = {
+      rifle: 'rifle_fire',
+      machinegun: 'machinegun_fire',
+      cannon: 'cannon_fire',
+      missile: 'missile_launch',
+      artillery: 'artillery_fire',
+      launcher: 'launcher_fire',
+    };
+    return mapping[category];
   }
 
   private playWeaponFire(now: number): void {
