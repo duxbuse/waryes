@@ -20,6 +20,7 @@ export enum CommandType {
   Unload = 11,
   DigIn = 12,
   SetReturnFireOnly = 13,
+  QueueReinforcement = 14,
 }
 
 export interface GameCommand {
