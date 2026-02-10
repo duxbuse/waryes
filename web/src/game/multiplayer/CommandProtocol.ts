@@ -20,6 +20,7 @@ export enum CommandType {
   Unload = 11,
   DigIn = 12,
   SetReturnFireOnly = 13,
+  QueueReinforcement = 14,
 }
 
 export interface GameCommand {
@@ -35,6 +36,7 @@ export interface GameCommand {
   unitType?: string;       // For SpawnUnit
   buildingId?: string;     // For Garrison
   value?: boolean;         // For SetReturnFireOnly
+  moveType?: string;       // For QueueReinforcement (normal, attack, reverse, fast)
 }
 
 /**
@@ -105,6 +107,30 @@ export function createAttackCommand(
     unitIds,
     targetUnitId,
     queue,
+  };
+}
+
+/**
+ * Create a queue reinforcement command
+ */
+export function createQueueReinforcementCommand(
+  tick: number,
+  playerId: string,
+  entryPointId: string,
+  unitType: string,
+  targetX?: number,
+  targetZ?: number,
+  moveType?: 'normal' | 'attack' | 'reverse' | 'fast' | null
+): GameCommand {
+  return {
+    type: CommandType.QueueReinforcement,
+    tick,
+    playerId,
+    unitIds: [entryPointId], // Use unitIds array to store entry point ID
+    unitType,
+    targetX,
+    targetZ,
+    moveType: moveType || undefined,
   };
 }
 
