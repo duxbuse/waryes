@@ -49,6 +49,7 @@ export class UnitUI {
   private aimRing: THREE.Line | null = null;  // Outer blue ring showing aim direction
   private weaponReloadRings: THREE.Line[] = []; // Inner green rings for weapon reloads
   private weaponReloadBgRings: THREE.Line[] = []; // Background rings for weapons
+  private weaponRangeRings: THREE.Line[] = []; // Attack range circles for each weapon
 
   // Ring constants
   private readonly AIM_RING_RADIUS = 2.5;
@@ -416,6 +417,11 @@ export class UnitUI {
     for (let i = 0; i < Math.min(weapons.length, 3); i++) { // Max 3 weapon rings
       this.createWeaponReloadRing(i);
     }
+
+    // Create weapon range rings - one per weapon
+    for (let i = 0; i < weapons.length; i++) {
+      this.createWeaponRangeRing(i);
+    }
   }
 
   /**
@@ -489,6 +495,48 @@ export class UnitUI {
     fgRing.visible = false;
     this.groundRingsGroup?.add(fgRing);
     this.weaponReloadRings.push(fgRing);
+  }
+
+  /**
+   * Create a weapon range ring (shows max attack range)
+   */
+  private createWeaponRangeRing(weaponIndex: number): void {
+    const weapons = this.unit.getWeapons();
+    if (weaponIndex >= weapons.length) return;
+
+    const weaponSlot = weapons[weaponIndex];
+    if (!weaponSlot) return;
+
+    const weapon = getWeaponById(weaponSlot.weaponId);
+    if (!weapon) return;
+
+    const radius = weapon.range;
+
+    // Determine color based on weapon type
+    let color: number;
+    if (weapon.isAntiAir && weapon.canTargetGround) {
+      color = 0xaa33ff; // Purple - can target both air and ground
+    } else if (weapon.isAntiAir) {
+      color = 0x4a9eff; // Blue - anti-air only
+    } else {
+      color = 0xff3333; // Red - ground attack
+    }
+
+    // Create full circle for range
+    const points = this.createArcPoints(radius, Math.PI * 2, 0);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: color,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: false,
+    });
+    const rangeRing = new THREE.Line(geometry, material);
+    rangeRing.renderOrder = 997; // Below other rings
+    rangeRing.visible = false;
+    this.groundRingsGroup?.add(rangeRing);
+    this.weaponRangeRings.push(rangeRing);
   }
 
   /**
@@ -625,11 +673,17 @@ export class UnitUI {
   }
 
   /**
-   * Update all ground ring indicators (aim + weapon reloads)
+   * Update all ground ring indicators (aim + weapon reloads + range rings)
    */
   private updateGroundRingIndicators(): void {
     // Get unit's current command
     const currentCommand = (this.unit as any).currentCommand;
+
+    // Update weapon range rings - show when unit is selected
+    const isSelected = this.unit.isSelected;
+    for (const rangeRing of this.weaponRangeRings) {
+      rangeRing.visible = isSelected;
+    }
 
     // Update aim ring - show when attacking or attack-moving with a target
     if (this.aimRing) {
@@ -940,6 +994,10 @@ export class UnitUI {
       (ring.material as THREE.Material).dispose();
     }
     for (const ring of this.weaponReloadBgRings) {
+      ring.geometry.dispose();
+      (ring.material as THREE.Material).dispose();
+    }
+    for (const ring of this.weaponRangeRings) {
       ring.geometry.dispose();
       (ring.material as THREE.Material).dispose();
     }
