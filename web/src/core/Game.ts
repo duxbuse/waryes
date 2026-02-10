@@ -229,13 +229,14 @@ export class Game {
   }
 
   private setupLighting(): void {
-    // Ambient light for base illumination
-    const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
+    // ENHANCED LIGHTING SETUP
+    // Reduced ambient light to create darker shadows (simulates ambient occlusion)
+    const ambientLight = new THREE.AmbientLight(0x303050, 0.3);
     this.scene.add(ambientLight);
 
-    // Directional light (sun) with optimized shadow settings
-    this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.0);
-    this.sunLight.position.set(50, 100, 50);
+    // Main directional light (sun) - increased intensity for better contrast
+    this.sunLight = new THREE.DirectionalLight(0xfff4e6, 1.4);
+    this.sunLight.position.set(60, 120, 40); // Higher angle for more dramatic shadows
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 2048;
     this.sunLight.shadow.mapSize.height = 2048;
@@ -250,8 +251,21 @@ export class Game {
     this.sunLight.shadow.normalBias = 0.02;
     this.scene.add(this.sunLight);
 
-    // Hemisphere light for sky/ground color variation
-    const hemiLight = new THREE.HemisphereLight(0x8888aa, 0x444422, 0.3);
+    // Fill light (soft directional from opposite side) - simulates bounce light
+    const fillLight = new THREE.DirectionalLight(0x8899dd, 0.4);
+    fillLight.position.set(-40, 60, -30);
+    fillLight.castShadow = false; // No shadows for fill light (performance)
+    this.scene.add(fillLight);
+
+    // Rim/back light for depth and edge definition
+    const rimLight = new THREE.DirectionalLight(0xccddff, 0.3);
+    rimLight.position.set(-20, 40, 80);
+    rimLight.castShadow = false; // No shadows for rim light (performance)
+    this.scene.add(rimLight);
+
+    // Enhanced hemisphere light for sky/ground ambient occlusion effect
+    // Brighter sky, darker ground creates natural ambient occlusion gradient
+    const hemiLight = new THREE.HemisphereLight(0x9999cc, 0x2a2a1a, 0.5);
     this.scene.add(hemiLight);
 
     // Create FPS overlay
