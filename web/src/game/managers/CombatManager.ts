@@ -104,6 +104,28 @@ export class CombatManager {
     // Detect garrisoned attacker
     if (isGarrisoned) {
       console.log(`[CombatManager] Garrisoned attacker detected: ${attacker.name} firing from building at (${attacker.garrisonedBuilding.x}, ${attacker.garrisonedBuilding.z})`);
+
+      // Check firing arc restriction (~180 degrees in front of building)
+      const buildingRotation = attacker.garrisonedBuilding.rotation ?? 0;
+
+      // Calculate angle from building to target
+      const directionToTarget = VectorPool.acquire();
+      directionToTarget.copy(target.position).sub(attackerPos).normalize();
+      const angleToTarget = Math.atan2(directionToTarget.x, directionToTarget.z);
+      VectorPool.release(directionToTarget);
+
+      // Calculate angle difference (normalize to -π to π range)
+      let angleDiff = angleToTarget - buildingRotation;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      // Check if target is outside firing arc (more than 90 degrees to either side)
+      const halfArc = Math.PI / 2; // 90 degrees
+      if (Math.abs(angleDiff) > halfArc) {
+        console.log(`[CombatManager] Target outside firing arc. Angle diff: ${(angleDiff * 180 / Math.PI).toFixed(1)}° (max: ±90°)`);
+        VectorPool.release(attackerPos);
+        return; // Cannot fire at targets behind the building
+      }
     }
 
     const distance = attackerPos.distanceTo(target.position);
