@@ -60,6 +60,11 @@ export class UnitUI {
   // Category icon for tactical view
   private categoryIcon: THREE.Mesh | null = null;
 
+  // Passenger count indicator (for transports)
+  private passengerCountIndicator: THREE.Mesh | null = null;
+  private passengerCountCanvas: HTMLCanvasElement | null = null;
+  private passengerCountTexture: THREE.CanvasTexture | null = null;
+
   // Constants
   private readonly BAR_WIDTH = 2.0;
   private readonly BAR_HEIGHT = 0.15;
@@ -111,6 +116,9 @@ export class UnitUI {
 
     // Create category icon for tactical view
     this.createCategoryIcon();
+
+    // Create passenger count indicator (for transports)
+    this.createPassengerCountIndicator();
 
     // Add container to unit mesh
     unit.mesh.add(this.container);
@@ -752,6 +760,71 @@ export class UnitUI {
     this.container.add(this.categoryIcon);
   }
 
+  private createPassengerCountIndicator(): void {
+    // Only create for transport units
+    if (this.unit.transportCapacity <= 0) {
+      this.passengerCountIndicator = null;
+      return;
+    }
+
+    // Create canvas for text rendering
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    this.passengerCountCanvas = canvas;
+
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    this.passengerCountTexture = texture;
+
+    // Create sprite
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthTest: false,
+    });
+
+    const size = 1.2;
+    const geometry = new THREE.PlaneGeometry(size * 2, size); // Wider for text
+    this.passengerCountIndicator = new THREE.Mesh(geometry, material);
+    this.passengerCountIndicator.position.y = 1.0; // Above status icons
+    this.passengerCountIndicator.renderOrder = 1004;
+    this.passengerCountIndicator.visible = false; // Hidden by default, shown when has passengers
+    this.container.add(this.passengerCountIndicator);
+  }
+
+  private updatePassengerCountText(currentCount: number, maxCapacity: number): void {
+    if (!this.passengerCountCanvas || !this.passengerCountTexture) return;
+
+    const context = this.passengerCountCanvas.getContext('2d');
+    if (!context) return;
+
+    // Clear canvas
+    context.clearRect(0, 0, this.passengerCountCanvas.width, this.passengerCountCanvas.height);
+
+    // Background box
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(10, 10, 236, 108);
+
+    // Border
+    context.strokeStyle = '#4a9eff';
+    context.lineWidth = 3;
+    context.strokeRect(10, 10, 236, 108);
+
+    // Text
+    context.fillStyle = '#ffffff';
+    context.font = 'bold 48px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(`${currentCount}/${maxCapacity}`, 128, 64);
+
+    // Update texture
+    this.passengerCountTexture.needsUpdate = true;
+  }
+
   update(): void {
     // Update health bar (skip if using batched renderer)
     if (this.healthBarFg && this.healthBarBg) {
@@ -806,6 +879,19 @@ export class UnitUI {
     // Update ground ring indicators
     this.updateGroundRingIndicators();
 
+    // Update passenger count indicator (for transports)
+    if (this.passengerCountIndicator && this.unit.transportCapacity > 0) {
+      const passengers = this.game.transportManager.getPassengers(this.unit);
+      const passengerCount = passengers.length;
+
+      if (passengerCount > 0) {
+        this.updatePassengerCountText(passengerCount, this.unit.transportCapacity);
+        this.passengerCountIndicator.visible = true;
+      } else {
+        this.passengerCountIndicator.visible = false;
+      }
+    }
+
     // Update tactical view visibility (independent of categoryIcon existence)
     const isTacticalView = this.game.cameraController?.isTacticalView ?? false;
 
@@ -823,6 +909,7 @@ export class UnitUI {
       this.statusIcons.visible = false;
       this.orderIconsGroup.visible = false;
       if (this.groundRingsGroup) this.groundRingsGroup.visible = false;
+      if (this.passengerCountIndicator) this.passengerCountIndicator.visible = false;
       for (const star of this.veterancyStars) {
         star.visible = false;
       }
@@ -834,6 +921,7 @@ export class UnitUI {
       this.statusIcons.visible = true;
       this.orderIconsGroup.visible = true;
       if (this.groundRingsGroup) this.groundRingsGroup.visible = true;
+      // Passenger count indicator remains dynamically controlled (only shows when has passengers)
       // Other indicators remain dynamically controlled
     }
 
@@ -951,6 +1039,14 @@ export class UnitUI {
     if (this.categoryIcon) {
       this.categoryIcon.geometry.dispose();
       const material = this.categoryIcon.material as THREE.MeshBasicMaterial;
+      if (material.map) material.map.dispose();
+      material.dispose();
+    }
+
+    // Clean up passenger count indicator
+    if (this.passengerCountIndicator) {
+      this.passengerCountIndicator.geometry.dispose();
+      const material = this.passengerCountIndicator.material as THREE.MeshBasicMaterial;
       if (material.map) material.map.dispose();
       material.dispose();
     }
