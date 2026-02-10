@@ -357,9 +357,16 @@ export class CombatManager {
     const criticalHit = gameRNG.nextBool(0.1);
     const damageMultiplier = criticalHit ? 2 : 1;
 
-    // Calculate final damage
+    // Calculate base damage after armor
     const armorReduction = Math.max(0, armor - proj.penetration * 0.5);
-    const damage = Math.max(1, proj.damage * damageMultiplier - armorReduction);
+    let damage = Math.max(1, proj.damage * damageMultiplier - armorReduction);
+
+    // Apply defense bonus from garrison
+    if (target.isGarrisoned && target.garrisonedBuilding) {
+      const defenseBonus = target.garrisonedBuilding.defenseBonus ?? 0.5;
+      const damageReduction = 1 - defenseBonus;
+      damage = Math.max(1, damage * damageReduction);
+    }
 
     return {
       damage,
