@@ -116,6 +116,10 @@ export class Unit {
   public combatTarget: Unit | null = null;
   public targetScanTimer: number = 0;
 
+  // Voice line throttling (per-unit)
+  private lastVoiceLineTime: number = 0;
+  private readonly VOICE_LINE_THROTTLE = 2.0; // Max 1 voice per 2 seconds per unit
+
   // UI elements (health bars, morale bars)
   private unitUI: UnitUI | null = null;
 
@@ -718,6 +722,21 @@ export class Unit {
   }
 
   /**
+   * Play voice line with per-unit throttling
+   */
+  private playVoiceLineThrottled(voiceType: 'move_order' | 'attack_order'): void {
+    // Check per-unit throttle (2 seconds between voice lines)
+    const currentTime = performance.now() / 1000;
+    if (currentTime - this.lastVoiceLineTime < this.VOICE_LINE_THROTTLE) {
+      return; // Throttled - skip voice line
+    }
+
+    // Play voice line via AudioManager
+    this.game.audioManager?.playVoiceLine(voiceType, this.position);
+    this.lastVoiceLineTime = currentTime;
+  }
+
+  /**
    * Build full command queue for path visualization
    * Includes current command + all queued commands
    */
@@ -763,6 +782,9 @@ export class Unit {
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Move, target: target.clone() };
+
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
@@ -828,6 +850,9 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Attack, targetUnit: target };
 
+    // Play attack acknowledgment voice line
+    this.playVoiceLineThrottled('attack_order');
+
     // Update path visualization with single command (not full queue - that's only for shift-queue)
     // For attack commands, we convert targetUnit to target position for visualization
     if (this.game.pathRenderer) {
@@ -853,6 +878,9 @@ export class Unit {
   setFastMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.FastMove, target: target.clone() };
+
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
@@ -915,6 +943,9 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Reverse, target: target.clone() };
 
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
+
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
 
@@ -975,6 +1006,9 @@ export class Unit {
   setAttackMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.AttackMove, target: target.clone() };
+
+    // Play attack acknowledgment voice line (attack-move is aggressive)
+    this.playVoiceLineThrottled('attack_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
