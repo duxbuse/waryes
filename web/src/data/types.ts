@@ -5,6 +5,9 @@
 // Unit Categories
 export type UnitCategory = 'LOG' | 'INF' | 'TNK' | 'REC' | 'AA' | 'ART' | 'HEL' | 'AIR';
 
+// Audio Categories for weapon sounds
+export type AudioCategory = 'rifle' | 'machinegun' | 'cannon' | 'missile' | 'artillery' | 'launcher';
+
 // Optics and Stealth ratings (strings from JSON, converted to numbers in game)
 export type OpticsRating = 'Poor' | 'Normal' | 'Good' | 'Very Good' | 'Exceptional';
 export type StealthRating = 'None' | 'Poor' | 'Medium' | 'Good' | 'Exceptional';
@@ -49,6 +52,9 @@ export interface WeaponData {
     duration: number; // Duration in seconds
     opacityReduction: number; // 0-1, how much it blocks vision
   };
+  // Audio properties
+  soundId?: string; // ID of the weapon fire sound to play
+  impactSoundId?: string; // ID of the impact sound to play on hit
 }
 
 export interface WeaponSlot {
