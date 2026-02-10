@@ -530,6 +530,9 @@ export class ReinforcementManager {
       unitType: reinforcement.unitType,
     });
 
+    // Create spawn effect
+    this.createSpawnEffect(spawnPos);
+
     console.log(`Spawned ${reinforcement.unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) - vulnerable immediately`);
 
     // Mark unit as no longer deployed in deployment manager so it can be called again
@@ -572,6 +575,74 @@ export class ReinforcementManager {
     }
 
     this.updateUI();
+  }
+
+  /**
+   * Create a spawn effect at a position
+   * Shows a bright blue flash when units spawn from entry points
+   */
+  private createSpawnEffect(position: THREE.Vector3): void {
+    // Create spawn flash sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) return;
+
+    // Create radial gradient for spawn flash (blue/cyan colors)
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');      // Bright white center
+    gradient.addColorStop(0.2, 'rgba(100, 200, 255, 1)');    // Bright cyan
+    gradient.addColorStop(0.5, 'rgba(74, 158, 255, 0.8)');   // Blue
+    gradient.addColorStop(0.8, 'rgba(50, 100, 200, 0.4)');   // Dark blue
+    gradient.addColorStop(1, 'rgba(30, 80, 150, 0)');        // Fade to transparent
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.position.y = this.game.getElevationAt(position.x, position.z) + 1; // Slightly above ground
+    sprite.scale.set(3, 3, 1); // Larger spawn effect
+    sprite.renderOrder = 1500;
+    this.game.scene.add(sprite);
+
+    // Animate and remove the effect
+    const duration = 0.4; // 400ms
+    let timeAlive = 0;
+
+    const animateEffect = (dt: number) => {
+      timeAlive += dt;
+      const progress = timeAlive / duration;
+
+      if (progress >= 1) {
+        // Remove effect
+        this.game.scene.remove(sprite);
+        sprite.geometry.dispose();
+        material.dispose();
+        texture.dispose();
+      } else {
+        // Fade out and scale up
+        material.opacity = 1 - progress;
+        const scale = 3 + progress * 2; // Expand from 3 to 5
+        sprite.scale.set(scale, scale, 1);
+
+        // Continue animation next frame
+        requestAnimationFrame(() => animateEffect(1 / 60));
+      }
+    };
+
+    // Start animation
+    requestAnimationFrame(() => animateEffect(1 / 60));
   }
 
   /**
