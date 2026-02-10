@@ -496,6 +496,21 @@ export class InputManager {
       return;
     }
 
+    // Check if clicked on a building - garrison command
+    const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
+    if (worldPos) {
+      const building = this.game.buildingManager.getBuildingAt(worldPos);
+      if (building) {
+        // Issue garrison commands to selected infantry units
+        selectedUnits.forEach(unit => {
+          if (unit.category === 'INF' && !unit.isGarrisoned) {
+            unit.setGarrisonCommand(building);
+          }
+        });
+        return;
+      }
+    }
+
     if (targetUnit && targetUnit.team !== 'player') {
       // Attack command
       if (isSetupPhase) {
