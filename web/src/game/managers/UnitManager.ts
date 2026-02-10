@@ -117,6 +117,21 @@ export class UnitManager {
     // Remove from selection
     this.game.selectionManager.removeFromSelection(unit);
 
+    // Handle transport destruction - unload passengers
+    if (this.game.transportManager?.isTransport(unit)) {
+      this.game.transportManager.onTransportDestroyed(unit);
+    }
+
+    // Handle mounted passenger - dismount from transport
+    if (unit.mountedIn) {
+      this.game.transportManager?.dismount(unit, unit.mountedIn);
+    }
+
+    // Handle garrisoned unit - ungarrison from building
+    if (unit.isGarrisoned && unit.garrisonedBuilding) {
+      this.game.buildingManager?.ungarrison(unit, unit.garrisonedBuilding);
+    }
+
     // Unregister from instanced renderer
     this.game.instancedUnitRenderer?.unregisterUnit(unit);
     this.game.batchedUIRenderer?.unregisterUnit(unit);
