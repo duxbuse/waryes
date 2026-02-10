@@ -304,7 +304,7 @@ export class BatchedUnitUIRenderer {
         distScale,
         moraleYOffset,
         moralePercent,
-        this.getMoraleColor(unit.moraleState),
+        this.getMoraleColor(unit.moraleState, moralePercent),
         this.moraleBarFgMesh
       );
     }
@@ -364,18 +364,62 @@ export class BatchedUnitUIRenderer {
   }
 
   /**
-   * Get health bar color based on health percentage
+   * Interpolate between two colors based on a factor (0-1)
    */
-  private getHealthColor(healthPercent: number): number {
-    if (healthPercent > 0.6) return 0x00ff00; // Green
-    if (healthPercent > 0.3) return 0xffff00; // Yellow
-    return 0xff0000; // Red
+  private lerpColorValue(color1: number, color2: number, factor: number): number {
+    const c1 = new THREE.Color(color1);
+    const c2 = new THREE.Color(color2);
+    c1.lerp(c2, factor);
+    return c1.getHex();
   }
 
   /**
-   * Get morale bar color based on morale state
+   * Get health bar color with smooth gradient transitions
+   * Green (100%) -> Yellow (50%) -> Red (0%)
    */
-  private getMoraleColor(moraleState: string): number {
+  private getHealthColor(healthPercent: number): number {
+    // Clamp to valid range
+    healthPercent = Math.max(0, Math.min(1, healthPercent));
+
+    if (healthPercent > 0.5) {
+      // Interpolate from green to yellow (100% -> 50%)
+      const factor = (1 - healthPercent) / 0.5; // 0 at 100%, 1 at 50%
+      return this.lerpColorValue(0x00ff00, 0xffff00, factor);
+    } else {
+      // Interpolate from yellow to red (50% -> 0%)
+      const factor = (0.5 - healthPercent) / 0.5; // 0 at 50%, 1 at 0%
+      return this.lerpColorValue(0xffff00, 0xff0000, factor);
+    }
+  }
+
+  /**
+   * Get morale bar color with smooth gradient transitions
+   * Bright blue (100%) -> Cyan (50%) -> Orange (0%)
+   * Uses moraleState for routing check
+   */
+  private getMoraleColor(moraleState: string, moralePercent?: number): number {
+    // Routing units get gray color
+    if (moraleState === 'routing') {
+      return 0x666666;
+    }
+
+    // If we have morale percent, use smooth gradient
+    if (moralePercent !== undefined) {
+      // Clamp to valid range
+      moralePercent = Math.max(0, Math.min(1, moralePercent));
+
+      if (moralePercent > 0.5) {
+        // Interpolate from bright blue to cyan (100% -> 50%)
+        const factor = (1 - moralePercent) / 0.5; // 0 at 100%, 1 at 50%
+        return this.lerpColorValue(0x4a9eff, 0x44ddff, factor);
+      } else {
+        // Interpolate from cyan to orange (50% -> 0%)
+        const factor = (0.5 - moralePercent) / 0.5; // 0 at 50%, 1 at 0%
+        return this.lerpColorValue(0x44ddff, 0xff8800, factor);
+      }
+    }
+
+    // Fallback to state-based colors if no percentage provided
     switch (moraleState) {
       case 'normal':
         return 0x4a9eff; // Blue
@@ -383,8 +427,6 @@ export class BatchedUnitUIRenderer {
         return 0xffa500; // Orange
       case 'breaking':
         return 0xff8c00; // Dark orange
-      case 'routing':
-        return 0x808080; // Gray
       default:
         return 0x4a9eff; // Default blue
     }

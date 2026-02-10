@@ -806,6 +806,58 @@ export class UnitUI {
     this.container.add(this.categoryIcon);
   }
 
+  /**
+   * Interpolate between two colors based on a factor (0-1)
+   */
+  private lerpColor(color1: number, color2: number, factor: number): THREE.Color {
+    const c1 = new THREE.Color(color1);
+    const c2 = new THREE.Color(color2);
+    return c1.lerp(c2, factor);
+  }
+
+  /**
+   * Get health bar color with smooth gradient transitions
+   * Green (100%) -> Yellow (50%) -> Red (0%)
+   */
+  private getHealthBarColor(healthPercent: number): THREE.Color {
+    // Clamp to valid range
+    healthPercent = Math.max(0, Math.min(1, healthPercent));
+
+    if (healthPercent > 0.5) {
+      // Interpolate from green to yellow (100% -> 50%)
+      const factor = (1 - healthPercent) / 0.5; // 0 at 100%, 1 at 50%
+      return this.lerpColor(0x00ff00, 0xffff00, factor);
+    } else {
+      // Interpolate from yellow to red (50% -> 0%)
+      const factor = (0.5 - healthPercent) / 0.5; // 0 at 50%, 1 at 0%
+      return this.lerpColor(0xffff00, 0xff0000, factor);
+    }
+  }
+
+  /**
+   * Get morale bar color with smooth gradient transitions
+   * Bright blue (100%) -> Cyan (50%) -> Gray-blue (0%)
+   */
+  private getMoraleBarColor(moralePercent: number, isRouting: boolean): THREE.Color {
+    // Routing units get gray color
+    if (isRouting) {
+      return new THREE.Color(0x666666);
+    }
+
+    // Clamp to valid range
+    moralePercent = Math.max(0, Math.min(1, moralePercent));
+
+    if (moralePercent > 0.5) {
+      // Interpolate from bright blue to cyan (100% -> 50%)
+      const factor = (1 - moralePercent) / 0.5; // 0 at 100%, 1 at 50%
+      return this.lerpColor(0x4a9eff, 0x44ddff, factor);
+    } else {
+      // Interpolate from cyan to orange (50% -> 0%)
+      const factor = (0.5 - moralePercent) / 0.5; // 0 at 50%, 1 at 0%
+      return this.lerpColor(0x44ddff, 0xff8800, factor);
+    }
+  }
+
   update(): void {
     // Update health bar (skip if using batched renderer)
     if (this.healthBarFg && this.healthBarBg) {
@@ -813,15 +865,9 @@ export class UnitUI {
       this.healthBarFg.scale.x = Math.max(0.01, healthPercent); // Prevent zero scale
       this.healthBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - healthPercent);
 
-      // Color health bar based on percentage
+      // Smooth gradient color based on health percentage
       const healthMaterial = this.healthBarFg.material as THREE.MeshBasicMaterial;
-      if (healthPercent > 0.6) {
-        healthMaterial.color.setHex(0x00ff00); // Green
-      } else if (healthPercent > 0.3) {
-        healthMaterial.color.setHex(0xffff00); // Yellow
-      } else {
-        healthMaterial.color.setHex(0xff0000); // Red
-      }
+      healthMaterial.color.copy(this.getHealthBarColor(healthPercent));
     }
 
     // Update morale bar (skip if using batched renderer)
@@ -830,17 +876,9 @@ export class UnitUI {
       this.moraleBarFg.scale.x = Math.max(0.01, moralePercent);
       this.moraleBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - moralePercent);
 
-      // Color morale bar based on state
+      // Smooth gradient color based on morale state
       const moraleMaterial = this.moraleBarFg.material as THREE.MeshBasicMaterial;
-      if (this.unit.isRouting) {
-        moraleMaterial.color.setHex(0x666666); // Gray when routing
-      } else if (moralePercent < 0.25) {
-        moraleMaterial.color.setHex(0xff8800); // Orange when breaking
-      } else if (moralePercent < 0.5) {
-        moraleMaterial.color.setHex(0xffcc00); // Yellow-orange when shaken
-      } else {
-        moraleMaterial.color.setHex(0x4a9eff); // Blue when normal
-      }
+      moraleMaterial.color.copy(this.getMoraleBarColor(moralePercent, this.unit.isRouting));
     }
 
     // Update status icons visibility
