@@ -35,7 +35,7 @@
   "tags": [],
   "isCommander": false,
   "commanderAuraRadius": 0,
-  "transportCapacity": 0,
+  "transportCapacity": 10,
   "canBeTransported": true,
   "transportSize": 1,
   "veterancyBonus": 0.1
