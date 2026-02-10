@@ -237,6 +237,18 @@ export class SelectionManager {
         <div>Team: ${unit.team}</div>
       `;
 
+      // Add transport/garrison status
+      if (unit.isGarrisoned && unit.garrisonedBuilding) {
+        const building = unit.garrisonedBuilding;
+        statsHtml += `<div style="margin-top: 4px; color: #4aff4a;">🏠 Garrisoned in ${building.name}</div>`;
+      }
+
+      // Check if unit is a transport with passengers
+      if (unit.transportCapacity > 0) {
+        const passengers = this.game.transportManager.getPassengers(unit);
+        statsHtml += `<div style="margin-top: 4px; color: #4a9eff;">🚚 Passengers: ${passengers.length}/${unit.transportCapacity}</div>`;
+      }
+
       // Add weapon stats
       const weapons = unit.getWeapons();
       if (weapons.length > 0) {
