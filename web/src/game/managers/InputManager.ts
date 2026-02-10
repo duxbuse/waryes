@@ -331,7 +331,9 @@ export class InputManager {
         break;
 
       case 'KeyE':
-        // Unload at position modifier
+        // Immediate unload command for selected transports
+        this.unloadSelectedTransports();
+        // Also set movement modifier for E+RightClick pattern
         this.state.movementModifiers.unload = true;
         break;
 
@@ -439,6 +441,18 @@ export class InputManager {
     }
   }
 
+  private unloadSelectedTransports(): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    for (const unit of selectedUnits) {
+      if (this.game.transportManager.isTransport(unit)) {
+        const passengers = this.game.transportManager.getPassengers(unit);
+        if (passengers.length > 0) {
+          this.game.transportManager.unloadAll(unit);
+        }
+      }
+    }
+  }
+
   private handleClickSelection(event: MouseEvent): void {
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
 
@@ -475,9 +489,41 @@ export class InputManager {
     const queue = this.state.modifiers.shift;
     const isSetupPhase = this.game.phase === GamePhase.Setup;
 
-    // Check if clicked on an enemy
+    // Check if clicked on a unit
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
     const targetUnit = hits.length > 0 ? this.findUnitFromMesh(hits[0]!) : null;
+
+    // Check if clicked on a friendly transport - mount command
+    if (targetUnit && targetUnit.team === 'player' && this.game.transportManager.isTransport(targetUnit)) {
+      // Issue mount commands to selected units
+      selectedUnits.forEach(unit => {
+        // Only infantry can mount into transports
+        if (unit.category === 'INF' && !this.game.transportManager.isMounted(unit)) {
+          if (this.game.transportManager.getAvailableCapacity(targetUnit) > 0) {
+            // Set move command to transport, will mount on arrival
+            unit.setMountCommand(targetUnit);
+          } else {
+            console.log(`${targetUnit.name} is full`);
+          }
+        }
+      });
+      return;
+    }
+
+    // Check if clicked on a building - garrison command
+    const worldPos = this.game.screenToWorld(event.clientX, event.clientY);
+    if (worldPos) {
+      const building = this.game.buildingManager.getBuildingAt(worldPos);
+      if (building) {
+        // Issue garrison commands to selected infantry units
+        selectedUnits.forEach(unit => {
+          if (unit.category === 'INF' && !unit.isGarrisoned) {
+            unit.setGarrisonCommand(building);
+          }
+        });
+        return;
+      }
+    }
 
     if (targetUnit && targetUnit.team !== 'player') {
       // Attack command

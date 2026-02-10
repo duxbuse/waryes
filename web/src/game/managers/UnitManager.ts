@@ -13,6 +13,7 @@ import type { Game } from '../../core/Game';
 import { GamePhase } from '../../core/Game';
 import { Unit, type UnitConfig } from '../units/Unit';
 import { SpatialHashGrid } from '../utils/SpatialHashGrid';
+import type { Building } from '../../data/types';
 
 export interface SpawnConfig {
   position: THREE.Vector3;
@@ -115,6 +116,21 @@ export class UnitManager {
 
     // Remove from selection
     this.game.selectionManager.removeFromSelection(unit);
+
+    // Handle transport destruction - unload passengers
+    if (this.game.transportManager?.isTransport(unit)) {
+      this.game.transportManager.onTransportDestroyed(unit);
+    }
+
+    // Handle mounted passenger - dismount from transport
+    if (unit.mountedIn) {
+      this.game.transportManager?.dismount(unit, unit.mountedIn);
+    }
+
+    // Handle garrisoned unit - ungarrison from building
+    if (unit.isGarrisoned && unit.garrisonedBuilding) {
+      this.game.buildingManager?.ungarrison(unit, unit.garrisonedBuilding);
+    }
 
     // Unregister from instanced renderer
     this.game.instancedUnitRenderer?.unregisterUnit(unit);
@@ -321,6 +337,26 @@ export class UnitManager {
         unit.setAttackMoveCommand(unitTarget);
       }
     });
+  }
+
+  /**
+   * Issue mount command to units (infantry boarding transport)
+   */
+  issueMountCommand(units: readonly Unit[], transport: Unit, queue: boolean): void {
+    for (const unit of units) {
+      // Note: queue parameter currently ignored as Unit doesn't have queueMountCommand yet
+      unit.setMountCommand(transport);
+    }
+  }
+
+  /**
+   * Issue garrison command to units (infantry entering building)
+   */
+  issueGarrisonCommand(units: readonly Unit[], building: Building, queue: boolean): void {
+    for (const unit of units) {
+      // Note: queue parameter currently ignored as Unit doesn't have queueGarrisonCommand yet
+      unit.setGarrisonCommand(building);
+    }
   }
 
   /**

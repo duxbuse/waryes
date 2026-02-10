@@ -530,6 +530,8 @@ export class Game {
       this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
       t5 = performance.now();
 
+      this.buildingManager.update(); // Update building occupancy indicators (billboard effect)
+
       this.pathRenderer?.update(dt); // Update path lines as units move
       this.instancedUnitRenderer?.update(); // Update instanced unit rendering
       this.batchedUIRenderer?.update(); // Update batched UI rendering (health/morale bars)
