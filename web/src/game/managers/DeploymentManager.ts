@@ -862,16 +862,6 @@ export class DeploymentManager {
     // Battle phase: Enter waiting mode for destination click
     this.waitingForReinforcementDestination = true;
     this.pendingReinforcementUnitIndex = duIndex;
-
-      // Track deployment
-      du.deployedCount++;
-
-      // Re-render both the battle unit bar and update credits display
-      this.renderBattleUnitBar();
-      this.updateCreditsDisplay();
-
-      console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
-    }
   }
 
   /**
