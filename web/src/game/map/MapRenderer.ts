@@ -30,7 +30,7 @@ export class MapRenderer {
     ground: THREE.MeshStandardMaterial;
     forest: THREE.MeshStandardMaterial;
     hill: THREE.MeshStandardMaterial;
-    water: THREE.MeshStandardMaterial;
+    water: THREE.ShaderMaterial;
     building: THREE.MeshStandardMaterial;
     church: THREE.MeshStandardMaterial;
     factory: THREE.MeshStandardMaterial;
@@ -133,14 +133,80 @@ export class MapRenderer {
         roughness: 0.9,
         metalness: 0.0,
       }),
-      water: new THREE.MeshStandardMaterial({
-        color: biomeConfig.waterColor ?? 0x3a6a8a, // Apply biome water color if available
-        roughness: 0.3,
-        metalness: 0.2,
+      water: new THREE.ShaderMaterial({
+        uniforms: {
+          time: { value: 0.0 },
+          waterColor: { value: new THREE.Color(biomeConfig.waterColor ?? 0x3a6a8a) },
+          deepWaterColor: { value: new THREE.Color(biomeConfig.waterColor ?? 0x3a6a8a).multiplyScalar(0.7) },
+          opacity: { value: 0.8 },
+          waveScale: { value: 0.5 },
+          waveSpeed: { value: 0.3 },
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          uniform float time;
+          uniform float waveScale;
+          uniform float waveSpeed;
+
+          void main() {
+            vUv = uv;
+
+            // Apply wave animation in vertex shader
+            vec3 pos = position;
+            float wave1 = sin(pos.x * 0.5 + time * waveSpeed) * waveScale;
+            float wave2 = cos(pos.z * 0.3 + time * waveSpeed * 1.3) * waveScale * 0.7;
+            pos.y += wave1 + wave2;
+
+            // Calculate animated normal for lighting
+            float dx = cos(pos.x * 0.5 + time * waveSpeed) * 0.5 * waveScale;
+            float dz = -sin(pos.z * 0.3 + time * waveSpeed * 1.3) * 0.3 * waveScale * 0.7;
+            vNormal = normalize(vec3(-dx, 1.0, -dz));
+
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          uniform vec3 waterColor;
+          uniform vec3 deepWaterColor;
+          uniform float opacity;
+          uniform float time;
+
+          void main() {
+            // Calculate view direction for Fresnel effect
+            vec3 viewDir = normalize(vViewPosition);
+            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
+
+            // Animated distortion for dynamic feel
+            vec2 distortedUv = vUv + vec2(
+              sin(vUv.y * 10.0 + time * 0.3) * 0.01,
+              cos(vUv.x * 10.0 + time * 0.3) * 0.01
+            );
+
+            // Mix water colors based on Fresnel
+            vec3 finalColor = mix(deepWaterColor, waterColor, fresnel);
+
+            // Add subtle shimmer effect
+            float shimmer = sin(distortedUv.x * 20.0 + time) *
+                           cos(distortedUv.y * 20.0 + time * 1.3) * 0.1 + 0.9;
+            finalColor *= shimmer;
+
+            // Add reflection highlights
+            float specular = pow(max(dot(vNormal, normalize(vec3(0.5, 1.0, 0.3))), 0.0), 32.0);
+            finalColor += vec3(specular * 0.5);
+
+            gl_FragColor = vec4(finalColor, opacity);
+          }
+        `,
         transparent: true,
-        opacity: 0.8,
         side: THREE.DoubleSide,
-        depthWrite: false, // Disable depth write to avoid z-fighting with overlapping water
+        depthWrite: false,
         stencilWrite: true,
         stencilFunc: THREE.NotEqualStencilFunc,
         stencilRef: 1,
@@ -4290,6 +4356,11 @@ export class MapRenderer {
    */
   update(dt: number): void {
     this.animationTime += dt;
+
+    // Animate water shader
+    if (this.materials.water && this.materials.water.uniforms) {
+      this.materials.water.uniforms.time.value = this.animationTime;
+    }
 
     // Animate border rings for contested zones
     this.captureZoneMeshes.forEach((group) => {
