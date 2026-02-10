@@ -302,7 +302,24 @@ export class Unit {
   private onDeath(): void {
     // Create destruction effect and sound (if managers exist)
     this.game.visualEffectsManager?.createDestructionEffect(this.position);
-    this.game.audioManager?.playSound('unit_death');
+
+    // Play death sound based on unit category
+    if (this.unitData) {
+      const category = this.unitData.category;
+      // Vehicles (tanks, aircraft, etc.) explode with large explosion sound
+      const vehicleCategories: string[] = ['TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
+
+      if (vehicleCategories.includes(category)) {
+        // Large explosion for vehicles
+        this.game.audioManager?.playImpactSound('vehicle_explosion', this.position, 1.0);
+      } else {
+        // Softer death sound for infantry and logistics
+        this.game.audioManager?.playSound('unit_death');
+      }
+    } else {
+      // Fallback to generic death sound if no unit data
+      this.game.audioManager?.playSound('unit_death');
+    }
 
     // Cleanup
     this.game.unitManager?.destroyUnit(this);
