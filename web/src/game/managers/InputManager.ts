@@ -475,9 +475,26 @@ export class InputManager {
     const queue = this.state.modifiers.shift;
     const isSetupPhase = this.game.phase === GamePhase.Setup;
 
-    // Check if clicked on an enemy
+    // Check if clicked on a unit
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
     const targetUnit = hits.length > 0 ? this.findUnitFromMesh(hits[0]!) : null;
+
+    // Check if clicked on a friendly transport - mount command
+    if (targetUnit && targetUnit.team === 'player' && this.game.transportManager.isTransport(targetUnit)) {
+      // Issue mount commands to selected units
+      selectedUnits.forEach(unit => {
+        // Only infantry can mount into transports
+        if (unit.category === 'INF' && !this.game.transportManager.isMounted(unit)) {
+          if (this.game.transportManager.getAvailableCapacity(targetUnit) > 0) {
+            // Set move command to transport, will mount on arrival
+            unit.setMountCommand(targetUnit);
+          } else {
+            console.log(`${targetUnit.name} is full`);
+          }
+        }
+      });
+      return;
+    }
 
     if (targetUnit && targetUnit.team !== 'player') {
       // Attack command
