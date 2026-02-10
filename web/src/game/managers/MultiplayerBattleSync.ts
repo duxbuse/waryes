@@ -385,6 +385,19 @@ export class MultiplayerBattleSync {
         }
         break;
 
+      case CommandType.QueueReinforcement:
+        if (cmd.unitType && cmd.unitIds.length > 0) {
+          const entryPointId = cmd.unitIds[0];
+          this.game.reinforcementManager.processReinforcementCommand(
+            entryPointId,
+            cmd.unitType,
+            cmd.targetX,
+            cmd.targetZ,
+            cmd.moveType
+          );
+        }
+        break;
+
       // Add more command types as needed
       default:
         console.warn(`[MP Battle] Unknown command type: ${cmd.type}`);
