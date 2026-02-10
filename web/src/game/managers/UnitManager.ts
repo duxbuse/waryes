@@ -13,6 +13,7 @@ import type { Game } from '../../core/Game';
 import { GamePhase } from '../../core/Game';
 import { Unit, type UnitConfig } from '../units/Unit';
 import { SpatialHashGrid } from '../utils/SpatialHashGrid';
+import type { Building } from '../../data/types';
 
 export interface SpawnConfig {
   position: THREE.Vector3;
@@ -321,6 +322,26 @@ export class UnitManager {
         unit.setAttackMoveCommand(unitTarget);
       }
     });
+  }
+
+  /**
+   * Issue mount command to units (infantry boarding transport)
+   */
+  issueMountCommand(units: readonly Unit[], transport: Unit, queue: boolean): void {
+    for (const unit of units) {
+      // Note: queue parameter currently ignored as Unit doesn't have queueMountCommand yet
+      unit.setMountCommand(transport);
+    }
+  }
+
+  /**
+   * Issue garrison command to units (infantry entering building)
+   */
+  issueGarrisonCommand(units: readonly Unit[], building: Building, queue: boolean): void {
+    for (const unit of units) {
+      // Note: queue parameter currently ignored as Unit doesn't have queueGarrisonCommand yet
+      unit.setGarrisonCommand(building);
+    }
   }
 
   /**
