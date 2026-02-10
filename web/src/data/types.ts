@@ -8,6 +8,43 @@ export type UnitCategory = 'LOG' | 'INF' | 'TNK' | 'REC' | 'AA' | 'ART' | 'HEL' 
 // Audio Categories for weapon sounds
 export type AudioCategory = 'rifle' | 'machinegun' | 'cannon' | 'missile' | 'artillery' | 'launcher';
 
+// Sound effect categories
+export type SoundCategory = 'weapon_fire' | 'impact' | 'unit_voice' | 'ambient';
+
+// Weapon fire sound types
+export type WeaponFireSound = 'rifle_fire' | 'machinegun_fire' | 'cannon_fire' | 'missile_launch' | 'artillery_fire' | 'launcher_fire';
+
+// Impact sound types
+export type ImpactSound = 'penetration' | 'deflection' | 'infantry_hit' | 'vehicle_explosion' | 'building_hit';
+
+// Unit voice sound types
+export type UnitVoiceSound = 'move_order' | 'attack_order' | 'under_fire' | 'low_morale' | 'retreating';
+
+// Ambient sound types
+export type AmbientSound = 'battle_ambient' | 'off_screen_combat' | 'environmental';
+
+// Sound effect definition
+export interface SoundEffect {
+  id: string;
+  category: SoundCategory;
+  filePath?: string; // Optional audio file path
+  config?: AudioConfig; // Optional override config
+}
+
+// Audio playback configuration
+export interface AudioConfig {
+  volume: number; // 0-1
+  pitchVariation?: number; // 0-1, amount of random pitch variation
+  spatialSettings?: {
+    refDistance: number; // Distance at which volume reduction starts
+    maxDistance: number; // Distance at which sound is inaudible
+    rolloffFactor: number; // How quickly volume decreases with distance
+    coneInnerAngle?: number; // Inner cone angle in degrees for directional sounds
+    coneOuterAngle?: number; // Outer cone angle in degrees for directional sounds
+    coneOuterGain?: number; // Volume multiplier outside cone for directional sounds
+  };
+}
+
 // Optics and Stealth ratings (strings from JSON, converted to numbers in game)
 export type OpticsRating = 'Poor' | 'Normal' | 'Good' | 'Very Good' | 'Exceptional';
 export type StealthRating = 'None' | 'Poor' | 'Medium' | 'Good' | 'Exceptional';
