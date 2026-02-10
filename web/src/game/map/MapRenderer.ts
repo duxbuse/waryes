@@ -117,6 +117,8 @@ export class MapRenderer {
         vertexColors: true, // Enable vertex colors for cliff/grass blending
         roughness: 0.9,
         metalness: 0.0,
+        normalMap: this.createProceduralNormalMap(),
+        normalScale: new THREE.Vector2(0.3, 0.3), // Subtle normal mapping for depth
       }),
       forest: new THREE.MeshStandardMaterial({
         color: biomeConfig.forestColor, // Apply biome forest color
@@ -205,6 +207,106 @@ export class MapRenderer {
         depthTest: true,
       }),
     };
+  }
+
+  /**
+   * Create a procedural normal map for terrain detail.
+   * Uses canvas-based noise to generate a tileable normal map texture
+   * for subtle surface detail without additional geometry.
+   *
+   * Performance: Created once and shared across all terrain chunks.
+   */
+  private createProceduralNormalMap(): THREE.Texture {
+    const size = 256; // Texture resolution (256x256 is good balance of quality/memory)
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      // Fallback: return empty texture if canvas context fails
+      return new THREE.Texture();
+    }
+
+    // Create image data for manipulation
+    const imageData = ctx.createImageData(size, size);
+    const data = imageData.data;
+
+    // Generate tileable Perlin-like noise for normal map
+    // Normal maps use RGB channels to encode XYZ normal directions
+    // R=X (left-right), G=Y (up-down), B=Z (depth)
+    // Center value (128, 128, 255) = flat surface pointing up
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+
+        // Generate height value using simple noise
+        // Combine multiple octaves for natural-looking variation
+        const scale1 = 0.05; // Large features
+        const scale2 = 0.15; // Medium features
+        const scale3 = 0.3;  // Small details
+
+        const noise1 = Math.sin(x * scale1) * Math.cos(y * scale1);
+        const noise2 = Math.sin(x * scale2 + 10) * Math.cos(y * scale2 + 10);
+        const noise3 = Math.sin(x * scale3 + 20) * Math.cos(y * scale3 + 20);
+
+        // Combine octaves with different weights
+        const height = (noise1 * 0.5 + noise2 * 0.3 + noise3 * 0.2);
+
+        // Calculate normal from height gradient
+        // Sample neighboring pixels to get slope
+        const heightL = Math.sin((x - 1) * scale1) * Math.cos(y * scale1) * 0.5 +
+                       Math.sin((x - 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
+                       Math.sin((x - 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
+
+        const heightR = Math.sin((x + 1) * scale1) * Math.cos(y * scale1) * 0.5 +
+                       Math.sin((x + 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
+                       Math.sin((x + 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
+
+        const heightD = Math.sin(x * scale1) * Math.cos((y - 1) * scale1) * 0.5 +
+                       Math.sin(x * scale2 + 10) * Math.cos((y - 1) * scale2 + 10) * 0.3 +
+                       Math.sin(x * scale3 + 20) * Math.cos((y - 1) * scale3 + 20) * 0.2;
+
+        const heightU = Math.sin(x * scale1) * Math.cos((y + 1) * scale1) * 0.5 +
+                       Math.sin(x * scale2 + 10) * Math.cos((y + 1) * scale2 + 10) * 0.3 +
+                       Math.sin(x * scale3 + 20) * Math.cos((y + 1) * scale3 + 20) * 0.2;
+
+        // Calculate gradients
+        const dx = (heightR - heightL) * 0.5;
+        const dy = (heightU - heightD) * 0.5;
+
+        // Convert to normal vector and encode in RGB
+        // Normal map convention: R=X+128, G=Y+128, B=Z (mostly 255 for upward facing)
+        const nx = dx * 255;
+        const ny = dy * 255;
+        const nz = 1.0;
+
+        // Normalize the vector
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+        // Encode normal in 0-255 range (128 = 0, 255 = +1, 0 = -1)
+        data[i] = ((nx / len) * 0.5 + 0.5) * 255;     // R: X component
+        data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255; // G: Y component
+        data[i + 2] = ((nz / len) * 0.5 + 0.5) * 255; // B: Z component (pointing up)
+        data[i + 3] = 255;                              // A: fully opaque
+      }
+    }
+
+    // Put image data on canvas
+    ctx.putImageData(imageData, 0, 0);
+
+    // Create Three.js texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+
+    // Set repeat to tile the normal map across terrain
+    // Larger repeat values = more tiling = finer detail
+    texture.repeat.set(16, 16); // Repeat 16x across terrain chunks
+
+    texture.needsUpdate = true;
+
+    return texture;
   }
 
   render(map: GameMap): void {
@@ -4202,6 +4304,11 @@ export class MapRenderer {
   }
 
   dispose(): void {
+    // Dispose of normal map texture
+    if (this.materials.ground.normalMap) {
+      this.materials.ground.normalMap.dispose();
+    }
+
     // Dispose all materials
     Object.values(this.materials).forEach(mat => mat.dispose());
     Object.values(this.roadMaterials).forEach(mat => mat.dispose());
