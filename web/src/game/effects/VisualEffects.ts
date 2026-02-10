@@ -13,6 +13,14 @@ interface Effect {
   duration: number;
 }
 
+interface MuzzleLight {
+  light: THREE.PointLight;
+  active: boolean;
+  timeAlive: number;
+  duration: number;
+  initialIntensity: number;
+}
+
 interface Particle {
   sprite: THREE.Sprite;
   velocity: THREE.Vector3;
@@ -135,15 +143,113 @@ class ParticlePool {
   }
 }
 
+/**
+ * Light pool for efficient muzzle flash lighting
+ * Reuses PointLight objects to avoid GC pressure during heavy combat
+ */
+class LightPool {
+  private lights: MuzzleLight[] = [];
+  private readonly POOL_SIZE = 20;
+  private readonly MAX_ACTIVE_LIGHTS = 15; // Limit to prevent performance impact
+
+  constructor(private scene: THREE.Scene) {
+    // Preallocate light pool
+    for (let i = 0; i < this.POOL_SIZE; i++) {
+      this.lights.push(this.createLight());
+    }
+  }
+
+  private createLight(): MuzzleLight {
+    const light = new THREE.PointLight(0xffaa44, 0, 10, 2);
+    light.castShadow = false; // Disable shadows for performance
+    light.visible = false;
+    this.scene.add(light);
+
+    return {
+      light,
+      active: false,
+      timeAlive: 0,
+      duration: 0.12,
+      initialIntensity: 2,
+    };
+  }
+
+  acquire(): MuzzleLight | null {
+    // Count active lights
+    let activeCount = 0;
+    for (const light of this.lights) {
+      if (light.active) activeCount++;
+    }
+
+    // Limit max active lights for performance
+    if (activeCount >= this.MAX_ACTIVE_LIGHTS) {
+      return null;
+    }
+
+    // Find inactive light
+    for (const light of this.lights) {
+      if (!light.active) {
+        light.active = true;
+        light.timeAlive = 0;
+        return light;
+      }
+    }
+
+    // Expand pool if needed (but respect max active limit)
+    if (this.lights.length < this.POOL_SIZE * 2) {
+      const light = this.createLight();
+      light.active = true;
+      this.lights.push(light);
+      return light;
+    }
+
+    return null;
+  }
+
+  release(muzzleLight: MuzzleLight): void {
+    muzzleLight.active = false;
+    muzzleLight.light.visible = false;
+    muzzleLight.light.intensity = 0;
+  }
+
+  update(dt: number): void {
+    for (const muzzleLight of this.lights) {
+      if (!muzzleLight.active) continue;
+
+      muzzleLight.timeAlive += dt;
+
+      // Fade out light intensity over duration
+      const progress = muzzleLight.timeAlive / muzzleLight.duration;
+      muzzleLight.light.intensity =
+        muzzleLight.initialIntensity * (1 - progress);
+
+      // Release expired lights
+      if (muzzleLight.timeAlive >= muzzleLight.duration) {
+        this.release(muzzleLight);
+      }
+    }
+  }
+
+  clear(): void {
+    for (const light of this.lights) {
+      if (light.active) {
+        this.release(light);
+      }
+    }
+  }
+}
+
 export class VisualEffectsManager {
   private readonly game: Game;
   private effects: Map<string, Effect> = new Map();
   private nextId = 0;
   private particlePool: ParticlePool;
+  private lightPool: LightPool;
 
   constructor(game: Game) {
     this.game = game;
     this.particlePool = new ParticlePool(game.scene);
+    this.lightPool = new LightPool(game.scene);
   }
 
   /**
@@ -229,6 +335,16 @@ export class VisualEffectsManager {
     };
 
     this.effects.set(id, effect);
+
+    // Add dynamic point light for muzzle flash
+    const muzzleLight = this.lightPool.acquire();
+    if (muzzleLight) {
+      muzzleLight.light.position.copy(position);
+      muzzleLight.light.position.add(direction.clone().multiplyScalar(2));
+      muzzleLight.light.intensity = muzzleLight.initialIntensity;
+      muzzleLight.light.visible = true;
+      muzzleLight.duration = 0.12; // 120ms duration
+    }
   }
 
   /**
@@ -466,6 +582,9 @@ export class VisualEffectsManager {
     // Update particle system
     this.particlePool.update(dt);
 
+    // Update light pool
+    this.lightPool.update(dt);
+
     // Update legacy effects (muzzle flashes still use this)
     const toRemove: string[] = [];
 
@@ -525,5 +644,6 @@ export class VisualEffectsManager {
       this.removeEffect(id);
     }
     this.particlePool.clear();
+    this.lightPool.clear();
   }
 }
