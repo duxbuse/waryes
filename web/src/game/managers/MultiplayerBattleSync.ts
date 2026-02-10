@@ -21,6 +21,7 @@ import {
   deserializeCommand,
   createMoveCommand,
   createAttackCommand,
+  createQueueReinforcementCommand,
 } from '../multiplayer/CommandProtocol';
 import { computeGameStateChecksum, formatChecksum } from '../multiplayer/StateChecksum';
 
@@ -254,6 +255,31 @@ export class MultiplayerBattleSync {
       unitIds,
       targetUnitId,
       queue
+    );
+
+    this.queueLocalCommand(cmd);
+  }
+
+  /**
+   * Send queue reinforcement command
+   */
+  sendQueueReinforcementCommand(
+    entryPointId: string,
+    unitType: string,
+    targetX?: number,
+    targetZ?: number,
+    moveType?: 'normal' | 'attack' | 'reverse' | 'fast' | null
+  ): void {
+    if (!this.useCommandSync) return;
+
+    const cmd = createQueueReinforcementCommand(
+      tickManager.getCurrentTick() + 2,
+      this.localPlayerId,
+      entryPointId,
+      unitType,
+      targetX,
+      targetZ,
+      moveType
     );
 
     this.queueLocalCommand(cmd);

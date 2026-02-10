@@ -231,16 +231,27 @@ export class ReinforcementManager {
       moveType = 'fast';
     }
 
-    // Add to queue with command
-    const reinforcement: QueuedReinforcement = {
-      unitType: this.pendingUnitType,
-      destination: { x: worldPos.x, z: worldPos.z },
-      moveType,
-    };
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        this.selectedEntryPoint.id,
+        this.pendingUnitType,
+        worldPos.x,
+        worldPos.z,
+        moveType
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType: this.pendingUnitType,
+        destination: { x: worldPos.x, z: worldPos.z },
+        moveType,
+      };
 
-    this.selectedEntryPoint.queue.push(reinforcement);
-
-    console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+      this.selectedEntryPoint.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+    }
 
     // Clear waiting state
     this.pendingUnitType = null;
@@ -309,14 +320,27 @@ export class ReinforcementManager {
       return false;
     }
 
-    const reinforcement: QueuedReinforcement = {
-      unitType,
-      destination,
-      moveType,
-    };
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        resupplyPointId,
+        unitType,
+        destination?.x,
+        destination?.z,
+        moveType
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType,
+        destination,
+        moveType,
+      };
 
-    ep.queue.push(reinforcement);
-    console.log(`[REINFORCE] Queued ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+      ep.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+    }
 
     this.updateUI();
     return true;
@@ -564,14 +588,29 @@ export class ReinforcementManager {
       return false;
     }
 
-    // Add to queue with no destination (will use rally point if set)
-    const reinforcement: QueuedReinforcement = {
-      unitType,
-      destination: null,
-      moveType: null,
-    };
-    bestEntry.queue.push(reinforcement);
-    console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      // Use rally point destination if set
+      const rallyX = bestEntry.rallyPoint?.x;
+      const rallyZ = bestEntry.rallyPoint?.z;
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        bestEntry.id,
+        unitType,
+        rallyX,
+        rallyZ,
+        null
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${unitType} at ${bestEntry.type} entry (auto-selected)`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType,
+        destination: null,
+        moveType: null,
+      };
+      bestEntry.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
+    }
 
     this.updateUI();
     return true;
@@ -586,5 +625,42 @@ export class ReinforcementManager {
       ep.rallyPoint = { x, z };
       console.log(`Set rally point for ${ep.type} entry to (${x.toFixed(0)}, ${z.toFixed(0)})`);
     }
+  }
+
+  /**
+   * Process received reinforcement command (for multiplayer sync)
+   * Called by MultiplayerBattleSync when receiving QueueReinforcement commands
+   */
+  processReinforcementCommand(
+    entryPointId: string,
+    unitType: string,
+    targetX?: number,
+    targetZ?: number,
+    moveType?: string
+  ): void {
+    const ep = this.entryPoints.find(e => e.id === entryPointId);
+    if (!ep) {
+      console.warn(`[REINFORCE] Entry point ${entryPointId} not found for command`);
+      return;
+    }
+
+    const destination = targetX !== undefined && targetZ !== undefined
+      ? { x: targetX, z: targetZ }
+      : null;
+
+    const typedMoveType = (moveType === 'attack' || moveType === 'reverse' || moveType === 'fast' || moveType === 'normal')
+      ? moveType
+      : null;
+
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination,
+      moveType: typedMoveType,
+    };
+
+    ep.queue.push(reinforcement);
+    console.log(`[REINFORCE] Processed MP command: queued ${unitType} at ${entryPointId} with ${moveType} move`);
+
+    this.updateUI();
   }
 }
