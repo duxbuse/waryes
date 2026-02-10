@@ -238,17 +238,27 @@ export class Game {
     this.sunLight = new THREE.DirectionalLight(0xfff4e6, 1.4);
     this.sunLight.position.set(60, 120, 40); // Higher angle for more dramatic shadows
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
-    this.sunLight.shadow.camera.near = 10;
-    this.sunLight.shadow.camera.far = 300;
-    this.sunLight.shadow.camera.left = -100;
-    this.sunLight.shadow.camera.right = 100;
-    this.sunLight.shadow.camera.top = 100;
-    this.sunLight.shadow.camera.bottom = -100;
-    // Reduce shadow acne with bias
-    this.sunLight.shadow.bias = -0.0005;
-    this.sunLight.shadow.normalBias = 0.02;
+
+    // ENHANCED SHADOW QUALITY
+    // Increased resolution for smoother shadow edges (2048 -> 4096 for small/medium maps)
+    this.sunLight.shadow.mapSize.width = 4096;
+    this.sunLight.shadow.mapSize.height = 4096;
+
+    // Optimized shadow camera bounds - wider coverage area for better shadow rendering
+    this.sunLight.shadow.camera.near = 5;  // Closer near plane for better precision
+    this.sunLight.shadow.camera.far = 400; // Extended far plane for larger shadow distance
+    this.sunLight.shadow.camera.left = -150;
+    this.sunLight.shadow.camera.right = 150;
+    this.sunLight.shadow.camera.top = 150;
+    this.sunLight.shadow.camera.bottom = -150;
+
+    // Optimized shadow bias values to reduce shadow acne while maintaining quality
+    this.sunLight.shadow.bias = -0.0003;    // Slightly reduced for better edge quality
+    this.sunLight.shadow.normalBias = 0.03; // Increased for better surface handling
+
+    // PCF shadow radius for even softer, more realistic shadows
+    this.sunLight.shadow.radius = 2.0;
+
     this.scene.add(this.sunLight);
 
     // Fill light (soft directional from opposite side) - simulates bounce light
@@ -336,32 +346,42 @@ export class Game {
         this.sunLight.castShadow = false;
         this.renderer.shadowMap.enabled = false;
       } else if (mapSize > 2000) {
-        // Large maps - reduced shadow quality, use faster shadow type
-        this.sunLight.shadow.mapSize.width = 1024;
-        this.sunLight.shadow.mapSize.height = 1024;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap; // Faster than soft
-        const shadowRange = Math.min(150, mapSize * 0.1);
+        // Large maps - reduced shadow quality but still smooth with PCFSoft
+        this.sunLight.shadow.mapSize.width = 2048;  // Maintain reasonable quality
+        this.sunLight.shadow.mapSize.height = 2048;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Keep soft shadows
+        this.sunLight.shadow.radius = 1.5; // Slightly reduced radius for performance
+
+        const shadowRange = Math.min(180, mapSize * 0.12);
         this.sunLight.shadow.camera.left = -shadowRange;
         this.sunLight.shadow.camera.right = shadowRange;
         this.sunLight.shadow.camera.top = shadowRange;
         this.sunLight.shadow.camera.bottom = -shadowRange;
-        this.sunLight.shadow.camera.near = 20;
-        this.sunLight.shadow.camera.far = Math.min(400, mapSize * 0.3);
+        this.sunLight.shadow.camera.near = 10;
+        this.sunLight.shadow.camera.far = Math.min(450, mapSize * 0.35);
+
+        // Adjust bias for larger areas
+        this.sunLight.shadow.bias = -0.0004;
+        this.sunLight.shadow.normalBias = 0.025;
+
         this.sunLight.shadow.camera.updateProjectionMatrix();
       } else if (mapSize > 500) {
-        // Medium maps - balanced quality
-        this.sunLight.shadow.mapSize.width = 1536;
-        this.sunLight.shadow.mapSize.height = 1536;
-        const shadowRange = Math.min(120, mapSize * 0.2);
+        // Medium maps - high quality with optimized coverage
+        this.sunLight.shadow.mapSize.width = 3072;  // Good balance of quality and performance
+        this.sunLight.shadow.mapSize.height = 3072;
+        this.sunLight.shadow.radius = 2.0; // Full soft shadow quality
+
+        const shadowRange = Math.min(160, mapSize * 0.25);
         this.sunLight.shadow.camera.left = -shadowRange;
         this.sunLight.shadow.camera.right = shadowRange;
         this.sunLight.shadow.camera.top = shadowRange;
         this.sunLight.shadow.camera.bottom = -shadowRange;
-        this.sunLight.shadow.camera.near = 15;
-        this.sunLight.shadow.camera.far = Math.min(300, mapSize * 0.4);
+        this.sunLight.shadow.camera.near = 8;
+        this.sunLight.shadow.camera.far = Math.min(420, mapSize * 0.45);
+
         this.sunLight.shadow.camera.updateProjectionMatrix();
       }
-      // Small maps (<= 500) keep default high-quality settings
+      // Small maps (<= 500) keep default high-quality settings (4096x4096, radius 2.0)
     }
   }
 
