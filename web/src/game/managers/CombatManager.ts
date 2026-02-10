@@ -132,7 +132,7 @@ export class CombatManager {
       // Create muzzle flash and sound
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-      this.game.audioManager.playSound('weapon_fire');
+      this.game.audioManager.playWeaponSound(weapon, attackerPos);
       VectorPool.release(forward);
       // Create minimap combat indicator
       this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
@@ -146,7 +146,7 @@ export class CombatManager {
     // Create muzzle flash and sound
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-    this.game.audioManager.playSound('weapon_fire');
+    this.game.audioManager.playWeaponSound(weapon, attackerPos);
     VectorPool.release(forward);
     // Create minimap combat indicator
     this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
@@ -295,7 +295,23 @@ export class CombatManager {
       // Create explosion effect and sound on impact
       const explosionSize = result.criticalHit ? 1.5 : 1;
       this.game.visualEffectsManager.createExplosion(proj.targetUnit.position, explosionSize);
-      this.game.audioManager.playSound('explosion');
+
+      // Play impact-specific sound based on penetration and target type
+      const targetCategory = proj.targetUnit.category;
+      const isInfantry = targetCategory === 'INF';
+
+      if (result.penetrated) {
+        // Penetrating hit - different sounds for infantry vs vehicles
+        if (isInfantry) {
+          this.game.audioManager.playImpactSound('infantry_hit', proj.targetUnit.position, 1.0);
+        } else {
+          // Vehicle penetration
+          this.game.audioManager.playImpactSound('penetration', proj.targetUnit.position, 1.0);
+        }
+      } else {
+        // Deflection/bounce - armor saved the unit
+        this.game.audioManager.playImpactSound('deflection', proj.targetUnit.position, 0.7);
+      }
     }
 
     // Apply suppression (always applies even on miss)

@@ -44,6 +44,9 @@ import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
 import { BenchmarkManager } from '../game/debug/BenchmarkManager';
 import { VectorPool } from '../game/utils/VectorPool';
+import { SoundLibrary } from '../game/audio/SoundLibrary';
+import { SpatialAudioManager } from '../game/audio/SpatialAudioManager';
+import { AUDIO_MANIFEST } from '../data/audioManifest';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -83,6 +86,9 @@ export class Game {
   public readonly damageNumberManager: DamageNumberManager;
   public readonly visualEffectsManager: VisualEffectsManager;
   public readonly audioManager: AudioManager;
+  public readonly soundLibrary: SoundLibrary;
+  public readonly audioListener: THREE.AudioListener;
+  public readonly spatialAudioManager: SpatialAudioManager;
   public readonly screenManager: ScreenManager;
   public mapRenderer: MapRenderer | null = null;
   public minimapRenderer: MinimapRenderer | null = null;
@@ -177,6 +183,10 @@ export class Game {
     this.camera.layers.enable(LAYERS.RENDER_ONLY);
     this.camera.layers.disable(LAYERS.RAYCAST_ONLY);
 
+    // Create AudioListener and attach to camera for spatial audio
+    this.audioListener = new THREE.AudioListener();
+    this.camera.add(this.audioListener);
+
     // Create ground plane (will be replaced by map terrain)
     const groundGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
     const groundMaterial = new THREE.MeshStandardMaterial({
@@ -210,6 +220,10 @@ export class Game {
     this.damageNumberManager = new DamageNumberManager(this);
     this.visualEffectsManager = new VisualEffectsManager(this);
     this.audioManager = new AudioManager();
+    this.soundLibrary = new SoundLibrary();
+    this.spatialAudioManager = new SpatialAudioManager(this.audioListener, this.soundLibrary, this.camera);
+    // Initialize audio manager with spatial audio capabilities
+    this.audioManager.initializeSpatialAudio(this.soundLibrary, this.spatialAudioManager);
     this.screenManager = new ScreenManager();
     // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);
@@ -358,6 +372,16 @@ export class Game {
   }
 
   async initialize(): Promise<void> {
+    // Preload audio files
+    console.log('[Game] Preloading audio files...');
+    const soundManifest: Record<string, string> = {};
+    for (const sound of AUDIO_MANIFEST) {
+      soundManifest[sound.id] = sound.filePath;
+    }
+    await this.soundLibrary.preloadSounds(soundManifest);
+    const cachedCount = this.soundLibrary.getCachedSoundCount();
+    console.log(`[Game] Audio preloading complete: ${cachedCount}/${AUDIO_MANIFEST.length} sounds loaded`);
+
     // Initialize all managers
     this.inputManager.initialize();
     this.selectionManager.initialize();
@@ -556,6 +580,9 @@ export class Game {
       t16 = performance.now();
 
       this.visualEffectsManager.update(dt);
+
+      // Update spatial audio manager for cleanup of finished sounds
+      this.spatialAudioManager.update();
     }
 
     const beforeScreen = performance.now();

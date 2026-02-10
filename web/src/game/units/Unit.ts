@@ -116,6 +116,12 @@ export class Unit {
   public combatTarget: Unit | null = null;
   public targetScanTimer: number = 0;
 
+  // Voice line throttling (per-unit)
+  private lastVoiceLineTime: number = 0;
+  private readonly VOICE_LINE_THROTTLE = 2.0; // Max 1 voice per 2 seconds per unit (for orders)
+  private lastCombatVoiceLineTime: number = 0;
+  private readonly COMBAT_VOICE_LINE_THROTTLE = 5.0; // Max 1 combat voice per 5 seconds per unit
+
   // UI elements (health bars, morale bars)
   private unitUI: UnitUI | null = null;
 
@@ -275,9 +281,31 @@ export class Unit {
       return;
     }
 
+    // Track morale before damage for threshold detection
+    const moraleBeforeDamage = this._morale;
+
     this._health = Math.max(0, this._health - amount);
     if (this._health <= 0) {
       this.onDeath();
+      return;
+    }
+
+    // Taking damage lowers morale slightly
+    const moraleDamage = amount * 0.5; // 50% of health damage affects morale
+    this._morale = Math.max(0, this._morale - moraleDamage);
+
+    // Play voice lines based on morale threshold crossings
+    if (moraleBeforeDamage >= 50 && this._morale < 50) {
+      // Crossed 50% morale threshold - play 'under_fire' voice line
+      this.playVoiceLineThrottled('under_fire');
+    } else if (moraleBeforeDamage >= 20 && this._morale < 20) {
+      // Crossed 20% morale threshold - play 'low_morale' voice line
+      this.playVoiceLineThrottled('low_morale');
+    }
+
+    // Check for routing due to low morale
+    if (this._morale <= 0 && !this._isRouting) {
+      this.onRout();
     }
   }
 
@@ -302,7 +330,24 @@ export class Unit {
   private onDeath(): void {
     // Create destruction effect and sound (if managers exist)
     this.game.visualEffectsManager?.createDestructionEffect(this.position);
-    this.game.audioManager?.playSound('unit_death');
+
+    // Play death sound based on unit category
+    if (this.unitData) {
+      const category = this.unitData.category;
+      // Vehicles (tanks, aircraft, etc.) explode with large explosion sound
+      const vehicleCategories: string[] = ['TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
+
+      if (vehicleCategories.includes(category)) {
+        // Large explosion for vehicles
+        this.game.audioManager?.playImpactSound('vehicle_explosion', this.position, 1.0);
+      } else {
+        // Softer death sound for infantry and logistics
+        this.game.audioManager?.playSound('unit_death');
+      }
+    } else {
+      // Fallback to generic death sound if no unit data
+      this.game.audioManager?.playSound('unit_death');
+    }
 
     // Cleanup
     this.game.unitManager?.destroyUnit(this);
@@ -314,14 +359,32 @@ export class Unit {
   }
 
   suppressMorale(amount: number): void {
+    // Track morale before suppression for threshold detection
+    const moraleBeforeSuppression = this._morale;
+
     this._morale = Math.max(0, this._morale - amount);
-    if (this._morale <= 0) {
+
+    // Play voice lines based on morale threshold crossings
+    if (moraleBeforeSuppression >= 50 && this._morale < 50) {
+      // Crossed 50% morale threshold - play 'under_fire' voice line
+      this.playVoiceLineThrottled('under_fire');
+    } else if (moraleBeforeSuppression >= 20 && this._morale < 20) {
+      // Crossed 20% morale threshold - play 'low_morale' voice line
+      this.playVoiceLineThrottled('low_morale');
+    }
+
+    // Check for routing
+    if (this._morale <= 0 && !this._isRouting) {
       this.onRout();
     }
   }
 
   private onRout(): void {
     this._isRouting = true;
+
+    // Play retreating voice line
+    this.playVoiceLineThrottled('retreating');
+
     // Clear commands and flee
     this.clearCommands();
     console.log(`${this.name} is routing!`);
@@ -701,6 +764,33 @@ export class Unit {
   }
 
   /**
+   * Play voice line with per-unit throttling
+   */
+  private playVoiceLineThrottled(voiceType: 'move_order' | 'attack_order' | 'under_fire' | 'low_morale' | 'retreating'): void {
+    const currentTime = performance.now() / 1000;
+
+    // Use different throttle times for command orders vs combat voice lines
+    const isCombatVoice = voiceType === 'under_fire' || voiceType === 'low_morale' || voiceType === 'retreating';
+
+    if (isCombatVoice) {
+      // Combat voice lines use 5-second throttle
+      if (currentTime - this.lastCombatVoiceLineTime < this.COMBAT_VOICE_LINE_THROTTLE) {
+        return; // Throttled - skip voice line
+      }
+      this.lastCombatVoiceLineTime = currentTime;
+    } else {
+      // Command voice lines use 2-second throttle
+      if (currentTime - this.lastVoiceLineTime < this.VOICE_LINE_THROTTLE) {
+        return; // Throttled - skip voice line
+      }
+      this.lastVoiceLineTime = currentTime;
+    }
+
+    // Play voice line via AudioManager
+    this.game.audioManager?.playVoiceLine(voiceType, this.position);
+  }
+
+  /**
    * Build full command queue for path visualization
    * Includes current command + all queued commands
    */
@@ -746,6 +836,9 @@ export class Unit {
   setMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Move, target: target.clone() };
+
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
@@ -811,6 +904,9 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Attack, targetUnit: target };
 
+    // Play attack acknowledgment voice line
+    this.playVoiceLineThrottled('attack_order');
+
     // Update path visualization with single command (not full queue - that's only for shift-queue)
     // For attack commands, we convert targetUnit to target position for visualization
     if (this.game.pathRenderer) {
@@ -836,6 +932,9 @@ export class Unit {
   setFastMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.FastMove, target: target.clone() };
+
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
@@ -898,6 +997,9 @@ export class Unit {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.Reverse, target: target.clone() };
 
+    // Play move acknowledgment voice line
+    this.playVoiceLineThrottled('move_order');
+
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
 
@@ -958,6 +1060,9 @@ export class Unit {
   setAttackMoveCommand(target: THREE.Vector3): void {
     this.commandQueue = [];
     this.currentCommand = { type: UnitCommand.AttackMove, target: target.clone() };
+
+    // Play attack acknowledgment voice line (attack-move is aggressive)
+    this.playVoiceLineThrottled('attack_order');
 
     // Use pathfinding to find route
     const path = this.game.pathfindingManager.findPath(this.position, target);
