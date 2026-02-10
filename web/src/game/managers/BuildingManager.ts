@@ -20,6 +20,10 @@ interface GarrisonedBuilding {
   occupants: Unit[];
   originalMaterial: THREE.Material;
   garrisonedMaterial: THREE.MeshBasicMaterial;
+  // Occupancy indicator
+  occupancyIndicator: THREE.Mesh | null;
+  occupancyCanvas: HTMLCanvasElement | null;
+  occupancyTexture: THREE.CanvasTexture | null;
 }
 
 export class BuildingManager {
@@ -52,13 +56,21 @@ export class BuildingManager {
           opacity: 0.6,
         });
 
-        this.garrisonedBuildings.set(building, {
+        const garrisonData: GarrisonedBuilding = {
           building,
           mesh,
           occupants: [],
           originalMaterial,
           garrisonedMaterial,
-        });
+          occupancyIndicator: null,
+          occupancyCanvas: null,
+          occupancyTexture: null,
+        };
+
+        // Create occupancy indicator for this building
+        this.createOccupancyIndicator(garrisonData);
+
+        this.garrisonedBuildings.set(building, garrisonData);
       }
 
 
@@ -115,6 +127,97 @@ export class BuildingManager {
     });
 
     return foundMesh;
+  }
+
+  /**
+   * Create occupancy indicator for a building
+   */
+  private createOccupancyIndicator(garrisonData: GarrisonedBuilding): void {
+    // Create canvas for text rendering
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    garrisonData.occupancyCanvas = canvas;
+
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    garrisonData.occupancyTexture = texture;
+
+    // Create sprite
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthTest: false,
+    });
+
+    const size = 2.0; // Slightly larger than unit UI for buildings
+    const geometry = new THREE.PlaneGeometry(size * 2, size);
+    const indicator = new THREE.Mesh(geometry, material);
+
+    // Position above building
+    const building = garrisonData.building;
+    indicator.position.set(building.x, building.height + 5.0, building.z);
+    indicator.renderOrder = 1005;
+    indicator.visible = false; // Hidden by default, shown when garrisoned
+
+    garrisonData.occupancyIndicator = indicator;
+    this.game.scene.add(indicator);
+  }
+
+  /**
+   * Update occupancy indicator text
+   */
+  private updateOccupancyText(garrisonData: GarrisonedBuilding): void {
+    if (!garrisonData.occupancyCanvas || !garrisonData.occupancyTexture) return;
+
+    const context = garrisonData.occupancyCanvas.getContext('2d');
+    if (!context) return;
+
+    const currentCount = garrisonData.occupants.length;
+    const maxCapacity = garrisonData.building.garrisonCapacity;
+
+    // Clear canvas
+    context.clearRect(0, 0, garrisonData.occupancyCanvas.width, garrisonData.occupancyCanvas.height);
+
+    // Background box
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(10, 10, 236, 108);
+
+    // Border (color based on occupancy status)
+    let borderColor = '#4a9eff'; // Default blue
+
+    // Determine team colors for border
+    let hasPlayer = false;
+    let hasEnemy = false;
+    for (const unit of garrisonData.occupants) {
+      if (unit.team === 'player') hasPlayer = true;
+      if (unit.team === 'enemy') hasEnemy = true;
+    }
+
+    if (hasPlayer && hasEnemy) {
+      borderColor = '#ff8800'; // Contested - orange
+    } else if (hasPlayer) {
+      borderColor = '#0088ff'; // Player - blue
+    } else if (hasEnemy) {
+      borderColor = '#ff0000'; // Enemy - red
+    }
+
+    context.strokeStyle = borderColor;
+    context.lineWidth = 3;
+    context.strokeRect(10, 10, 236, 108);
+
+    // Text
+    context.fillStyle = '#ffffff';
+    context.font = 'bold 48px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(`${currentCount}/${maxCapacity}`, 128, 64);
+
+    // Update texture
+    garrisonData.occupancyTexture.needsUpdate = true;
   }
 
   /**
@@ -269,6 +372,11 @@ export class BuildingManager {
     if (garrisonData.occupants.length === 0) {
       // Reset to original
       garrisonData.mesh.material = garrisonData.originalMaterial;
+
+      // Hide occupancy indicator
+      if (garrisonData.occupancyIndicator) {
+        garrisonData.occupancyIndicator.visible = false;
+      }
       return;
     }
 
@@ -296,6 +404,12 @@ export class BuildingManager {
 
     garrisonData.garrisonedMaterial.color.copy(color);
     garrisonData.mesh.material = garrisonData.garrisonedMaterial;
+
+    // Update and show occupancy indicator
+    if (garrisonData.occupancyIndicator) {
+      this.updateOccupancyText(garrisonData);
+      garrisonData.occupancyIndicator.visible = true;
+    }
   }
 
   /**
@@ -378,6 +492,19 @@ export class BuildingManager {
   }
 
   /**
+   * Update occupancy indicators (called each frame to make them billboard)
+   */
+  update(): void {
+    // Make occupancy indicators always face camera
+    for (const [_building, data] of this.garrisonedBuildings) {
+      if (data.occupancyIndicator && data.occupancyIndicator.visible) {
+        // Billboard effect - rotate to face camera
+        data.occupancyIndicator.quaternion.copy(this.game.camera.quaternion);
+      }
+    }
+  }
+
+  /**
    * Clear all garrisons (for map change, game end, etc.)
    */
   clear(): void {
@@ -388,6 +515,19 @@ export class BuildingManager {
       }
       data.occupants = [];
       data.mesh.material = data.originalMaterial;
+
+      // Clean up occupancy indicator resources
+      if (data.occupancyIndicator) {
+        this.game.scene.remove(data.occupancyIndicator);
+        data.occupancyIndicator.geometry.dispose();
+        (data.occupancyIndicator.material as THREE.Material).dispose();
+        data.occupancyIndicator = null;
+      }
+      if (data.occupancyTexture) {
+        data.occupancyTexture.dispose();
+        data.occupancyTexture = null;
+      }
+      data.occupancyCanvas = null;
     }
 
     this.garrisonedBuildings.clear();
