@@ -331,7 +331,9 @@ export class InputManager {
         break;
 
       case 'KeyE':
-        // Unload at position modifier
+        // Immediate unload command for selected transports
+        this.unloadSelectedTransports();
+        // Also set movement modifier for E+RightClick pattern
         this.state.movementModifiers.unload = true;
         break;
 
@@ -436,6 +438,18 @@ export class InputManager {
     const selectedUnits = this.game.selectionManager.getSelectedUnits();
     for (const unit of selectedUnits) {
       unit.setReturnFireOnly(!unit.returnFireOnly);
+    }
+  }
+
+  private unloadSelectedTransports(): void {
+    const selectedUnits = this.game.selectionManager.getSelectedUnits();
+    for (const unit of selectedUnits) {
+      if (this.game.transportManager.isTransport(unit)) {
+        const passengers = this.game.transportManager.getPassengers(unit);
+        if (passengers.length > 0) {
+          this.game.transportManager.unloadAll(unit);
+        }
+      }
     }
   }
 
