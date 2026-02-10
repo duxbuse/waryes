@@ -132,7 +132,7 @@ export class CombatManager {
       // Create muzzle flash and sound
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-      this.game.audioManager.playSound('weapon_fire');
+      this.game.audioManager.playWeaponSound(weapon, attackerPos);
       VectorPool.release(forward);
       // Create minimap combat indicator
       this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
@@ -146,7 +146,7 @@ export class CombatManager {
     // Create muzzle flash and sound
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-    this.game.audioManager.playSound('weapon_fire');
+    this.game.audioManager.playWeaponSound(weapon, attackerPos);
     VectorPool.release(forward);
     // Create minimap combat indicator
     this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
