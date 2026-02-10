@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three';
-import type { WeaponData, AudioCategory } from '../../data/types';
+import type { WeaponData, AudioCategory, ImpactSound } from '../../data/types';
 import type { SoundLibrary } from './SoundLibrary';
 import type { SpatialAudioManager } from './SpatialAudioManager';
 import { getSoundById } from '../../data/audioManifest';
@@ -53,6 +53,16 @@ export class AudioManager {
     ['artillery', 0.2],     // Artillery: 0.2s (5 sounds/sec max)
     ['missile', 0.15],      // Missiles: 0.15s (6.7 sounds/sec max)
     ['launcher', 0.15],     // Launchers: 0.15s (6.7 sounds/sec max)
+  ]);
+
+  // Per-impact-type throttling
+  private impactLastPlayTimes: Map<ImpactSound, number> = new Map();
+  private impactThrottleLimits: Map<ImpactSound, number> = new Map([
+    ['penetration', 0.05],         // Penetrations: 0.05s (20 sounds/sec max)
+    ['deflection', 0.05],          // Deflections: 0.05s (20 sounds/sec max)
+    ['infantry_hit', 0.03],        // Infantry hits: 0.03s (33 sounds/sec max)
+    ['vehicle_explosion', 0.15],   // Vehicle explosions: 0.15s (6.7 sounds/sec max)
+    ['building_hit', 0.1],         // Building hits: 0.1s (10 sounds/sec max)
   ]);
 
   constructor() {
@@ -222,6 +232,48 @@ export class AudioManager {
       launcher: 'launcher_fire',
     };
     return mapping[category];
+  }
+
+  /**
+   * Play an impact sound at a 3D position
+   * Different sounds for penetration, deflection, infantry hits, explosions, etc.
+   * @param impactType - Type of impact ('penetration', 'deflection', 'infantry_hit', 'vehicle_explosion', 'building_hit')
+   * @param position - 3D world position where the sound should play
+   * @param intensity - Impact intensity (0-1), affects volume
+   */
+  playImpactSound(impactType: ImpactSound, position: THREE.Vector3, intensity: number = 1.0): void {
+    if (!this.enabled || !this.spatialAudioManager || !this.soundLibrary) {
+      return;
+    }
+
+    // Check throttling for this impact type
+    if (this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const lastPlayTime = this.impactLastPlayTimes.get(impactType) ?? 0;
+      const throttleLimit = this.impactThrottleLimits.get(impactType) ?? 0.05;
+
+      if (now - lastPlayTime < throttleLimit) {
+        return; // Skip this sound, playing too frequently
+      }
+
+      this.impactLastPlayTimes.set(impactType, now);
+    }
+
+    // Get the sound configuration from the manifest
+    const soundEffect = getSoundById(impactType);
+    if (!soundEffect || !soundEffect.config) {
+      console.warn(`AudioManager: No sound configuration found for impact type "${impactType}"`);
+      return;
+    }
+
+    // Clone the config and adjust volume based on intensity
+    const config = {
+      ...soundEffect.config,
+      volume: soundEffect.config.volume * Math.max(0, Math.min(1, intensity)),
+    };
+
+    // Play the sound at the 3D position with spatial audio
+    this.spatialAudioManager.playSoundAt(impactType, position, config);
   }
 
   private playWeaponFire(now: number): void {
