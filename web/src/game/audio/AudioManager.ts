@@ -19,7 +19,10 @@ export type SoundEffect =
   | 'unit_death'
   | 'victory'
   | 'defeat'
-  | 'button_click';
+  | 'button_click'
+  | 'zone_capture'
+  | 'income_tick'
+  | 'zone_contested';
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -42,6 +45,9 @@ export class AudioManager {
     ['victory', 1.0],
     ['defeat', 1.0],
     ['button_click', 0.05],
+    ['zone_capture', 2.0],    // Max once per 2 seconds
+    ['income_tick', 4.0],     // Max once per 4 seconds (matches income frequency)
+    ['zone_contested', 2.0],  // Max once per 2 seconds
   ]);
 
   // Per-weapon-category throttling
@@ -150,6 +156,15 @@ export class AudioManager {
         break;
       case 'button_click':
         this.playButtonClick(now);
+        break;
+      case 'zone_capture':
+        this.playZoneCapture(now);
+        break;
+      case 'income_tick':
+        this.playIncomeTick(now);
+        break;
+      case 'zone_contested':
+        this.playZoneContested(now);
         break;
     }
   }
@@ -499,6 +514,87 @@ export class AudioManager {
 
     osc.start(now);
     osc.stop(now + 0.05);
+  }
+
+  /**
+   * Play zone capture sound: ascending major chord (C-E-G-C)
+   */
+  private playZoneCapture(now: number): void {
+    if (!this.audioContext) return;
+
+    // Ascending major chord: C, E, G, high C
+    const frequencies = [523, 659, 784, 1046]; // C5, E5, G5, C6
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.audioContext!.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.15);
+
+      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.12, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.6);
+
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.6);
+    });
+  }
+
+  /**
+   * Play income tick sound: bright 'ka-ching' two-tone beep
+   */
+  private playIncomeTick(now: number): void {
+    if (!this.audioContext) return;
+
+    // Two-tone ascending beep: 1200Hz -> 1600Hz
+    const frequencies = [1200, 1600];
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.audioContext!.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.08);
+
+      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.08, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.15);
+
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.15);
+    });
+  }
+
+  /**
+   * Play zone contested sound: alert tone with alternating frequencies
+   */
+  private playZoneContested(now: number): void {
+    if (!this.audioContext) return;
+
+    // Alternating alert tone: 900Hz <-> 1100Hz, 3 cycles (6 beeps total)
+    const frequencies = [900, 1100, 900, 1100, 900, 1100];
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.audioContext!.destination);
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now + i * 0.08);
+
+      gain.gain.setValueAtTime(this.masterVolume * this.sfxVolume * 0.1, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.3);
+
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.3);
+    });
   }
 
   /**
