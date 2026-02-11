@@ -275,6 +275,18 @@ export class TacticalIconRenderer {
    * Update icon positions and visibility - called every frame
    */
   update(): void {
+    // Check if we're in tactical view - show icons only in tactical view
+    const isTacticalView = this.game.cameraController?.isTacticalView ?? false;
+
+    // Early return if not in tactical view to save performance
+    if (!isTacticalView) {
+      // Hide all icons when not in tactical view
+      for (const iconData of this.unitIcons.values()) {
+        iconData.sprite.visible = false;
+      }
+      return;
+    }
+
     // Icons are automatically billboarded by THREE.Sprite
     // Update positions and scale based on distance from camera
 
@@ -282,7 +294,13 @@ export class TacticalIconRenderer {
 
     for (const [unitId, iconData] of this.unitIcons) {
       const unit = this.game.unitManager.getUnitById(unitId);
-      if (!unit || unit.health <= 0) continue;
+      if (!unit || unit.health <= 0) {
+        iconData.sprite.visible = false;
+        continue;
+      }
+
+      // Show icon in tactical view
+      iconData.sprite.visible = true;
 
       // Update position to match unit
       iconData.sprite.position.copy(unit.mesh.position);
