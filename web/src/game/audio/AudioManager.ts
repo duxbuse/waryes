@@ -19,7 +19,10 @@ export type SoundEffect =
   | 'unit_death'
   | 'victory'
   | 'defeat'
-  | 'button_click';
+  | 'button_click'
+  | 'zone_capture'
+  | 'income_tick'
+  | 'zone_contested';
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -42,6 +45,9 @@ export class AudioManager {
     ['victory', 1.0],
     ['defeat', 1.0],
     ['button_click', 0.05],
+    ['zone_capture', 2.0],    // Max once per 2 seconds
+    ['income_tick', 4.0],     // Max once per 4 seconds (matches income frequency)
+    ['zone_contested', 2.0],  // Max once per 2 seconds
   ]);
 
   // Per-weapon-category throttling
