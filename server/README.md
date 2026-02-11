@@ -26,6 +26,7 @@ The server will start on `ws://localhost:3001`
 - 30-second reconnection window
 - Host privileges (kick players, start game)
 - HTTP endpoint for lobby browsing: `http://localhost:3001/lobbies`
+- Rate limiting protection against message floods
 
 ## Environment Variables
 
@@ -56,6 +57,56 @@ The server will start on `ws://localhost:3001`
 - `error` - Error occurred
 - `player_disconnected` - Player disconnected
 - `player_reconnected` - Player reconnected
+- `rate_limit_exceeded` - Message rate limit exceeded
+
+### Rate Limiting
+
+The server implements per-connection rate limiting using a token bucket algorithm to protect against message floods and denial-of-service attacks.
+
+**Rate Limits by Message Type:**
+
+| Message Type | Limit | Time Window |
+|--------------|-------|-------------|
+| `game_command` | 60 messages | per minute |
+| `update_state`, `game_state_update` | 30 messages | per minute |
+| `create_lobby`, `join_lobby`, `leave_lobby` | 10 messages | per minute |
+| `kick_player`, `start_game` | 5 messages | per minute |
+| `reconnect` | unlimited | (not rate limited) |
+
+**Rate Limit Exceeded Response:**
+
+When a client exceeds the rate limit, the server responds with:
+
+```json
+{
+  "type": "rate_limit_exceeded",
+  "messageType": "game_command",
+  "retryAfter": 1000
+}
+```
+
+- `messageType`: The type of message that was rate limited
+- `retryAfter`: Milliseconds to wait before retrying (when next token available)
+
+**Implementation Details:**
+
+- Rate limits are enforced per WebSocket connection
+- Token bucket algorithm allows bursts while maintaining average rate
+- Rate limit state is automatically cleaned up when connection closes
+- Reconnection attempts are never rate limited to allow quick recovery
+
+**Adjusting Rate Limits:**
+
+To modify rate limits, edit the `RateLimiter` constructor calls in `server.ts`:
+
+```typescript
+// Example: Increase game command limit to 120 per minute
+this.rateLimitGameCommand = new RateLimiter(120, 60000);
+```
+
+Parameters: `new RateLimiter(capacity, windowMs)`
+- `capacity`: Maximum tokens (messages allowed per window)
+- `windowMs`: Time window in milliseconds
 
 ## Testing
 
