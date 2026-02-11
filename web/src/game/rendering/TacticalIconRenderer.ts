@@ -39,6 +39,12 @@ export class TacticalIconRenderer {
   private readonly ICON_SIZE = 3.0; // Base size in world units
   private readonly CANVAS_SIZE = 128; // Canvas texture size in pixels
 
+  // Scaling constants for zoom compensation
+  private readonly MIN_SCALE = 1.0;
+  private readonly MAX_SCALE = 4.0;
+  private readonly NEAR_DISTANCE = 20;
+  private readonly FAR_DISTANCE = 150;
+
   // Team colors
   private readonly TEAM_COLORS = {
     player: '#3B82F6', // Blue
@@ -270,7 +276,9 @@ export class TacticalIconRenderer {
    */
   update(): void {
     // Icons are automatically billboarded by THREE.Sprite
-    // Just need to update positions to match units
+    // Update positions and scale based on distance from camera
+
+    const camera = this.game.camera;
 
     for (const [unitId, iconData] of this.unitIcons) {
       const unit = this.game.unitManager.getUnitById(unitId);
@@ -279,6 +287,26 @@ export class TacticalIconRenderer {
       // Update position to match unit
       iconData.sprite.position.copy(unit.mesh.position);
       iconData.sprite.position.y += 2; // Keep above unit
+
+      // Calculate distance from camera
+      const distanceToCamera = iconData.sprite.position.distanceTo(camera.position);
+
+      // Scale inversely with distance for readability
+      // At NEAR_DISTANCE: scale = MIN_SCALE
+      // At FAR_DISTANCE: scale = MAX_SCALE
+      const t = THREE.MathUtils.clamp(
+        (distanceToCamera - this.NEAR_DISTANCE) / (this.FAR_DISTANCE - this.NEAR_DISTANCE),
+        0,
+        1
+      );
+      const scale = THREE.MathUtils.lerp(this.MIN_SCALE, this.MAX_SCALE, t);
+
+      // Apply scale (sprites are billboarded automatically, so no rotation needed)
+      iconData.sprite.scale.set(
+        this.ICON_SIZE * scale,
+        this.ICON_SIZE * scale,
+        1
+      );
     }
   }
 
