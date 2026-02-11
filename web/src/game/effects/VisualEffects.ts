@@ -13,6 +13,7 @@ interface Effect {
   mesh: THREE.Mesh | THREE.Sprite;
   timeAlive: number;
   duration: number;
+  pooledSprite?: PooledSprite; // Reference to pooled sprite for efficient release
 }
 
 export class VisualEffectsManager {
@@ -200,6 +201,7 @@ export class VisualEffectsManager {
       mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.1, // Very short duration (100ms)
+      pooledSprite, // Store reference for efficient pool release
     };
 
     this.effects.set(id, effect);
@@ -238,6 +240,7 @@ export class VisualEffectsManager {
       mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.3, // 300ms
+      pooledSprite, // Store reference for efficient pool release
     };
 
     this.effects.set(id, effect);
@@ -276,6 +279,7 @@ export class VisualEffectsManager {
       mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.5, // 500ms
+      pooledSprite, // Store reference for efficient pool release
     };
 
     this.effects.set(id, effect);
@@ -335,37 +339,28 @@ export class VisualEffectsManager {
   }
 
   /**
-   * Remove an effect
+   * Remove an effect and return sprite to pool
    */
   private removeEffect(id: string): void {
     const effect = this.effects.get(id);
     if (!effect) return;
 
-    // Check if this is a pooled sprite and return to pool
-    if (effect.mesh instanceof THREE.Sprite) {
-      // Determine which pool based on effect ID
+    // Check if this is a pooled sprite
+    if (effect.pooledSprite) {
+      // Return to appropriate pool based on effect type
       if (id.startsWith('muzzle_')) {
-        const pooledSprite = this.muzzleFlashPool.getAll().find((ps) => ps.sprite === effect.mesh);
-        if (pooledSprite) {
-          this.muzzleFlashPool.release(pooledSprite);
-        }
+        this.muzzleFlashPool.release(effect.pooledSprite);
       } else if (id.startsWith('explosion_')) {
-        const pooledSprite = this.explosionPool.getAll().find((ps) => ps.sprite === effect.mesh);
-        if (pooledSprite) {
-          this.explosionPool.release(pooledSprite);
-        }
+        this.explosionPool.release(effect.pooledSprite);
       } else if (id.startsWith('smoke_')) {
-        const pooledSprite = this.smokePuffPool.getAll().find((ps) => ps.sprite === effect.mesh);
-        if (pooledSprite) {
-          this.smokePuffPool.release(pooledSprite);
-        }
-      } else {
-        // Legacy non-pooled sprite - dispose normally
-        this.game.scene.remove(effect.mesh);
-        const material = effect.mesh.material as THREE.SpriteMaterial;
-        if (material.map) material.map.dispose();
-        material.dispose();
+        this.smokePuffPool.release(effect.pooledSprite);
       }
+    } else if (effect.mesh instanceof THREE.Sprite) {
+      // Legacy non-pooled sprite - dispose normally
+      this.game.scene.remove(effect.mesh);
+      const material = effect.mesh.material as THREE.SpriteMaterial;
+      if (material.map) material.map.dispose();
+      material.dispose();
     } else if (effect.mesh instanceof THREE.Mesh) {
       // Non-sprite effects (if any)
       this.game.scene.remove(effect.mesh);
