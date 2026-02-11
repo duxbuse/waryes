@@ -77,6 +77,7 @@ export class UnitManager {
     // Register with instanced renderer for GPU batching
     this.game.instancedUnitRenderer?.registerUnit(unit);
     this.game.batchedUIRenderer?.registerUnit(unit);
+    this.game.tacticalIconRenderer?.registerUnit(unit);
 
     // If game is already in battle phase, unfreeze immediately
     if (this.game.phase === GamePhase.Battle) {
@@ -135,6 +136,7 @@ export class UnitManager {
     // Unregister from instanced renderer
     this.game.instancedUnitRenderer?.unregisterUnit(unit);
     this.game.batchedUIRenderer?.unregisterUnit(unit);
+    this.game.tacticalIconRenderer?.unregisterUnit(unit);
 
     // Remove from scene
     this.game.scene.remove(unit.mesh);
