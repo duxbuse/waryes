@@ -155,6 +155,9 @@ export class InstancedUnitRenderer {
    * Update instance matrices - called every frame
    */
   update(): void {
+    // Check if in tactical view (hide 3D models when zoomed out)
+    const isTacticalView = this.game.cameraController?.isTacticalView ?? false;
+
     // Use reusable temp objects to avoid GC pressure
     const tempMatrix = this.tempMatrix;
     const tempPosition = this.tempPosition;
@@ -163,6 +166,17 @@ export class InstancedUnitRenderer {
 
     // Update each group
     for (const [_groupKey, group] of this.groups) {
+      // Set visibility based on tactical view
+      group.bodyMesh.visible = !isTacticalView;
+      group.wireframeMesh.visible = !isTacticalView;
+
+      // Skip matrix updates if not visible (performance optimization)
+      if (isTacticalView) {
+        group.bodyMesh.count = 0;
+        group.wireframeMesh.count = 0;
+        continue;
+      }
+
       let instanceIndex = 0;
 
       // Update matrices for all units in this group
