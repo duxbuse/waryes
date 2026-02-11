@@ -173,42 +173,31 @@ export class VisualEffectsManager {
   createMuzzleFlash(position: THREE.Vector3, direction: THREE.Vector3): void {
     const id = `muzzle_${this.nextId++}`;
 
-    // Create a simple bright sprite for muzzle flash
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const context = canvas.getContext('2d');
+    // Acquire pooled sprite
+    const pooledSprite = this.muzzleFlashPool.acquire();
 
-    if (!context) return;
+    if (!pooledSprite) {
+      console.warn('VisualEffects: Muzzle flash pool exhausted');
+      return;
+    }
 
-    // Create radial gradient (bright center, fading out)
-    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, 'rgba(255, 255, 200, 1)');
-    gradient.addColorStop(0.3, 'rgba(255, 200, 100, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+    // Set material blending mode for muzzle flash
+    if (pooledSprite.sprite.material instanceof THREE.SpriteMaterial) {
+      pooledSprite.sprite.material.blending = THREE.AdditiveBlending;
+    }
 
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 64, 64);
+    // Activate sprite with base position, duration, and scale
+    pooledSprite.activate(position, 0.1, 1.5);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    // Offset slightly forward in firing direction (avoid allocation)
+    pooledSprite.sprite.position.addScaledVector(direction, 2);
 
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    // Offset slightly forward in firing direction
-    sprite.position.add(direction.clone().multiplyScalar(2));
-    sprite.scale.set(1.5, 1.5, 1);
-    sprite.renderOrder = 1500;
-    this.game.scene.add(sprite);
+    // Set render order for proper layering
+    pooledSprite.sprite.renderOrder = 1500;
 
     const effect: Effect = {
       id,
-      mesh: sprite,
+      mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.1, // Very short duration (100ms)
     };
