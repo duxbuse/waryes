@@ -532,6 +532,23 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       cursor: not-allowed;
     }
 
+    .start-btn.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .button-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+
     .skirmish-footer {
       display: flex;
       gap: 15px;
@@ -1233,13 +1250,13 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   function updateStartButton(): void {
     const btn = element.querySelector('#skirmish-start-btn') as HTMLButtonElement;
     btn.disabled = !selectedDeck || isGeneratingMap;
-    // Show loading state on button if generating
+
     if (isGeneratingMap) {
-      btn.textContent = 'GENERATING MAP...';
-      btn.style.opacity = '0.7';
+      btn.classList.add('loading');
+      btn.innerHTML = '<span class="button-spinner"></span>GENERATING MAP...';
     } else {
-      btn.textContent = 'START BATTLE';
-      btn.style.opacity = '1';
+      btn.classList.remove('loading');
+      btn.innerHTML = 'START BATTLE';
     }
   }
 
