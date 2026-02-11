@@ -23,6 +23,86 @@ export class VisualEffectsManager {
   }
 
   /**
+   * Create reusable muzzle flash texture
+   * @note Will be used during pool initialization in subtask 1-3
+   */
+  private createMuzzleFlashTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to get 2D context for muzzle flash texture');
+    }
+
+    // Create radial gradient (bright center, fading out)
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255, 255, 200, 1)');
+    gradient.addColorStop(0.3, 'rgba(255, 200, 100, 0.8)');
+    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
+   * Create reusable explosion texture
+   * @note Will be used during pool initialization in subtask 1-3
+   */
+  private createExplosionTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to get 2D context for explosion texture');
+    }
+
+    // Create radial gradient for explosion
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 200, 0, 1)');
+    gradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.8)');
+    gradient.addColorStop(0.8, 'rgba(100, 50, 0, 0.4)');
+    gradient.addColorStop(1, 'rgba(50, 50, 50, 0)');
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
+   * Create reusable smoke puff texture
+   * @note Will be used during pool initialization in subtask 1-3
+   */
+  private createSmokePuffTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to get 2D context for smoke puff texture');
+    }
+
+    // Create radial gradient for smoke
+    const gradient = context.createRadialGradient(64, 64, 10, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(100, 100, 100, 0.8)');
+    gradient.addColorStop(0.5, 'rgba(80, 80, 80, 0.4)');
+    gradient.addColorStop(1, 'rgba(60, 60, 60, 0)');
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
    * Create a muzzle flash effect at a position
    */
   createMuzzleFlash(position: THREE.Vector3, direction: THREE.Vector3): void {
