@@ -102,6 +102,12 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
       transform: scale(0.98);
     }
 
+    #main-menu-screen .menu-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
     #main-menu-screen .menu-footer {
       margin-top: 60px;
       color: #444;
