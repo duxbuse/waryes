@@ -128,6 +128,33 @@ export class CombatManager {
       ? VectorPool.acquire().set(attacker.garrisonedBuilding.x, 0, attacker.garrisonedBuilding.z)
       : attacker.position;
 
+    // Detect garrisoned attacker
+    if (isGarrisoned) {
+      console.log(`[CombatManager] Garrisoned attacker detected: ${attacker.name} firing from building at (${attacker.garrisonedBuilding.x}, ${attacker.garrisonedBuilding.z})`);
+
+      // Check firing arc restriction (~180 degrees in front of building)
+      const buildingRotation = attacker.garrisonedBuilding.rotation ?? 0;
+
+      // Calculate angle from building to target
+      const directionToTarget = VectorPool.acquire();
+      directionToTarget.copy(target.position).sub(attackerPos).normalize();
+      const angleToTarget = Math.atan2(directionToTarget.x, directionToTarget.z);
+      VectorPool.release(directionToTarget);
+
+      // Calculate angle difference (normalize to -π to π range)
+      let angleDiff = angleToTarget - buildingRotation;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      // Check if target is outside firing arc (more than 90 degrees to either side)
+      const halfArc = Math.PI / 2; // 90 degrees
+      if (Math.abs(angleDiff) > halfArc) {
+        console.log(`[CombatManager] Target outside firing arc. Angle diff: ${(angleDiff * 180 / Math.PI).toFixed(1)}° (max: ±90°)`);
+        VectorPool.release(attackerPos);
+        return; // Cannot fire at targets behind the building
+      }
+    }
+
     const distance = attackerPos.distanceTo(target.position);
 
     // Out of range
@@ -159,7 +186,7 @@ export class CombatManager {
       // Create muzzle flash and sound
       const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
       this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-      this.game.audioManager.playSound('weapon_fire');
+      this.game.audioManager.playWeaponSound(weapon, attackerPos);
       VectorPool.release(forward);
       // Create minimap combat indicator
       this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
@@ -173,7 +200,7 @@ export class CombatManager {
     // Create muzzle flash and sound
     const forward = VectorPool.acquire().set(0, 0, 1).applyQuaternion(attacker.mesh.quaternion);
     this.game.visualEffectsManager.createMuzzleFlash(attacker.position, forward);
-    this.game.audioManager.playSound('weapon_fire');
+    this.game.audioManager.playWeaponSound(weapon, attackerPos);
     VectorPool.release(forward);
     // Create minimap combat indicator
     this.game.minimapRenderer?.createCombatIndicator(attackerPos, attacker.team);
@@ -329,7 +356,23 @@ export class CombatManager {
       // Create explosion effect and sound on impact
       const explosionSize = result.criticalHit ? 1.5 : 1;
       this.game.visualEffectsManager.createExplosion(proj.targetUnit.position, explosionSize);
-      this.game.audioManager.playSound('explosion');
+
+      // Play impact-specific sound based on penetration and target type
+      const targetCategory = proj.targetUnit.category;
+      const isInfantry = targetCategory === 'INF';
+
+      if (result.penetrated) {
+        // Penetrating hit - different sounds for infantry vs vehicles
+        if (isInfantry) {
+          this.game.audioManager.playImpactSound('infantry_hit', proj.targetUnit.position, 1.0);
+        } else {
+          // Vehicle penetration
+          this.game.audioManager.playImpactSound('penetration', proj.targetUnit.position, 1.0);
+        }
+      } else {
+        // Deflection/bounce - armor saved the unit
+        this.game.audioManager.playImpactSound('deflection', proj.targetUnit.position, 0.7);
+      }
     }
 
     // Apply suppression (always applies even on miss)
@@ -364,9 +407,16 @@ export class CombatManager {
     const criticalHit = gameRNG.nextBool(0.1);
     const damageMultiplier = criticalHit ? 2 : 1;
 
-    // Calculate final damage
+    // Calculate base damage after armor
     const armorReduction = Math.max(0, armor - proj.penetration * 0.5);
-    const damage = Math.max(1, proj.damage * damageMultiplier - armorReduction);
+    let damage = Math.max(1, proj.damage * damageMultiplier - armorReduction);
+
+    // Apply defense bonus from garrison
+    if (target.isGarrisoned && target.garrisonedBuilding) {
+      const defenseBonus = target.garrisonedBuilding.defenseBonus ?? 0.5;
+      const damageReduction = 1 - defenseBonus;
+      damage = Math.max(1, damage * damageReduction);
+    }
 
     return {
       damage,
@@ -398,7 +448,9 @@ export class CombatManager {
   private getTargetCover(target: Unit): number {
     // Check if target is in a building
     if (target.isGarrisoned && target.garrisonedBuilding) {
-      return target.garrisonedBuilding.stealthBonus ?? 0.5;
+      const stealthBonus = target.garrisonedBuilding.stealthBonus ?? 0.5;
+      console.log(`[CombatManager] Garrisoned target detected: ${target.name} in building with ${(stealthBonus * 100).toFixed(0)}% stealth bonus`);
+      return stealthBonus;
     }
 
     // Get terrain at target position
@@ -516,6 +568,7 @@ export class CombatManager {
 
     // If attacker is garrisoned, check from multiple points of the building
     if (from.isGarrisoned && from.garrisonedBuilding) {
+      console.log(`[CombatManager] Checking line of sight from garrisoned unit: ${from.name} in building at (${from.garrisonedBuilding.x}, ${from.garrisonedBuilding.z})`);
       const b = from.garrisonedBuilding;
       const points = [
         VectorPool.acquire().set(b.x, 2, b.z), // Center

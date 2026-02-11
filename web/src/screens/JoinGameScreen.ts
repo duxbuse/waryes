@@ -11,6 +11,7 @@
 import type { Game } from '../core/Game';
 import { ScreenType } from '../core/ScreenManager';
 import type { LobbyListItem } from '../game/managers/MultiplayerManager';
+import { showNotification } from '../core/UINotifications';
 
 export class JoinGameScreen {
   private readonly game: Game;
@@ -40,6 +41,22 @@ export class JoinGameScreen {
       align-items: center;
       z-index: 1000;
     `;
+
+    // Add focus-visible styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #join-game-screen button:focus-visible {
+        outline: 3px solid #4a90e2;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+      }
+      #join-game-screen input:focus-visible {
+        outline: 3px solid #4a90e2;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+      }
+    `;
+    container.appendChild(style);
 
     // Main panel
     const panel = document.createElement('div');
@@ -227,7 +244,7 @@ export class JoinGameScreen {
     const code = this.codeInput.value.trim().toUpperCase();
 
     if (code.length !== 9 || !code.match(/^[A-Z]{4}-[0-9]{4}$/)) {
-      alert('Invalid game code format. Use XXXX-NNNN (4 letters, 4 numbers)');
+      showNotification('Invalid game code format. Use XXXX-NNNN (4 letters, 4 numbers)');
       return;
     }
 
@@ -235,7 +252,7 @@ export class JoinGameScreen {
       await this.game.multiplayerManager.joinLobby(code);
       // On success, screen will change via callback
     } catch (error) {
-      alert(`Failed to join game: ${error}`);
+      showNotification(`Failed to join game: ${error}`);
     }
   }
 
@@ -249,7 +266,7 @@ export class JoinGameScreen {
         this.lobbyList.innerHTML = `
           <div style="
             text-align: center;
-            color: #888;
+            color: #bbb;
             padding: 40px 20px;
             font-size: 18px;
           ">
@@ -325,7 +342,7 @@ export class JoinGameScreen {
     details.textContent = `Host: ${lobby.host} • ${lobby.mapSize} • ${lobby.playerCount}/${lobby.maxPlayers} players`;
     details.style.cssText = `
       font-size: 14px;
-      color: #aaa;
+      color: #ccc;
     `;
 
     info.appendChild(code);
@@ -356,7 +373,7 @@ export class JoinGameScreen {
       try {
         await this.game.multiplayerManager.joinLobby(lobby.code);
       } catch (error) {
-        alert(`Failed to join: ${error}`);
+        showNotification(`Failed to join: ${error}`);
       }
     });
 

@@ -37,6 +37,7 @@ import { PathRenderer } from '../game/rendering/PathRenderer';
 import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
 import { BatchedUnitUIRenderer } from '../game/rendering/BatchedUnitUIRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
+import { FogOfWarRenderer } from '../game/rendering/FogOfWarRenderer';
 import { LAYERS } from '../game/utils/LayerConstants';
 import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell, EntryPoint } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
@@ -44,6 +45,10 @@ import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
 import { BenchmarkManager } from '../game/debug/BenchmarkManager';
 import { VectorPool } from '../game/utils/VectorPool';
+import { SoundLibrary } from '../game/audio/SoundLibrary';
+import { SpatialAudioManager } from '../game/audio/SpatialAudioManager';
+import { AUDIO_MANIFEST } from '../data/audioManifest';
+import { showConfirmDialog } from './UINotifications';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -83,6 +88,9 @@ export class Game {
   public readonly damageNumberManager: DamageNumberManager;
   public readonly visualEffectsManager: VisualEffectsManager;
   public readonly audioManager: AudioManager;
+  public readonly soundLibrary: SoundLibrary;
+  public readonly audioListener: THREE.AudioListener;
+  public readonly spatialAudioManager: SpatialAudioManager;
   public readonly screenManager: ScreenManager;
   public mapRenderer: MapRenderer | null = null;
   public minimapRenderer: MinimapRenderer | null = null;
@@ -90,6 +98,7 @@ export class Game {
   public instancedUnitRenderer: InstancedUnitRenderer | null = null;
   public batchedUIRenderer: BatchedUnitUIRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
+  public fogOfWarRenderer: FogOfWarRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
 
   // Game state
@@ -177,6 +186,10 @@ export class Game {
     this.camera.layers.enable(LAYERS.RENDER_ONLY);
     this.camera.layers.disable(LAYERS.RAYCAST_ONLY);
 
+    // Create AudioListener and attach to camera for spatial audio
+    this.audioListener = new THREE.AudioListener();
+    this.camera.add(this.audioListener);
+
     // Create ground plane (will be replaced by map terrain)
     const groundGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
     const groundMaterial = new THREE.MeshStandardMaterial({
@@ -210,6 +223,10 @@ export class Game {
     this.damageNumberManager = new DamageNumberManager(this);
     this.visualEffectsManager = new VisualEffectsManager(this);
     this.audioManager = new AudioManager();
+    this.soundLibrary = new SoundLibrary();
+    this.spatialAudioManager = new SpatialAudioManager(this.audioListener, this.soundLibrary, this.camera);
+    // Initialize audio manager with spatial audio capabilities
+    this.audioManager.initializeSpatialAudio(this.soundLibrary, this.spatialAudioManager);
     this.screenManager = new ScreenManager();
     // MapRenderer will be created when starting a battle (needs biome parameter)
     this.minimapRenderer = new MinimapRenderer(this);
@@ -392,6 +409,16 @@ export class Game {
   }
 
   async initialize(): Promise<void> {
+    // Preload audio files
+    console.log('[Game] Preloading audio files...');
+    const soundManifest: Record<string, string> = {};
+    for (const sound of AUDIO_MANIFEST) {
+      soundManifest[sound.id] = sound.filePath;
+    }
+    await this.soundLibrary.preloadSounds(soundManifest);
+    const cachedCount = this.soundLibrary.getCachedSoundCount();
+    console.log(`[Game] Audio preloading complete: ${cachedCount}/${AUDIO_MANIFEST.length} sounds loaded`);
+
     // Initialize all managers
     this.inputManager.initialize();
     this.selectionManager.initialize();
@@ -540,6 +567,8 @@ export class Game {
       this.mapRenderer?.update(dt); // Animate capture zone borders, etc.
       t5 = performance.now();
 
+      this.buildingManager.update(); // Update building occupancy indicators (billboard effect)
+
       this.pathRenderer?.update(dt); // Update path lines as units move
       this.instancedUnitRenderer?.update(); // Update instanced unit rendering
       this.batchedUIRenderer?.update(); // Update batched UI rendering (health/morale bars)
@@ -577,6 +606,9 @@ export class Game {
       this.fogOfWarManager.update(dt);
       t12 = performance.now();
 
+      // Update fog of war renderer (visual overlay)
+      this.fogOfWarRenderer?.update(dt);
+
       this.multiplayerBattleSync.update(dt);
       t13 = performance.now();
 
@@ -590,6 +622,9 @@ export class Game {
       t16 = performance.now();
 
       this.visualEffectsManager.update(dt);
+
+      // Update spatial audio manager for cleanup of finished sounds
+      this.spatialAudioManager.update();
     }
 
     const beforeScreen = performance.now();
@@ -1153,6 +1188,12 @@ export class Game {
     // Initialize fog of war
     this.fogOfWarManager.initialize();
 
+    // Initialize fog of war renderer
+    if (!this.fogOfWarRenderer) {
+      this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+    }
+    this.fogOfWarRenderer.initialize();
+
     // Initialize pathfinding
     this.pathfindingManager.initialize();
 
@@ -1498,6 +1539,12 @@ export class Game {
       this.mapRenderer.clear();
     }
 
+    // Clean up fog of war renderer
+    if (this.fogOfWarRenderer) {
+      this.fogOfWarRenderer.dispose();
+      this.fogOfWarRenderer = null;
+    }
+
     this.currentMap = null;
     this.groundPlane.visible = true;
 
@@ -1584,8 +1631,9 @@ export class Game {
     }
 
     if (surrenderBtn) {
-      surrenderBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to surrender?')) {
+      surrenderBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog('Are you sure you want to surrender?');
+        if (confirmed) {
           this.togglePause(); // Unpause first
           this.onVictory('enemy'); // Trigger defeat
         }
@@ -1593,8 +1641,9 @@ export class Game {
     }
 
     if (quitBtn) {
-      quitBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to quit to main menu?')) {
+      quitBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog('Are you sure you want to quit to main menu?');
+        if (confirmed) {
           this._isPaused = false; // Reset pause state
           this.returnToMainMenu();
         }

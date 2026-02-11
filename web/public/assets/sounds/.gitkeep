@@ -1,0 +1,11 @@
+# Sound Assets Directory
+
+This directory contains audio files for the combat sound system:
+
+- `weapons/` - Weapon fire sounds (rifle, machinegun, cannon, missile, artillery, launcher)
+- `impacts/` - Impact sounds (penetration, deflection, infantry_hit, vehicle_explosion, building_hit)
+- `voices/` - Unit voice lines (move_order, attack_order, under_fire, low_morale, retreating)
+- `ambient/` - Ambient sounds (battle_ambient, off_screen_combat, environmental)
+
+Audio files are referenced in `src/data/audioManifest.ts`.
+Initially using placeholder paths - actual audio files to be added in later phases.

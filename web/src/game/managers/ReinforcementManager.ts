@@ -111,10 +111,15 @@ export class ReinforcementManager {
       btn.innerHTML = `
         <div style="display: flex; justify-content: space-between;">
           <span>${typeName} Entry</span>
-          <span style="color: ${queueCount > 0 ? '#ffd700' : '#666'};">Queue: ${queueCount}</span>
+          <span class="queue-count" style="color: ${queueCount > 0 ? '#ffd700' : '#666'};">Queue: ${queueCount}</span>
         </div>
-        <div style="font-size: 10px; color: #888; margin-top: 2px;">
-          Spawn rate: ${ep.spawnRate}s
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+          <div style="font-size: 10px; color: #888;">
+            Spawn rate: ${ep.spawnRate}s
+          </div>
+          <div class="spawn-timer" style="font-size: 10px; font-weight: bold; color: #4a9eff;">
+            Ready
+          </div>
         </div>
       `;
 
@@ -231,16 +236,27 @@ export class ReinforcementManager {
       moveType = 'fast';
     }
 
-    // Add to queue with command
-    const reinforcement: QueuedReinforcement = {
-      unitType: this.pendingUnitType,
-      destination: { x: worldPos.x, z: worldPos.z },
-      moveType,
-    };
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        this.selectedEntryPoint.id,
+        this.pendingUnitType,
+        worldPos.x,
+        worldPos.z,
+        moveType
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType: this.pendingUnitType,
+        destination: { x: worldPos.x, z: worldPos.z },
+        moveType,
+      };
 
-    this.selectedEntryPoint.queue.push(reinforcement);
-
-    console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+      this.selectedEntryPoint.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+    }
 
     // Clear waiting state
     this.pendingUnitType = null;
@@ -309,14 +325,27 @@ export class ReinforcementManager {
       return false;
     }
 
-    const reinforcement: QueuedReinforcement = {
-      unitType,
-      destination,
-      moveType,
-    };
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        resupplyPointId,
+        unitType,
+        destination?.x,
+        destination?.z,
+        moveType
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType,
+        destination,
+        moveType,
+      };
 
-    ep.queue.push(reinforcement);
-    console.log(`[REINFORCE] Queued ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+      ep.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${unitType} at ${resupplyPointId} with ${moveType} move to (${destination?.x.toFixed(0)}, ${destination?.z.toFixed(0)})`);
+    }
 
     this.updateUI();
     return true;
@@ -400,15 +429,44 @@ export class ReinforcementManager {
    * Update reinforcement UI
    */
   private updateUI(): void {
-    // Update queue counts on buttons
+    // Update queue counts and spawn timers on buttons
     this.entryPointButtons.forEach((btn, id) => {
       const ep = this.entryPoints.find(e => e.id === id);
       if (ep) {
+        // Update queue count
         const queueCount = ep.queue.length;
-        const spans = btn.querySelectorAll('span');
-        if (spans.length >= 2) {
-          spans[1]!.textContent = `Queue: ${queueCount}`;
-          spans[1]!.style.color = queueCount > 0 ? '#ffd700' : '#666';
+        const queueSpan = btn.querySelector('.queue-count');
+        if (queueSpan) {
+          queueSpan.textContent = `Queue: ${queueCount}`;
+          (queueSpan as HTMLElement).style.color = queueCount > 0 ? '#ffd700' : '#666';
+        }
+
+        // Update spawn timer display
+        const timerSpan = btn.querySelector('.spawn-timer');
+        if (timerSpan) {
+          const currentTimer = this.spawnTimers.get(ep.id) || 0;
+
+          if (queueCount === 0) {
+            // No queue, show "Ready"
+            timerSpan.textContent = 'Ready';
+            (timerSpan as HTMLElement).style.color = '#4a9eff';
+          } else if (currentTimer <= 0) {
+            // Timer expired, ready to spawn
+            timerSpan.textContent = 'Spawning...';
+            (timerSpan as HTMLElement).style.color = '#00ff00';
+          } else {
+            // Show countdown
+            const seconds = Math.ceil(currentTimer);
+            timerSpan.textContent = `${seconds}s`;
+            // Color based on remaining time
+            if (currentTimer < 2) {
+              (timerSpan as HTMLElement).style.color = '#00ff88'; // Cyan - almost ready
+            } else if (currentTimer < 5) {
+              (timerSpan as HTMLElement).style.color = '#ffd700'; // Gold - soon
+            } else {
+              (timerSpan as HTMLElement).style.color = '#ff8800'; // Orange - waiting
+            }
+          }
         }
       }
     });
@@ -423,6 +481,8 @@ export class ReinforcementManager {
     if (totalQueued > 0) {
       console.log(`[REINFORCE] Update called, dt=${dt.toFixed(3)}, total queued: ${totalQueued}`);
     }
+
+    let timersChanged = false;
 
     for (const ep of this.entryPoints) {
       // Skip if queue is empty
@@ -441,9 +501,16 @@ export class ReinforcementManager {
 
         // Reset timer
         this.spawnTimers.set(ep.id, ep.spawnRate);
+        timersChanged = true;
       } else {
         this.spawnTimers.set(ep.id, newTimer);
+        timersChanged = true;
       }
+    }
+
+    // Update UI if panel is visible and timers changed
+    if (timersChanged && this.reinforcementPanel && this.reinforcementPanel.style.display !== 'none') {
+      this.updateUI();
     }
   }
 
@@ -462,6 +529,9 @@ export class ReinforcementManager {
       team: 'player',
       unitType: reinforcement.unitType,
     });
+
+    // Create spawn effect
+    this.createSpawnEffect(spawnPos);
 
     console.log(`Spawned ${reinforcement.unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) - vulnerable immediately`);
 
@@ -505,6 +575,74 @@ export class ReinforcementManager {
     }
 
     this.updateUI();
+  }
+
+  /**
+   * Create a spawn effect at a position
+   * Shows a bright blue flash when units spawn from entry points
+   */
+  private createSpawnEffect(position: THREE.Vector3): void {
+    // Create spawn flash sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) return;
+
+    // Create radial gradient for spawn flash (blue/cyan colors)
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');      // Bright white center
+    gradient.addColorStop(0.2, 'rgba(100, 200, 255, 1)');    // Bright cyan
+    gradient.addColorStop(0.5, 'rgba(74, 158, 255, 0.8)');   // Blue
+    gradient.addColorStop(0.8, 'rgba(50, 100, 200, 0.4)');   // Dark blue
+    gradient.addColorStop(1, 'rgba(30, 80, 150, 0)');        // Fade to transparent
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.position.y = this.game.getElevationAt(position.x, position.z) + 1; // Slightly above ground
+    sprite.scale.set(3, 3, 1); // Larger spawn effect
+    sprite.renderOrder = 1500;
+    this.game.scene.add(sprite);
+
+    // Animate and remove the effect
+    const duration = 0.4; // 400ms
+    let timeAlive = 0;
+
+    const animateEffect = (dt: number) => {
+      timeAlive += dt;
+      const progress = timeAlive / duration;
+
+      if (progress >= 1) {
+        // Remove effect
+        this.game.scene.remove(sprite);
+        sprite.geometry.dispose();
+        material.dispose();
+        texture.dispose();
+      } else {
+        // Fade out and scale up
+        material.opacity = 1 - progress;
+        const scale = 3 + progress * 2; // Expand from 3 to 5
+        sprite.scale.set(scale, scale, 1);
+
+        // Continue animation next frame
+        requestAnimationFrame(() => animateEffect(1 / 60));
+      }
+    };
+
+    // Start animation
+    requestAnimationFrame(() => animateEffect(1 / 60));
   }
 
   /**
@@ -564,14 +702,29 @@ export class ReinforcementManager {
       return false;
     }
 
-    // Add to queue with no destination (will use rally point if set)
-    const reinforcement: QueuedReinforcement = {
-      unitType,
-      destination: null,
-      moveType: null,
-    };
-    bestEntry.queue.push(reinforcement);
-    console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      // Use rally point destination if set
+      const rallyX = bestEntry.rallyPoint?.x;
+      const rallyZ = bestEntry.rallyPoint?.z;
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        bestEntry.id,
+        unitType,
+        rallyX,
+        rallyZ,
+        null
+      );
+      console.log(`[REINFORCE] Sent MP command to queue ${unitType} at ${bestEntry.type} entry (auto-selected)`);
+    } else {
+      // Local mode: add to queue directly
+      const reinforcement: QueuedReinforcement = {
+        unitType,
+        destination: null,
+        moveType: null,
+      };
+      bestEntry.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${unitType} at ${bestEntry.type} entry (auto-selected), queue length now: ${bestEntry.queue.length}`);
+    }
 
     this.updateUI();
     return true;
@@ -586,5 +739,42 @@ export class ReinforcementManager {
       ep.rallyPoint = { x, z };
       console.log(`Set rally point for ${ep.type} entry to (${x.toFixed(0)}, ${z.toFixed(0)})`);
     }
+  }
+
+  /**
+   * Process received reinforcement command (for multiplayer sync)
+   * Called by MultiplayerBattleSync when receiving QueueReinforcement commands
+   */
+  processReinforcementCommand(
+    entryPointId: string,
+    unitType: string,
+    targetX?: number,
+    targetZ?: number,
+    moveType?: string
+  ): void {
+    const ep = this.entryPoints.find(e => e.id === entryPointId);
+    if (!ep) {
+      console.warn(`[REINFORCE] Entry point ${entryPointId} not found for command`);
+      return;
+    }
+
+    const destination = targetX !== undefined && targetZ !== undefined
+      ? { x: targetX, z: targetZ }
+      : null;
+
+    const typedMoveType = (moveType === 'attack' || moveType === 'reverse' || moveType === 'fast' || moveType === 'normal')
+      ? moveType
+      : null;
+
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination,
+      moveType: typedMoveType,
+    };
+
+    ep.queue.push(reinforcement);
+    console.log(`[REINFORCE] Processed MP command: queued ${unitType} at ${entryPointId} with ${moveType} move`);
+
+    this.updateUI();
   }
 }

@@ -409,11 +409,26 @@ export class FogOfWarManager {
 
   /**
    * Update vision around a unit
+   *
+   * Elevation Bonus System:
+   * - Units at higher elevation see farther than units at lower elevation
+   * - Bonus formula: bonusRange = (unitElevation - targetElevation) * ELEVATION_MULTIPLIER
+   * - ELEVATION_MULTIPLIER = 2.0 means 2m extra range per 1m elevation advantage
+   * - No penalty for being lower (clamped to 0)
+   * - Maximum bonus capped at +50% of base vision range
    */
   private updateVisionForUnit(unit: Unit): void {
-    const visionRadius = this.getVisionRadius(unit);
+    const baseVisionRadius = this.getVisionRadius(unit);
     const unitPos = unit.position;
     const team = unit.team;
+
+    // Elevation bonus constants
+    const ELEVATION_MULTIPLIER = 2.0; // 2m extra range per 1m elevation advantage
+    const MAX_BONUS_PERCENT = 0.5; // Cap at +50% of base range
+    const maxElevationBonus = baseVisionRadius * MAX_BONUS_PERCENT;
+
+    // Calculate unit elevation once (performance optimization)
+    const unitElevation = this.getTerrainHeight(unitPos.x, unitPos.z);
 
     // Ensure team map exists
     if (!this.currentVision.has(team)) {
@@ -428,22 +443,37 @@ export class FogOfWarManager {
       this.unitVisionCells.set(unit.id, unitCells);
     }
 
-    // Mark cells within vision radius as visible
-    const cellRadius = Math.ceil(visionRadius / this.cellSize);
+    // Calculate maximum possible vision radius (base + max bonus) for loop bounds
+    const maxVisionRadius = baseVisionRadius + maxElevationBonus;
+    const cellRadius = Math.ceil(maxVisionRadius / this.cellSize);
 
     for (let dx = -cellRadius; dx <= cellRadius; dx++) {
       for (let dz = -cellRadius; dz <= cellRadius; dz++) {
         const worldX = unitPos.x + dx * this.cellSize;
         const worldZ = unitPos.z + dz * this.cellSize;
 
-        // Check if within circle
+        // Calculate target elevation for elevation bonus
+        const targetElevation = this.getTerrainHeight(worldX, worldZ);
+
+        // Calculate elevation advantage (high ground bonus)
+        // Only positive values (no penalty for being lower)
+        const elevationDifference = unitElevation - targetElevation;
+        const elevationBonus = Math.max(0, elevationDifference * ELEVATION_MULTIPLIER);
+
+        // Cap elevation bonus at maximum
+        const cappedBonus = Math.min(elevationBonus, maxElevationBonus);
+
+        // Effective vision radius for this cell includes elevation bonus
+        const effectiveVisionRadius = baseVisionRadius + cappedBonus;
+
+        // Check if within effective vision circle
         const distSq = (worldX - unitPos.x) ** 2 + (worldZ - unitPos.z) ** 2;
-        if (distSq <= visionRadius ** 2) {
+        if (distSq <= effectiveVisionRadius ** 2) {
+          const dist = Math.sqrt(distSq);
           const key = this.getCellKey(worldX, worldZ);
 
           // OPTIMIZATION: Skip expensive LOS check for cells very close to unit
           // Cells within 60m are almost always visible (most combat happens <100m)
-          const dist = Math.sqrt(distSq);
           if (dist < 60) {
             // Close cells are automatically visible (no LOS check needed)
             teamVision.set(key, true);
@@ -459,7 +489,7 @@ export class FogOfWarManager {
             startPos.y += 2;
 
             const targetPos = VectorPool.acquire();
-            targetPos.set(worldX, this.getTerrainHeight(worldX, worldZ) + 2, worldZ);
+            targetPos.set(worldX, targetElevation + 2, worldZ);
 
             const blocked = this.isLOSBlocked(startPos, targetPos);
 

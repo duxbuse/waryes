@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { GameMap, Building, Road, RoadType, CaptureZone, DeploymentZone, ResupplyPoint, Bridge, Intersection, WaterBody, BiomeType, ObjectiveType } from '../../data/types';
+import type { GameMap, Building, Road, RoadType, CaptureZone, DeploymentZone, ResupplyPoint, EntryPoint, Bridge, Intersection, WaterBody, BiomeType, ObjectiveType } from '../../data/types';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 import { ZoneFillRenderer, type FillEntry } from './ZoneFillRenderer';
 
@@ -402,6 +402,9 @@ export class MapRenderer {
 
     // Render resupply points
     this.renderResupplyPoints(map.resupplyPoints, map);
+
+    // Render entry points for reinforcements
+    this.renderEntryPoints(map.entryPoints, map);
 
     // Add trees to forests
     this.renderForestTrees(map);
@@ -4097,6 +4100,108 @@ export class MapRenderer {
     }
 
     this.mapGroup.add(resupplyGroup);
+  }
+
+  private renderEntryPoints(entryPoints: EntryPoint[], map: GameMap): void {
+    const entryGroup = new THREE.Group();
+    entryGroup.name = 'entry-points';
+
+    // Helper to get elevation at world position
+    const rows = map.terrain.length;
+    const cols = map.terrain[0]?.length ?? 0;
+    const cellSizeX = map.width / cols;
+    const cellSizeZ = map.height / rows;
+
+    const getElevationAt = (worldX: number, worldZ: number): number => {
+      const gx = (worldX + map.width / 2) / cellSizeX;
+      const gz = (worldZ + map.height / 2) / cellSizeZ;
+      const x0 = Math.floor(gx);
+      const z0 = Math.floor(gz);
+      const cx0 = Math.max(0, Math.min(cols - 1, x0));
+      const cx1 = Math.max(0, Math.min(cols - 1, x0 + 1));
+      const cz0 = Math.max(0, Math.min(rows - 1, z0));
+      const cz1 = Math.max(0, Math.min(rows - 1, z0 + 1));
+      const e00 = map.terrain[cz0]?.[cx0]?.elevation ?? 0;
+      const e10 = map.terrain[cz0]?.[cx1]?.elevation ?? 0;
+      const e01 = map.terrain[cz1]?.[cx0]?.elevation ?? 0;
+      const e11 = map.terrain[cz1]?.[cx1]?.elevation ?? 0;
+      const fx = gx - x0;
+      const fz = gz - z0;
+      const e0 = e00 + (e10 - e00) * fx;
+      const e1 = e01 + (e11 - e01) * fx;
+      return e0 + (e1 - e0) * fz;
+    };
+
+    const heightOffset = 0.6; // Height above terrain
+
+    for (const entry of entryPoints) {
+      const group = new THREE.Group();
+      group.name = `entry-point-${entry.id}`;
+
+      const teamColor = entry.team === 'player' ? 0x4a9eff : 0xff4a4a;
+
+      // Different sizes based on entry point type
+      const radiusMap = {
+        'highway': 8,
+        'secondary': 6,
+        'dirt': 4,
+        'air': 10
+      };
+      const radius = radiusMap[entry.type] || 6;
+
+      // Main circle marker
+      const circleGeometry = new THREE.CircleGeometry(radius, 32);
+      circleGeometry.rotateX(-Math.PI / 2);
+      const circleMaterial = new THREE.MeshBasicMaterial({
+        color: teamColor,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const circleMesh = new THREE.Mesh(circleGeometry, circleMaterial);
+      const circleHeight = getElevationAt(entry.x, entry.z) + heightOffset;
+      circleMesh.position.set(entry.x, circleHeight, entry.z);
+      circleMesh.renderOrder = 98;
+      group.add(circleMesh);
+
+      // Inner circle for depth effect
+      const innerCircleGeometry = new THREE.CircleGeometry(radius * 0.6, 32);
+      innerCircleGeometry.rotateX(-Math.PI / 2);
+      const innerCircleMaterial = new THREE.MeshBasicMaterial({
+        color: teamColor,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const innerCircleMesh = new THREE.Mesh(innerCircleGeometry, innerCircleMaterial);
+      innerCircleMesh.position.set(entry.x, circleHeight + 0.05, entry.z);
+      innerCircleMesh.renderOrder = 99;
+      group.add(innerCircleMesh);
+
+      // Border circle outline
+      const borderGeometry = new THREE.RingGeometry(radius * 0.95, radius, 32);
+      borderGeometry.rotateX(-Math.PI / 2);
+      const borderMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+      borderMesh.position.set(entry.x, circleHeight + 0.1, entry.z);
+      borderMesh.renderOrder = 100;
+      group.add(borderMesh);
+
+      entryGroup.add(group);
+    }
+
+    this.mapGroup.add(entryGroup);
   }
 
   private renderForestTrees(map: GameMap): void {

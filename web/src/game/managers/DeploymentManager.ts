@@ -437,14 +437,10 @@ export class DeploymentManager {
 
       const success = this.game.reinforcementManager.queueUnit(du.unitData.id);
       if (success) {
-        // Deduct credits
-        this.credits -= du.unitData.cost;
-
-        // Track deployment
-        du.deployedCount++;
-        this.renderUI();
-
-        console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
+        // Note: Credits and deployment count are NOT deducted here
+        // They will be deducted when the destination is clicked and the unit is actually queued
+        // (in handleReinforcementDestinationClick)
+        console.log(`Waiting for destination for ${du.unitData.name} reinforcement`);
       }
       return;
     }
@@ -866,16 +862,6 @@ export class DeploymentManager {
     // Battle phase: Enter waiting mode for destination click
     this.waitingForReinforcementDestination = true;
     this.pendingReinforcementUnitIndex = duIndex;
-
-      // Track deployment
-      du.deployedCount++;
-
-      // Re-render both the battle unit bar and update credits display
-      this.renderBattleUnitBar();
-      this.updateCreditsDisplay();
-
-      console.log(`Queued ${du.unitData.name} for reinforcement (${du.unitData.cost} credits)`);
-    }
   }
 
   /**
@@ -958,24 +944,33 @@ export class DeploymentManager {
       moveType = 'fast';
     }
 
-    // Queue at the closest resupply point
-    const success = this.game.reinforcementManager.queueUnitAtResupplyPoint(
-      closestResupplyPoint.id,
-      du.unitData.id,
-      { x: worldPos.x, z: worldPos.z },
-      moveType
-    );
+    // Send multiplayer command if in command sync mode
+    if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
+      // MP mode: send command, don't update local state (will be updated when command is processed)
+      this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
+        closestResupplyPoint.id,
+        du.unitData.id,
+        worldPos.x,
+        worldPos.z,
+        moveType
+      );
+      console.log(`[DEPLOY] Sent MP command to queue ${du.unitData.name} at ${closestResupplyPoint.type} entry point`);
 
-    if (success) {
-      // Deduct credits
-      this.credits -= du.unitData.cost;
+      // Update local state - credit deduction and tracking
+      // Note: In MP mode, state is updated locally but will be validated when command is processed
+      this.processQueueReinforcementLocal(du, closestResupplyPoint.id);
+    } else {
+      // Local mode: queue directly and update state
+      const success = this.game.reinforcementManager.queueUnitAtResupplyPoint(
+        closestResupplyPoint.id,
+        du.unitData.id,
+        { x: worldPos.x, z: worldPos.z },
+        moveType
+      );
 
-      // Mark as deployed
-      du.deployed = true;
-
-      // Update UI
-      this.renderBattleUnitBar();
-      this.updateCreditsDisplay();
+      if (success) {
+        this.processQueueReinforcementLocal(du, closestResupplyPoint.id);
+      }
     }
 
     // Check if shift is held for multi-placement
@@ -1006,6 +1001,55 @@ export class DeploymentManager {
       this.game.reinforcementManager.clearPreviewPath();
       this.renderBattleUnitBar();
     }
+  }
+
+  /**
+   * Process reinforcement queue locally (credit deduction and state updates)
+   */
+  private processQueueReinforcementLocal(du: DeployableUnit, entryPointId: string): void {
+    // Deduct credits
+    this.credits -= du.unitData.cost;
+
+    // Mark as deployed
+    du.deployed = true;
+
+    // Increment deployment count
+    du.deployedCount++;
+
+    // Update UI
+    this.renderBattleUnitBar();
+    this.updateCreditsDisplay();
+
+    console.log(`[DEPLOY] Queued ${du.unitData.name} for reinforcement at entry point ${entryPointId} (${du.unitData.cost} credits)`);
+  }
+
+  /**
+   * Process received reinforcement command (for multiplayer sync)
+   * Called by MultiplayerBattleSync when receiving QueueReinforcement commands
+   * Handles credit deduction and deployment tracking
+   */
+  processReinforcementCommand(unitType: string, entryPointId: string): void {
+    // Find the deployable unit by type
+    const du = this.deployableUnits.find(d => d.unitData.id === unitType);
+    if (!du) {
+      console.warn(`[DEPLOY] Cannot process reinforcement command: unit type ${unitType} not found in deck`);
+      return;
+    }
+
+    // Check if we have units available
+    if (du.deployedCount >= du.totalQuantity) {
+      console.warn(`[DEPLOY] Cannot process reinforcement command: no units of type ${unitType} available`);
+      return;
+    }
+
+    // Check if we have enough credits
+    if (this.credits < du.unitData.cost) {
+      console.warn(`[DEPLOY] Cannot process reinforcement command: insufficient credits for ${unitType}`);
+      return;
+    }
+
+    // Process the reinforcement
+    this.processQueueReinforcementLocal(du, entryPointId);
   }
 
   /**
