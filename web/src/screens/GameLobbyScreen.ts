@@ -47,6 +47,17 @@ export class GameLobbyScreen {
       z-index: 1000;
     `;
 
+    // Add focus-visible styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #game-lobby-screen button:focus-visible {
+        outline: 3px solid #4a90e2;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+      }
+    `;
+    container.appendChild(style);
+
     // Main panel
     const panel = document.createElement('div');
     panel.style.cssText = `
