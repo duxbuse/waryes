@@ -211,43 +211,31 @@ export class VisualEffectsManager {
   createExplosion(position: THREE.Vector3, size: number = 1): void {
     const id = `explosion_${this.nextId++}`;
 
-    // Create explosion sprite
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const context = canvas.getContext('2d');
+    // Acquire pooled sprite
+    const pooledSprite = this.explosionPool.acquire();
 
-    if (!context) return;
+    if (!pooledSprite) {
+      console.warn('VisualEffects: Explosion pool exhausted');
+      return;
+    }
 
-    // Create radial gradient for explosion
-    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.2, 'rgba(255, 200, 0, 1)');
-    gradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.8)');
-    gradient.addColorStop(0.8, 'rgba(100, 50, 0, 0.4)');
-    gradient.addColorStop(1, 'rgba(50, 50, 50, 0)');
+    // Set material blending mode for explosion
+    if (pooledSprite.sprite.material instanceof THREE.SpriteMaterial) {
+      pooledSprite.sprite.material.blending = THREE.AdditiveBlending;
+    }
 
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 128, 128);
+    // Activate sprite with base position, duration, and scale
+    pooledSprite.activate(position, 0.3, size * 2);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    // Offset slightly above ground
+    pooledSprite.sprite.position.y += 0.5;
 
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    sprite.position.y += 0.5; // Slightly above ground
-    sprite.scale.set(size * 2, size * 2, 1);
-    sprite.renderOrder = 1500;
-    this.game.scene.add(sprite);
+    // Set render order for proper layering
+    pooledSprite.sprite.renderOrder = 1500;
 
     const effect: Effect = {
       id,
-      mesh: sprite,
+      mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.3, // 300ms
     };
