@@ -47,7 +47,8 @@ describe('Sanitization', () => {
         const malicious = '" onclick="alert(1)"';
         const result = Sanitization.escapeHTML(malicious);
         expect(result).toBe('&quot; onclick=&quot;alert(1)&quot;');
-        expect(result).not.toContain('onclick=');
+        // Verify quotes are escaped, making the onclick harmless
+        expect(result).toContain('&quot;');
       });
 
       it('should escape javascript: protocol', () => {
