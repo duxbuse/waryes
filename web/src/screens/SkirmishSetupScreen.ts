@@ -297,7 +297,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .slot-number {
       width: 20px;
-      color: #666;
+      color: #bbb;
       font-weight: bold;
     }
 
@@ -316,7 +316,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .slot-type.closed {
-      color: #555;
+      color: #aaa;
     }
 
     .slot-controls {
@@ -369,7 +369,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .setup-section h3 {
       margin: 0 0 15px 0;
       font-size: 14px;
-      color: #888;
+      color: #bbb;
       text-transform: uppercase;
       letter-spacing: 2px;
     }
@@ -396,7 +396,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .deck-preview .placeholder {
-      color: #555;
+      color: #aaa;
       text-align: center;
       padding: 20px;
     }
@@ -407,7 +407,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .deck-info .label {
-      color: #888;
+      color: #bbb;
     }
 
     .deck-info .value {
@@ -421,7 +421,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .setting-row label {
       display: block;
       font-size: 13px;
-      color: #888;
+      color: #bbb;
       margin-bottom: 8px;
     }
 
@@ -435,7 +435,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       padding: 10px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid #333;
-      color: #888;
+      color: #bbb;
       border-radius: 4px;
       cursor: pointer;
       transition: all 0.2s;
@@ -528,7 +528,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .start-btn:disabled {
       background: #333;
-      color: #666;
+      color: #bbb;
       cursor: not-allowed;
     }
 
