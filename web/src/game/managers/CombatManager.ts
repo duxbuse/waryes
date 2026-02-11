@@ -632,6 +632,13 @@ export class CombatManager {
     return true;
   }
 
+  /**
+   * Get projectile pool statistics for debugging
+   */
+  getProjectilePoolStats(): { active: number; total: number } {
+    return this.projectilePool.getStats();
+  }
+
   dispose(): void {
     // Remove all projectiles and tracers
     for (const proj of this.projectiles.values()) {
