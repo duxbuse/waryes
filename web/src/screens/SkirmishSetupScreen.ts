@@ -232,6 +232,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       border-color: #4a9eff;
     }
 
+    .back-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
     .skirmish-content {
       flex: 1 1 auto;
       display: flex;
@@ -345,6 +351,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       color: #4a9eff;
     }
 
+    .slot-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
     .difficulty-select {
       padding: 3px 6px;
       font-size: 11px;
@@ -353,6 +365,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       color: #e0e0e0;
       border-radius: 3px;
       cursor: pointer;
+    }
+
+    .difficulty-select:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .deck-select {
@@ -364,6 +382,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       border-radius: 3px;
       cursor: pointer;
       max-width: 120px;
+    }
+
+    .deck-select:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .setup-section h3 {
@@ -383,6 +407,29 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       border-radius: 4px;
       font-size: 14px;
       cursor: pointer;
+    }
+
+    .setup-select:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
+    .biome-select {
+      width: 100%;
+      padding: 10px;
+      background: #1a1a2a;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .biome-select:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .deck-preview {
@@ -454,6 +501,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       color: #4a9eff;
     }
 
+    .size-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
     .seed-input-row {
       display: flex;
       gap: 10px;
@@ -469,6 +522,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       font-size: 14px;
     }
 
+    .seed-input:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+    }
+
     .random-btn {
       padding: 10px 20px;
       background: rgba(255, 255, 255, 0.1);
@@ -480,6 +539,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .random-btn:hover {
       background: rgba(255, 255, 255, 0.2);
+    }
+
+    .random-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .map-preview-section {
@@ -532,6 +597,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       cursor: not-allowed;
     }
 
+    .start-btn:focus-visible {
+      outline: 3px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 30px rgba(74, 158, 255, 0.6);
+    }
+
     .start-btn.loading {
       opacity: 0.7;
       pointer-events: none;
@@ -571,6 +642,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .host-online-btn:hover {
       transform: scale(1.02);
       box-shadow: 0 0 30px rgba(255, 152, 0, 0.4);
+    }
+
+    .host-online-btn:focus-visible {
+      outline: 3px solid #ff9800;
+      outline-offset: 2px;
+      box-shadow: 0 0 30px rgba(255, 152, 0, 0.6);
     }
 
     .map-preview {
