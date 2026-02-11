@@ -15,6 +15,14 @@ import { ScreenType } from '../core/ScreenManager';
 import type { MultiplayerPlayer } from '../game/managers/MultiplayerManager';
 import { showNotification, showConfirmDialog } from '../core/UINotifications';
 
+// Helper to sanitize HTML to prevent XSS (defense-in-depth)
+function sanitizeHTML(str: string | number): string {
+  const text = String(str);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 export class GameLobbyScreen {
   private readonly game: Game;
   private container: HTMLElement;
@@ -372,7 +380,7 @@ export class GameLobbyScreen {
     const info = document.createElement('div');
 
     const name = document.createElement('div');
-    name.textContent = player.name + (player.isHost ? ' (Host)' : '');
+    name.textContent = sanitizeHTML(player.name) + (player.isHost ? ' (Host)' : '');
     name.style.cssText = `
       color: #e0e0e0;
       font-size: 16px;
@@ -410,7 +418,7 @@ export class GameLobbyScreen {
       `;
 
       kickBtn.addEventListener('click', async () => {
-        const confirmed = await showConfirmDialog(`Kick ${player.name}?`);
+        const confirmed = await showConfirmDialog(`Kick ${sanitizeHTML(player.name)}?`);
         if (confirmed) {
           this.game.multiplayerManager.kickPlayer(player.id);
         }
