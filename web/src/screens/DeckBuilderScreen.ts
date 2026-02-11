@@ -184,6 +184,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       border-color: #4a9eff;
     }
 
+    .back-btn:focus-visible, .action-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
     .deck-actions {
       display: flex;
       gap: 10px;
@@ -221,6 +226,12 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       border: 1px solid #333;
       color: #e0e0e0;
       border-radius: 4px;
+    }
+
+    .faction-selection select:focus-visible, .division-selection select:focus-visible, .deck-name-input input:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+      border-color: #4a9eff;
     }
 
     .deck-stats {
@@ -267,6 +278,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       background: rgba(255, 255, 255, 0.05);
     }
 
+    .category-tab:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: -2px;
+    }
+
     .category-tab.active {
       color: #4a9eff;
       background: rgba(74, 158, 255, 0.1);
@@ -295,6 +311,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .unit-card:hover {
       background: rgba(74, 158, 255, 0.1);
       border-color: #4a9eff;
+    }
+
+    .unit-card:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .unit-card.unavailable {
@@ -383,6 +404,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .pin-btn:hover {
       background: rgba(255, 255, 255, 0.2);
       color: #e0e0e0;
+    }
+
+    .pin-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .pin-btn.pinned {
@@ -480,6 +506,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       background: rgba(255, 74, 74, 0.4);
     }
 
+    .clear-btn:focus-visible {
+      outline: 2px solid #ff4a4a;
+      outline-offset: 2px;
+    }
+
     .deck-strip-units {
       display: flex;
       gap: 8px;
@@ -511,6 +542,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    .deck-unit-card .remove-btn:focus-visible {
+      outline: 2px solid #ff4a4a;
+      outline-offset: 2px;
     }
 
     .deck-unit-card .unit-name {
@@ -575,6 +611,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .popup-close:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
     .transport-option {
       padding: 10px;
       margin: 5px 0;
@@ -587,6 +628,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .transport-option:hover {
       background: rgba(74, 158, 255, 0.2);
       border-color: #4a9eff;
+    }
+
+    .transport-option:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .saved-deck-item {
@@ -603,6 +649,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .saved-deck-item:hover {
       background: rgba(74, 158, 255, 0.2);
       border-color: #4a9eff;
+    }
+
+    .saved-deck-item:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .saved-deck-item .delete-deck {
@@ -701,7 +752,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       return `
         <div class="unit-card ${!isAvailable || remaining <= 0 ? 'unavailable' : ''}"
              data-unit-id="${unit.id}"
-             ${isAvailable && remaining > 0 ? '' : 'data-unavailable="true"'}>
+             ${isAvailable && remaining > 0 ? 'tabindex="0"' : 'data-unavailable="true"'}>
           <div class="unit-card-header">
             <span class="unit-card-name">${unit.name}</span>
             <span class="unit-card-cost">${unit.cost}</span>
@@ -938,7 +989,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     });
 
     options.innerHTML = transports.map(t => `
-      <div class="transport-option" data-transport-id="${t.id}">
+      <div class="transport-option" data-transport-id="${t.id}" tabindex="0">
         ${t.name} (${t.transportCapacity} slots, ${t.cost}c)
       </div>
     `).join('');
@@ -949,7 +1000,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     // Bind transport selection
     options.querySelectorAll('.transport-option').forEach(opt => {
-      opt.addEventListener('click', () => {
+      const selectTransport = () => {
         const transportId = (opt as HTMLElement).dataset['transportId']!;
 
         // Get quantity for the unit being added
@@ -970,6 +1021,14 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         renderDeckStrip();
         renderUnitLibrary();
         updateStats();
+      };
+
+      opt.addEventListener('click', selectTransport);
+      opt.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectTransport();
+        }
       });
     });
   }
@@ -1020,7 +1079,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       list.innerHTML = '<p style="color: #666; text-align: center;">No saved decks</p>';
     } else {
       list.innerHTML = savedDecks.map(d => `
-        <div class="saved-deck-item" data-deck-id="${d.id}">
+        <div class="saved-deck-item" data-deck-id="${d.id}" tabindex="0">
           <span>${d.name} (${d.units.length} units)</span>
           <span class="delete-deck" data-delete-deck="${d.id}">&times;</span>
         </div>
@@ -1117,6 +1176,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }
     });
 
+    element.querySelector('#unit-library')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const card = (e.target as HTMLElement).closest('.unit-card') as HTMLElement;
+        if (card && !card.dataset['unavailable']) {
+          e.preventDefault();
+          addUnit(card.dataset['unitId']!);
+        }
+      }
+    });
+
     element.querySelector('#unit-library')?.addEventListener('mouseover', (e) => {
       const card = (e.target as HTMLElement).closest('.unit-card') as HTMLElement;
       if (card) {
@@ -1181,6 +1250,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         deleteDeck(deleteBtn.dataset['deleteDeck']!);
       } else if (item) {
         loadDeck(item.dataset['deckId']!);
+      }
+    });
+
+    element.querySelector('#saved-decks-list')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const item = (e.target as HTMLElement).closest('.saved-deck-item') as HTMLElement;
+        if (item) {
+          e.preventDefault();
+          loadDeck(item.dataset['deckId']!);
+        }
       }
     });
   };
