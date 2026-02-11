@@ -12,6 +12,14 @@ import type { Game } from '../core/Game';
 import { ScreenType } from '../core/ScreenManager';
 import type { LobbyListItem } from '../game/managers/MultiplayerManager';
 
+// Helper to sanitize HTML to prevent XSS (defense-in-depth)
+function sanitizeHTML(str: string | number): string {
+  const text = String(str);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 export class JoinGameScreen {
   private readonly game: Game;
   private container: HTMLElement;
@@ -312,7 +320,7 @@ export class JoinGameScreen {
     `;
 
     const code = document.createElement('div');
-    code.textContent = lobby.code;
+    code.textContent = sanitizeHTML(lobby.code);
     code.style.cssText = `
       font-size: 20px;
       font-weight: bold;
@@ -322,7 +330,7 @@ export class JoinGameScreen {
     `;
 
     const details = document.createElement('div');
-    details.textContent = `Host: ${lobby.host} • ${lobby.mapSize} • ${lobby.playerCount}/${lobby.maxPlayers} players`;
+    details.textContent = `Host: ${sanitizeHTML(lobby.host)} • ${sanitizeHTML(lobby.mapSize)} • ${sanitizeHTML(lobby.playerCount)}/${sanitizeHTML(lobby.maxPlayers)} players`;
     details.style.cssText = `
       font-size: 14px;
       color: #aaa;
