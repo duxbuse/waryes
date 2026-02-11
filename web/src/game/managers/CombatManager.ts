@@ -47,6 +47,12 @@ export class CombatManager {
     enemy: THREE.MeshBasicMaterial;
   };
 
+  // Tracer materials
+  private tracerMaterials: {
+    player: THREE.LineBasicMaterial;
+    enemy: THREE.LineBasicMaterial;
+  };
+
   // Shared geometry
   private projectileGeometry: THREE.SphereGeometry;
 
@@ -62,22 +68,43 @@ export class CombatManager {
       enemy: new THREE.MeshBasicMaterial({ color: 0xff4a4a }),
     };
 
+    // Initialize tracer materials with bright glowing colors
+    this.tracerMaterials = {
+      player: new THREE.LineBasicMaterial({
+        color: 0x88ccff,
+        transparent: true,
+        opacity: 0.7,
+        linewidth: 2,
+      }),
+      enemy: new THREE.LineBasicMaterial({
+        color: 0xff8888,
+        transparent: true,
+        opacity: 0.7,
+        linewidth: 2,
+      }),
+    };
+
     this.projectileGeometry = new THREE.SphereGeometry(0.2, 8, 8);
   }
 
   initialize(): void {
     // Initialize projectile pool
     this.projectilePool = new ObjectPool<PooledProjectile>(
-      () => new PooledProjectile(this.projectileGeometry, this.projectileMaterials.player),
+      () => new PooledProjectile(
+        this.projectileGeometry,
+        this.projectileMaterials.player,
+        this.tracerMaterials.player
+      ),
       100,  // initial size
       500   // max size
     );
 
-    // Pre-warm pool and add all meshes to scene
+    // Pre-warm pool and add all meshes and tracers to scene
     for (let i = 0; i < 100; i++) {
       const proj = this.projectilePool.acquire();
       if (proj) {
         this.game.scene.add(proj.mesh);
+        this.game.scene.add(proj.tracer);
         this.projectilePool.release(proj);
       }
     }
@@ -222,10 +249,14 @@ export class CombatManager {
     // Penetration also increases at close range
     const scaledPenetration = weaponData.penetration * kineticScale;
 
-    // Get appropriate material
+    // Get appropriate materials
     const material = attacker.team === 'player'
       ? this.projectileMaterials.player
       : this.projectileMaterials.enemy;
+
+    const tracerMaterial = attacker.team === 'player'
+      ? this.tracerMaterials.player
+      : this.tracerMaterials.enemy;
 
     // Activate the pooled projectile
     pooledProj.activate(
@@ -242,7 +273,8 @@ export class CombatManager {
       weaponIndex,
       maxTime,
       weaponData,
-      material
+      material,
+      tracerMaterial
     );
 
     this.projectiles.set(id, pooledProj);
@@ -266,6 +298,8 @@ export class CombatManager {
       } else {
         // Update position
         proj.mesh.position.copy(proj.start).add(direction.multiplyScalar(currentDistance));
+        // Update tracer trail
+        proj.updateTracer(15);
       }
     }
 
@@ -599,15 +633,18 @@ export class CombatManager {
   }
 
   dispose(): void {
-    // Remove all projectiles
+    // Remove all projectiles and tracers
     for (const proj of this.projectiles.values()) {
       this.game.scene.remove(proj.mesh);
+      this.game.scene.remove(proj.tracer);
     }
     this.projectiles.clear();
 
     // Dispose materials and geometry
     this.projectileMaterials.player.dispose();
     this.projectileMaterials.enemy.dispose();
+    this.tracerMaterials.player.dispose();
+    this.tracerMaterials.enemy.dispose();
     this.projectileGeometry.dispose();
   }
 }

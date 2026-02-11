@@ -9,6 +9,8 @@
  * - Reconnection support (30 second window)
  */
 
+import { RateLimiter } from './RateLimiter';
+
 interface Player {
   id: string;
   name: string;
@@ -36,7 +38,19 @@ class MultiplayerServer {
   private playerConnections: Map<string, any> = new Map(); // connectionId -> ws
   private reconnectWindows: Map<string, NodeJS.Timeout> = new Map();
 
+  // Rate limiters for different message types
+  private rateLimitGameCommand: RateLimiter;
+  private rateLimitUpdateState: RateLimiter;
+  private rateLimitLobbyActions: RateLimiter;
+  private rateLimitHostActions: RateLimiter;
+
   constructor() {
+    // Initialize rate limiters with different limits per message type
+    this.rateLimitGameCommand = new RateLimiter(60, 60000); // 60 commands per minute
+    this.rateLimitUpdateState = new RateLimiter(30, 60000); // 30 updates per minute
+    this.rateLimitLobbyActions = new RateLimiter(10, 60000); // 10 lobby actions per minute
+    this.rateLimitHostActions = new RateLimiter(5, 60000); // 5 host actions per minute
+
     this.startCleanupTask();
   }
 
@@ -527,6 +541,78 @@ class MultiplayerServer {
   }
 
   /**
+   * Check rate limit for a connection and message type
+   * @returns true if allowed, false if rate limited
+   */
+  private checkRateLimit(connectionId: string, messageType: string): boolean {
+    switch (messageType) {
+      case 'game_command':
+        return this.rateLimitGameCommand.tryConsume(connectionId);
+
+      case 'update_state':
+      case 'game_state_update':
+        return this.rateLimitUpdateState.tryConsume(connectionId);
+
+      case 'create_lobby':
+      case 'join_lobby':
+      case 'leave_lobby':
+        return this.rateLimitLobbyActions.tryConsume(connectionId);
+
+      case 'kick_player':
+      case 'start_game':
+        return this.rateLimitHostActions.tryConsume(connectionId);
+
+      case 'reconnect':
+        // Don't rate limit reconnection attempts
+        return true;
+
+      default:
+        // Unknown message types use lobby action limit as default
+        return this.rateLimitLobbyActions.tryConsume(connectionId);
+    }
+  }
+
+  /**
+   * Get retry-after time for a connection and message type
+   * @returns milliseconds to wait before retrying
+   */
+  private getRetryAfter(connectionId: string, messageType: string): number {
+    switch (messageType) {
+      case 'game_command':
+        return this.rateLimitGameCommand.getRetryAfter(connectionId);
+
+      case 'update_state':
+      case 'game_state_update':
+        return this.rateLimitUpdateState.getRetryAfter(connectionId);
+
+      case 'create_lobby':
+      case 'join_lobby':
+      case 'leave_lobby':
+        return this.rateLimitLobbyActions.getRetryAfter(connectionId);
+
+      case 'kick_player':
+      case 'start_game':
+        return this.rateLimitHostActions.getRetryAfter(connectionId);
+
+      case 'reconnect':
+        return 0;
+
+      default:
+        return this.rateLimitLobbyActions.getRetryAfter(connectionId);
+    }
+  }
+
+  /**
+   * Clear rate limit data for a connection (called on disconnect)
+   */
+  private clearRateLimits(connectionId: string): void {
+    this.rateLimitGameCommand.clear(connectionId);
+    this.rateLimitUpdateState.clear(connectionId);
+    this.rateLimitLobbyActions.clear(connectionId);
+    this.rateLimitHostActions.clear(connectionId);
+  }
+
+  /**
    * Register a WebSocket connection
    */
   registerConnection(connectionId: string, ws: any): void {
@@ -538,6 +624,7 @@ class MultiplayerServer {
    */
   unregisterConnection(connectionId: string): void {
     this.playerConnections.delete(connectionId);
+    this.clearRateLimits(connectionId);
   }
 }
 
@@ -578,6 +665,17 @@ Bun.serve({
       try {
         const data = JSON.parse(message as string);
         const { connectionId } = ws.data;
+
+        // Check rate limit before processing message
+        if (!server.data.checkRateLimit(connectionId, data.type)) {
+          const retryAfter = server.data.getRetryAfter(connectionId, data.type);
+          ws.send(JSON.stringify({
+            type: 'rate_limit_exceeded',
+            messageType: data.type,
+            retryAfter,
+          }));
+          return;
+        }
 
         // Handle different message types
         switch (data.type) {

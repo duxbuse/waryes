@@ -4,7 +4,7 @@ import { resolve } from 'path';
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
+    environment: 'jsdom',
     include: ['tests/**/*.test.ts'],
     // Exclude Bun-specific tests (jsonSchema.test.ts uses bun:test)
     exclude: ['tests/jsonSchema.test.ts', 'node_modules/**'],

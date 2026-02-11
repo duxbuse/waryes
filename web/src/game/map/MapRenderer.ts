@@ -30,7 +30,7 @@ export class MapRenderer {
     ground: THREE.MeshStandardMaterial;
     forest: THREE.MeshStandardMaterial;
     hill: THREE.MeshStandardMaterial;
-    water: THREE.MeshStandardMaterial;
+    water: THREE.ShaderMaterial;
     building: THREE.MeshStandardMaterial;
     church: THREE.MeshStandardMaterial;
     factory: THREE.MeshStandardMaterial;
@@ -117,6 +117,8 @@ export class MapRenderer {
         vertexColors: true, // Enable vertex colors for cliff/grass blending
         roughness: 0.9,
         metalness: 0.0,
+        normalMap: this.createProceduralNormalMap(),
+        normalScale: new THREE.Vector2(0.3, 0.3), // Subtle normal mapping for depth
       }),
       forest: new THREE.MeshStandardMaterial({
         color: biomeConfig.forestColor, // Apply biome forest color
@@ -131,14 +133,80 @@ export class MapRenderer {
         roughness: 0.9,
         metalness: 0.0,
       }),
-      water: new THREE.MeshStandardMaterial({
-        color: biomeConfig.waterColor ?? 0x3a6a8a, // Apply biome water color if available
-        roughness: 0.3,
-        metalness: 0.2,
+      water: new THREE.ShaderMaterial({
+        uniforms: {
+          time: { value: 0.0 },
+          waterColor: { value: new THREE.Color(biomeConfig.waterColor ?? 0x3a6a8a) },
+          deepWaterColor: { value: new THREE.Color(biomeConfig.waterColor ?? 0x3a6a8a).multiplyScalar(0.7) },
+          opacity: { value: 0.8 },
+          waveScale: { value: 0.5 },
+          waveSpeed: { value: 0.3 },
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          uniform float time;
+          uniform float waveScale;
+          uniform float waveSpeed;
+
+          void main() {
+            vUv = uv;
+
+            // Apply wave animation in vertex shader
+            vec3 pos = position;
+            float wave1 = sin(pos.x * 0.5 + time * waveSpeed) * waveScale;
+            float wave2 = cos(pos.z * 0.3 + time * waveSpeed * 1.3) * waveScale * 0.7;
+            pos.y += wave1 + wave2;
+
+            // Calculate animated normal for lighting
+            float dx = cos(pos.x * 0.5 + time * waveSpeed) * 0.5 * waveScale;
+            float dz = -sin(pos.z * 0.3 + time * waveSpeed * 1.3) * 0.3 * waveScale * 0.7;
+            vNormal = normalize(vec3(-dx, 1.0, -dz));
+
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          uniform vec3 waterColor;
+          uniform vec3 deepWaterColor;
+          uniform float opacity;
+          uniform float time;
+
+          void main() {
+            // Calculate view direction for Fresnel effect
+            vec3 viewDir = normalize(vViewPosition);
+            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
+
+            // Animated distortion for dynamic feel
+            vec2 distortedUv = vUv + vec2(
+              sin(vUv.y * 10.0 + time * 0.3) * 0.01,
+              cos(vUv.x * 10.0 + time * 0.3) * 0.01
+            );
+
+            // Mix water colors based on Fresnel
+            vec3 finalColor = mix(deepWaterColor, waterColor, fresnel);
+
+            // Add subtle shimmer effect
+            float shimmer = sin(distortedUv.x * 20.0 + time) *
+                           cos(distortedUv.y * 20.0 + time * 1.3) * 0.1 + 0.9;
+            finalColor *= shimmer;
+
+            // Add reflection highlights
+            float specular = pow(max(dot(vNormal, normalize(vec3(0.5, 1.0, 0.3))), 0.0), 32.0);
+            finalColor += vec3(specular * 0.5);
+
+            gl_FragColor = vec4(finalColor, opacity);
+          }
+        `,
         transparent: true,
-        opacity: 0.8,
         side: THREE.DoubleSide,
-        depthWrite: false, // Disable depth write to avoid z-fighting with overlapping water
+        depthWrite: false,
         stencilWrite: true,
         stencilFunc: THREE.NotEqualStencilFunc,
         stencilRef: 1,
@@ -205,6 +273,106 @@ export class MapRenderer {
         depthTest: true,
       }),
     };
+  }
+
+  /**
+   * Create a procedural normal map for terrain detail.
+   * Uses canvas-based noise to generate a tileable normal map texture
+   * for subtle surface detail without additional geometry.
+   *
+   * Performance: Created once and shared across all terrain chunks.
+   */
+  private createProceduralNormalMap(): THREE.Texture {
+    const size = 256; // Texture resolution (256x256 is good balance of quality/memory)
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      // Fallback: return empty texture if canvas context fails
+      return new THREE.Texture();
+    }
+
+    // Create image data for manipulation
+    const imageData = ctx.createImageData(size, size);
+    const data = imageData.data;
+
+    // Generate tileable Perlin-like noise for normal map
+    // Normal maps use RGB channels to encode XYZ normal directions
+    // R=X (left-right), G=Y (up-down), B=Z (depth)
+    // Center value (128, 128, 255) = flat surface pointing up
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+
+        // Generate height value using simple noise
+        // Combine multiple octaves for natural-looking variation
+        const scale1 = 0.05; // Large features
+        const scale2 = 0.15; // Medium features
+        const scale3 = 0.3;  // Small details
+
+        const noise1 = Math.sin(x * scale1) * Math.cos(y * scale1);
+        const noise2 = Math.sin(x * scale2 + 10) * Math.cos(y * scale2 + 10);
+        const noise3 = Math.sin(x * scale3 + 20) * Math.cos(y * scale3 + 20);
+
+        // Combine octaves with different weights
+        const height = (noise1 * 0.5 + noise2 * 0.3 + noise3 * 0.2);
+
+        // Calculate normal from height gradient
+        // Sample neighboring pixels to get slope
+        const heightL = Math.sin((x - 1) * scale1) * Math.cos(y * scale1) * 0.5 +
+                       Math.sin((x - 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
+                       Math.sin((x - 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
+
+        const heightR = Math.sin((x + 1) * scale1) * Math.cos(y * scale1) * 0.5 +
+                       Math.sin((x + 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
+                       Math.sin((x + 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
+
+        const heightD = Math.sin(x * scale1) * Math.cos((y - 1) * scale1) * 0.5 +
+                       Math.sin(x * scale2 + 10) * Math.cos((y - 1) * scale2 + 10) * 0.3 +
+                       Math.sin(x * scale3 + 20) * Math.cos((y - 1) * scale3 + 20) * 0.2;
+
+        const heightU = Math.sin(x * scale1) * Math.cos((y + 1) * scale1) * 0.5 +
+                       Math.sin(x * scale2 + 10) * Math.cos((y + 1) * scale2 + 10) * 0.3 +
+                       Math.sin(x * scale3 + 20) * Math.cos((y + 1) * scale3 + 20) * 0.2;
+
+        // Calculate gradients
+        const dx = (heightR - heightL) * 0.5;
+        const dy = (heightU - heightD) * 0.5;
+
+        // Convert to normal vector and encode in RGB
+        // Normal map convention: R=X+128, G=Y+128, B=Z (mostly 255 for upward facing)
+        const nx = dx * 255;
+        const ny = dy * 255;
+        const nz = 1.0;
+
+        // Normalize the vector
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+        // Encode normal in 0-255 range (128 = 0, 255 = +1, 0 = -1)
+        data[i] = ((nx / len) * 0.5 + 0.5) * 255;     // R: X component
+        data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255; // G: Y component
+        data[i + 2] = ((nz / len) * 0.5 + 0.5) * 255; // B: Z component (pointing up)
+        data[i + 3] = 255;                              // A: fully opaque
+      }
+    }
+
+    // Put image data on canvas
+    ctx.putImageData(imageData, 0, 0);
+
+    // Create Three.js texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+
+    // Set repeat to tile the normal map across terrain
+    // Larger repeat values = more tiling = finer detail
+    texture.repeat.set(16, 16); // Repeat 16x across terrain chunks
+
+    texture.needsUpdate = true;
+
+    return texture;
   }
 
   render(map: GameMap): void {
@@ -4294,6 +4462,11 @@ export class MapRenderer {
   update(dt: number): void {
     this.animationTime += dt;
 
+    // Animate water shader
+    if (this.materials.water && this.materials.water.uniforms) {
+      this.materials.water.uniforms.time.value = this.animationTime;
+    }
+
     // Animate border rings for contested zones
     this.captureZoneMeshes.forEach((group) => {
       const ringMesh = group.children.find(child => child.userData.isBorderRing) as THREE.Mesh | undefined;
@@ -4307,6 +4480,11 @@ export class MapRenderer {
   }
 
   dispose(): void {
+    // Dispose of normal map texture
+    if (this.materials.ground.normalMap) {
+      this.materials.ground.normalMap.dispose();
+    }
+
     // Dispose all materials
     Object.values(this.materials).forEach(mat => mat.dispose());
     Object.values(this.roadMaterials).forEach(mat => mat.dispose());

@@ -130,6 +130,8 @@ export class Unit {
   private readonly bodyMesh: THREE.Mesh;
   private readonly wireframe: THREE.LineSegments;
   private readonly selectionRing: THREE.Mesh;
+  private readonly selectionRingMaterial: THREE.MeshBasicMaterial;
+  private selectionRingTime: number = 0; // Animation time tracker
 
   // Movement
   private targetPosition: THREE.Vector3 | null = null;
@@ -229,13 +231,25 @@ export class Unit {
     this.wireframe.visible = false; // Disabled - instanced renderer handles it
     this.mesh.add(this.wireframe);
 
-    // Create selection ring (shared material)
+    // Create selection ring with per-unit emissive material for glow effect
     const ringGeometry = new THREE.RingGeometry(1.5, 1.8, 32);
-    this.selectionRing = new THREE.Mesh(ringGeometry, getSelectionRingMaterial());
+    // Create per-unit material with emissive properties for glowing effect
+    this.selectionRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      emissive: 0x00ff00,
+      emissiveIntensity: 0.5, // Initial intensity
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8,
+    });
+    this.selectionRing = new THREE.Mesh(ringGeometry, this.selectionRingMaterial);
     this.selectionRing.rotation.x = -Math.PI / 2;
     this.selectionRing.position.y = 0.05;
     this.selectionRing.visible = false;
     this.mesh.add(this.selectionRing);
+
+    // Initialize animation time with random offset (deterministic per unit)
+    this.selectionRingTime = gameRNG.next() * Math.PI * 2;
 
     // Create UI (health bars, morale bars)
     this.unitUI = new UnitUI(this, game);
@@ -2115,6 +2129,16 @@ export class Unit {
       this._spawnProtectionTimer = Math.max(0, this._spawnProtectionTimer - dt);
     }
 
+    // Animate selection ring glow effect (smooth pulsing)
+    if (this._isSelected && this.selectionRing.visible) {
+      this.selectionRingTime += dt * 2.5; // Speed of pulse animation
+      // Sine wave oscillation between 0.3 and 1.0 for smooth glow effect
+      const pulseIntensity = 0.3 + 0.7 * (Math.sin(this.selectionRingTime) * 0.5 + 0.5);
+      this.selectionRingMaterial.emissiveIntensity = pulseIntensity;
+      // Also pulse opacity slightly for enhanced glow
+      this.selectionRingMaterial.opacity = 0.6 + 0.3 * (Math.sin(this.selectionRingTime) * 0.5 + 0.5);
+    }
+
     // Update UI (health bars, morale bars)
     if (this.unitUI) {
       this.unitUI.update();
@@ -2137,9 +2161,10 @@ export class Unit {
     // wireframe.geometry is per-unit (EdgesGeometry) - dispose it
     // wireframe.material is SHARED - do NOT dispose
     // selectionRing.geometry is per-unit (RingGeometry) - dispose it
-    // selectionRing.material is SHARED - do NOT dispose
+    // selectionRing.material is PER-UNIT (emissive material) - dispose it
     this.wireframe.geometry.dispose();
     this.selectionRing.geometry.dispose();
+    this.selectionRingMaterial.dispose();
   }
 
   /**
