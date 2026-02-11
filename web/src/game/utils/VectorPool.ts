@@ -33,6 +33,10 @@ class VectorPoolClass {
   reset(): void {
     this.index = 0;
   }
+
+  getStats(): { active: number; total: number } {
+    return { active: this.index, total: this.vectors.length };
+  }
 }
 
 export const VectorPool = new VectorPoolClass();
