@@ -38,6 +38,7 @@ import { InstancedUnitRenderer } from '../game/rendering/InstancedUnitRenderer';
 import { BatchedUnitUIRenderer } from '../game/rendering/BatchedUnitUIRenderer';
 import { LOSPreviewRenderer } from '../game/map/LOSPreviewRenderer';
 import { FogOfWarRenderer } from '../game/rendering/FogOfWarRenderer';
+import { TacticalIconRenderer } from '../game/rendering/TacticalIconRenderer';
 import { LAYERS } from '../game/utils/LayerConstants';
 import type { GameMap, DeckData, MapSize, BiomeType, TerrainCell, EntryPoint } from '../data/types';
 import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
@@ -98,6 +99,7 @@ export class Game {
   public batchedUIRenderer: BatchedUnitUIRenderer | null = null;
   public losPreviewRenderer: LOSPreviewRenderer | null = null;
   public fogOfWarRenderer: FogOfWarRenderer | null = null;
+  public tacticalIconRenderer: TacticalIconRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
 
   // Game state
@@ -234,6 +236,8 @@ export class Game {
     this.instancedUnitRenderer.initialize();
     this.batchedUIRenderer = new BatchedUnitUIRenderer(this, this.scene);
     this.batchedUIRenderer.initialize();
+    this.tacticalIconRenderer = new TacticalIconRenderer(this, this.scene);
+    this.tacticalIconRenderer.initialize();
     this.losPreviewRenderer = new LOSPreviewRenderer(this);
     this.benchmarkManager = new BenchmarkManager(this);
 
@@ -537,6 +541,7 @@ export class Game {
       this.pathRenderer?.update(dt); // Update path lines as units move
       this.instancedUnitRenderer?.update(); // Update instanced unit rendering
       this.batchedUIRenderer?.update(); // Update batched UI rendering (health/morale bars)
+      this.tacticalIconRenderer?.update(); // Update tactical icon rendering
       t6 = performance.now();
 
       // Update LOS preview if active
