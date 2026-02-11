@@ -66,7 +66,13 @@ class MultiplayerServer {
   /**
    * Create a new game lobby
    */
-  createLobby(hostId: string, hostName: string, mapSize: 'small' | 'medium' | 'large'): GameLobby {
+  createLobby(hostId: string, hostName: string, mapSize: 'small' | 'medium' | 'large'): { success: boolean; error?: string; lobby?: GameLobby } {
+    // Validate player name
+    const validation = this.validatePlayerName(hostName);
+    if (!validation.valid) {
+      return { success: false, error: `Invalid player name: ${validation.error}` };
+    }
+
     const code = this.generateGameCode();
     const connectionId = this.getConnectionIdForPlayer(hostId);
 
@@ -96,13 +102,19 @@ class MultiplayerServer {
     this.lobbies.set(code, lobby);
 
     console.log(`[Lobby Created] ${code} by ${hostName}`);
-    return lobby;
+    return { success: true, lobby };
   }
 
   /**
    * Join an existing lobby
    */
   joinLobby(code: string, playerId: string, playerName: string): { success: boolean; error?: string; lobby?: GameLobby } {
+    // Validate player name
+    const validation = this.validatePlayerName(playerName);
+    if (!validation.valid) {
+      return { success: false, error: `Invalid player name: ${validation.error}` };
+    }
+
     const lobby = this.lobbies.get(code);
 
     if (!lobby) {
@@ -571,15 +583,22 @@ Bun.serve({
         switch (data.type) {
           case 'create_lobby':
             {
-              const lobby = server.data.createLobby(data.playerId, data.playerName, data.mapSize);
-              ws.send(JSON.stringify({
-                type: 'lobby_created',
-                code: lobby.code,
-                lobby: {
-                  ...lobby,
-                  players: Array.from(lobby.players.values()),
-                },
-              }));
+              const result = server.data.createLobby(data.playerId, data.playerName, data.mapSize);
+              if (result.success && result.lobby) {
+                ws.send(JSON.stringify({
+                  type: 'lobby_created',
+                  code: result.lobby.code,
+                  lobby: {
+                    ...result.lobby,
+                    players: Array.from(result.lobby.players.values()),
+                  },
+                }));
+              } else {
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  error: result.error,
+                }));
+              }
             }
             break;
 
