@@ -161,7 +161,7 @@ export class GameLobbyScreen {
     const spectatorsTitle = document.createElement('h3');
     spectatorsTitle.textContent = 'Spectators';
     spectatorsTitle.style.cssText = `
-      color: #aaa;
+      color: #ccc;
       font-size: 20px;
       margin: 0 0 15px 0;
     `;
@@ -372,7 +372,7 @@ export class GameLobbyScreen {
     const status = document.createElement('div');
     status.textContent = player.isReady ? '✓ Ready' : 'Not Ready';
     status.style.cssText = `
-      color: ${player.isReady ? '#4caf50' : '#888'};
+      color: ${player.isReady ? '#4caf50' : '#bbb'};
       font-size: 14px;
     `;
 
