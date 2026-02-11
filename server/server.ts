@@ -365,6 +365,53 @@ class MultiplayerServer {
   }
 
   /**
+   * Validate a player name for security
+   * Checks: length (1-64 chars), rejects HTML tags, rejects script keywords,
+   * allows alphanumeric + basic punctuation only
+   */
+  private validatePlayerName(name: string): { valid: boolean; error?: string } {
+    // Check if name exists
+    if (!name || typeof name !== 'string') {
+      return { valid: false, error: 'Player name is required' };
+    }
+
+    // Trim whitespace
+    const trimmedName = name.trim();
+
+    // Check length (1-64 characters)
+    if (trimmedName.length < 1) {
+      return { valid: false, error: 'Player name cannot be empty' };
+    }
+    if (trimmedName.length > 64) {
+      return { valid: false, error: 'Player name must be 64 characters or less' };
+    }
+
+    // Reject HTML tags (< and > characters)
+    if (trimmedName.includes('<') || trimmedName.includes('>')) {
+      return { valid: false, error: 'Player name cannot contain HTML tags' };
+    }
+
+    // Reject script keywords (case-insensitive)
+    const dangerousKeywords = ['script', 'javascript:', 'onerror', 'onload', 'onclick', 'onmouseover', 'svg', 'iframe', 'embed', 'object'];
+    const lowerName = trimmedName.toLowerCase();
+    for (const keyword of dangerousKeywords) {
+      if (lowerName.includes(keyword)) {
+        return { valid: false, error: 'Player name contains prohibited keywords' };
+      }
+    }
+
+    // Allow only alphanumeric + basic punctuation (spaces, hyphens, underscores, periods, apostrophes)
+    // This regex matches strings that contain ONLY allowed characters
+    const allowedPattern = /^[a-zA-Z0-9\s\-_.'\u0080-\uFFFF]+$/;
+    if (!allowedPattern.test(trimmedName)) {
+      return { valid: false, error: 'Player name contains invalid characters. Use letters, numbers, spaces, hyphens, underscores, periods, or apostrophes only' };
+    }
+
+    // Name is valid
+    return { valid: true };
+  }
+
+  /**
    * Validate a game command
    * Checks: player exists, command structure valid, tick is reasonable
    */
