@@ -13,6 +13,7 @@
 import type { Game } from '../core/Game';
 import { ScreenType } from '../core/ScreenManager';
 import type { MultiplayerPlayer } from '../game/managers/MultiplayerManager';
+import { showNotification, showConfirmDialog } from '../core/UINotifications';
 
 export class GameLobbyScreen {
   private readonly game: Game;
@@ -171,7 +172,7 @@ export class GameLobbyScreen {
     const spectatorsTitle = document.createElement('h3');
     spectatorsTitle.textContent = 'Spectators';
     spectatorsTitle.style.cssText = `
-      color: #aaa;
+      color: #ccc;
       font-size: 20px;
       margin: 0 0 15px 0;
     `;
@@ -309,13 +310,13 @@ export class GameLobbyScreen {
 
     // Game starting
     this.game.multiplayerManager.on('game_starting', (mapSeed: number, mapSize: string) => {
-      alert(`Game starting! Map: ${mapSize}, Seed: ${mapSeed}`);
+      showNotification(`Game starting! Map: ${mapSize}, Seed: ${mapSeed}`, 5000);
       // TODO: Transition to battle screen with multiplayer mode
     });
 
     // Kicked
     this.game.multiplayerManager.on('kicked', () => {
-      alert('You were kicked from the lobby');
+      showNotification('You were kicked from the lobby', 5000);
       this.game.screenManager.switchTo(ScreenType.MainMenu);
     });
   }
@@ -382,7 +383,7 @@ export class GameLobbyScreen {
     const status = document.createElement('div');
     status.textContent = player.isReady ? '✓ Ready' : 'Not Ready';
     status.style.cssText = `
-      color: ${player.isReady ? '#4caf50' : '#888'};
+      color: ${player.isReady ? '#4caf50' : '#bbb'};
       font-size: 14px;
     `;
 
@@ -408,8 +409,9 @@ export class GameLobbyScreen {
         font-size: 12px;
       `;
 
-      kickBtn.addEventListener('click', () => {
-        if (confirm(`Kick ${player.name}?`)) {
+      kickBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog(`Kick ${player.name}?`);
+        if (confirmed) {
           this.game.multiplayerManager.kickPlayer(player.id);
         }
       });
@@ -437,8 +439,9 @@ export class GameLobbyScreen {
     this.game.multiplayerManager.startGame();
   }
 
-  private leaveLobby(): void {
-    if (confirm('Leave lobby?')) {
+  private async leaveLobby(): Promise<void> {
+    const confirmed = await showConfirmDialog('Leave lobby?');
+    if (confirmed) {
       this.game.multiplayerManager.leaveLobby();
       this.game.screenManager.switchTo(ScreenType.MainMenu);
     }

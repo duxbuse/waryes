@@ -211,7 +211,7 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
     .settings-section h3 {
       margin: 0 0 15px 0;
       font-size: 14px;
-      color: #888;
+      color: #bbb;
       text-transform: uppercase;
       letter-spacing: 2px;
     }
@@ -226,7 +226,7 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
     .setting-row label {
       flex: 0 0 140px;
       font-size: 13px;
-      color: #aaa;
+      color: #ccc;
     }
 
     .setting-select {

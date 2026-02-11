@@ -303,7 +303,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .slot-number {
       width: 20px;
-      color: #666;
+      color: #bbb;
       font-weight: bold;
     }
 
@@ -322,7 +322,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .slot-type.closed {
-      color: #555;
+      color: #aaa;
     }
 
     .slot-controls {
@@ -393,7 +393,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .setup-section h3 {
       margin: 0 0 15px 0;
       font-size: 14px;
-      color: #888;
+      color: #bbb;
       text-transform: uppercase;
       letter-spacing: 2px;
     }
@@ -443,7 +443,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .deck-preview .placeholder {
-      color: #555;
+      color: #aaa;
       text-align: center;
       padding: 20px;
     }
@@ -454,7 +454,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .deck-info .label {
-      color: #888;
+      color: #bbb;
     }
 
     .deck-info .value {
@@ -468,7 +468,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .setting-row label {
       display: block;
       font-size: 13px;
-      color: #888;
+      color: #bbb;
       margin-bottom: 8px;
     }
 
@@ -482,7 +482,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       padding: 10px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid #333;
-      color: #888;
+      color: #bbb;
       border-radius: 4px;
       cursor: pointer;
       transition: all 0.2s;
@@ -593,7 +593,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .start-btn:disabled {
       background: #333;
-      color: #666;
+      color: #bbb;
       cursor: not-allowed;
     }
 
@@ -601,6 +601,23 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       outline: 3px solid #4a9eff;
       outline-offset: 2px;
       box-shadow: 0 0 30px rgba(74, 158, 255, 0.6);
+    }
+
+    .start-btn.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .button-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+      vertical-align: middle;
     }
 
     .skirmish-footer {
@@ -1310,13 +1327,13 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   function updateStartButton(): void {
     const btn = element.querySelector('#skirmish-start-btn') as HTMLButtonElement;
     btn.disabled = !selectedDeck || isGeneratingMap;
-    // Show loading state on button if generating
+
     if (isGeneratingMap) {
-      btn.textContent = 'GENERATING MAP...';
-      btn.style.opacity = '0.7';
+      btn.classList.add('loading');
+      btn.innerHTML = '<span class="button-spinner"></span>GENERATING MAP...';
     } else {
-      btn.textContent = 'START BATTLE';
-      btn.style.opacity = '1';
+      btn.classList.remove('loading');
+      btn.innerHTML = 'START BATTLE';
     }
   }
 

@@ -48,6 +48,7 @@ import { VectorPool } from '../game/utils/VectorPool';
 import { SoundLibrary } from '../game/audio/SoundLibrary';
 import { SpatialAudioManager } from '../game/audio/SpatialAudioManager';
 import { AUDIO_MANIFEST } from '../data/audioManifest';
+import { showConfirmDialog } from './UINotifications';
 
 export enum GamePhase {
   Loading = 'loading',
@@ -1596,8 +1597,9 @@ export class Game {
     }
 
     if (surrenderBtn) {
-      surrenderBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to surrender?')) {
+      surrenderBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog('Are you sure you want to surrender?');
+        if (confirmed) {
           this.togglePause(); // Unpause first
           this.onVictory('enemy'); // Trigger defeat
         }
@@ -1605,8 +1607,9 @@ export class Game {
     }
 
     if (quitBtn) {
-      quitBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to quit to main menu?')) {
+      quitBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog('Are you sure you want to quit to main menu?');
+        if (confirmed) {
           this._isPaused = false; // Reset pause state
           this.returnToMainMenu();
         }
