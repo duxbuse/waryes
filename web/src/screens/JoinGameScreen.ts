@@ -11,6 +11,7 @@
 import type { Game } from '../core/Game';
 import { ScreenType } from '../core/ScreenManager';
 import type { LobbyListItem } from '../game/managers/MultiplayerManager';
+import { showNotification } from '../core/UINotifications';
 
 export class JoinGameScreen {
   private readonly game: Game;
@@ -227,7 +228,7 @@ export class JoinGameScreen {
     const code = this.codeInput.value.trim().toUpperCase();
 
     if (code.length !== 9 || !code.match(/^[A-Z]{4}-[0-9]{4}$/)) {
-      alert('Invalid game code format. Use XXXX-NNNN (4 letters, 4 numbers)');
+      showNotification('Invalid game code format. Use XXXX-NNNN (4 letters, 4 numbers)');
       return;
     }
 
@@ -235,7 +236,7 @@ export class JoinGameScreen {
       await this.game.multiplayerManager.joinLobby(code);
       // On success, screen will change via callback
     } catch (error) {
-      alert(`Failed to join game: ${error}`);
+      showNotification(`Failed to join game: ${error}`);
     }
   }
 
@@ -356,7 +357,7 @@ export class JoinGameScreen {
       try {
         await this.game.multiplayerManager.joinLobby(lobby.code);
       } catch (error) {
-        alert(`Failed to join: ${error}`);
+        showNotification(`Failed to join: ${error}`);
       }
     });
 

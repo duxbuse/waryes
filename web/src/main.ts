@@ -13,7 +13,7 @@ import { createSkirmishSetupScreen, type SkirmishConfig } from './screens/Skirmi
 import { createSettingsScreen } from './screens/SettingsScreen';
 import { JoinGameScreen } from './screens/JoinGameScreen';
 import { GameLobbyScreen } from './screens/GameLobbyScreen';
-import { showConfirmDialog } from './core/UINotifications';
+import { showConfirmDialog, showNotification } from './core/UINotifications';
 
 // DOM Elements
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
             await game.multiplayerManager.createLobby(config.mapSize);
             // Lobby created callback will switch to GameLobby screen
           } catch (error) {
-            alert(`Failed to create online lobby: ${error}`);
+            showNotification(`Failed to create online lobby: ${error}`, 5000);
           }
         }
       },
