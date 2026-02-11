@@ -5,12 +5,15 @@
 
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
+import { ObjectPool } from '../utils/ObjectPool';
+import { PooledSprite } from './PooledSprite';
 
 interface Effect {
   id: string;
   mesh: THREE.Mesh | THREE.Sprite;
   timeAlive: number;
   duration: number;
+  pooledSprite?: PooledSprite; // Reference to pooled sprite for efficient release
 }
 
 interface MuzzleLight {
@@ -246,10 +249,61 @@ export class VisualEffectsManager {
   private particlePool: ParticlePool;
   private lightPool: LightPool;
 
+  // Shared textures
+  private muzzleFlashTexture: THREE.CanvasTexture;
+  private explosionTexture: THREE.CanvasTexture;
+  private smokePuffTexture: THREE.CanvasTexture;
+
+  // Sprite pools
+  private muzzleFlashPool!: ObjectPool<PooledSprite>;
+  private explosionPool!: ObjectPool<PooledSprite>;
+  private smokePuffPool!: ObjectPool<PooledSprite>;
+
   constructor(game: Game) {
     this.game = game;
     this.particlePool = new ParticlePool(game.scene);
     this.lightPool = new LightPool(game.scene);
+
+    // Initialize shared textures
+    this.muzzleFlashTexture = this.createMuzzleFlashTexture();
+    this.explosionTexture = this.createExplosionTexture();
+    this.smokePuffTexture = this.createSmokePuffTexture();
+  }
+
+  initialize(): void {
+    const scene = this.game.scene;
+
+    // Factory closures add sprites to scene so both pre-warmed
+    // and dynamically-grown sprites are always renderable
+    this.muzzleFlashPool = new ObjectPool<PooledSprite>(
+      () => {
+        const ps = new PooledSprite(this.muzzleFlashTexture, 'muzzle');
+        scene.add(ps.sprite);
+        return ps;
+      },
+      50,
+      200
+    );
+
+    this.explosionPool = new ObjectPool<PooledSprite>(
+      () => {
+        const ps = new PooledSprite(this.explosionTexture, 'explosion');
+        scene.add(ps.sprite);
+        return ps;
+      },
+      30,
+      100
+    );
+
+    this.smokePuffPool = new ObjectPool<PooledSprite>(
+      () => {
+        const ps = new PooledSprite(this.smokePuffTexture, 'smoke');
+        scene.add(ps.sprite);
+        return ps;
+      },
+      30,
+      100
+    );
   }
 
   /**
@@ -289,18 +343,17 @@ export class VisualEffectsManager {
   }
 
   /**
-   * Create a muzzle flash effect at a position
+   * Create reusable muzzle flash texture
    */
-  createMuzzleFlash(position: THREE.Vector3, direction: THREE.Vector3): void {
-    const id = `muzzle_${this.nextId++}`;
-
-    // Create a simple bright sprite for muzzle flash
+  private createMuzzleFlashTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
     const context = canvas.getContext('2d');
 
-    if (!context) return;
+    if (!context) {
+      throw new Error('Failed to get 2D context for muzzle flash texture');
+    }
 
     // Create radial gradient (bright center, fading out)
     const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -311,27 +364,95 @@ export class VisualEffectsManager {
     context.fillStyle = gradient;
     context.fillRect(0, 0, 64, 64);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    return new THREE.CanvasTexture(canvas);
+  }
 
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    // Offset slightly forward in firing direction
-    sprite.position.add(direction.clone().multiplyScalar(2));
-    sprite.scale.set(1.5, 1.5, 1);
-    sprite.renderOrder = 1500;
-    this.game.scene.add(sprite);
+  /**
+   * Create reusable explosion texture
+   */
+  private createExplosionTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to get 2D context for explosion texture');
+    }
+
+    // Create radial gradient for explosion
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 200, 0, 1)');
+    gradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.8)');
+    gradient.addColorStop(0.8, 'rgba(100, 50, 0, 0.4)');
+    gradient.addColorStop(1, 'rgba(50, 50, 50, 0)');
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
+   * Create reusable smoke puff texture
+   */
+  private createSmokePuffTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to get 2D context for smoke puff texture');
+    }
+
+    // Create radial gradient for smoke
+    const gradient = context.createRadialGradient(64, 64, 10, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(100, 100, 100, 0.8)');
+    gradient.addColorStop(0.5, 'rgba(80, 80, 80, 0.4)');
+    gradient.addColorStop(1, 'rgba(60, 60, 60, 0)');
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
+   * Create a muzzle flash effect at a position
+   */
+  createMuzzleFlash(position: THREE.Vector3, direction: THREE.Vector3): void {
+    const id = `muzzle_${this.nextId++}`;
+
+    // Acquire pooled sprite
+    const pooledSprite = this.muzzleFlashPool.acquire();
+
+    if (!pooledSprite) {
+      console.warn('VisualEffects: Muzzle flash pool exhausted');
+      return;
+    }
+
+    // Set material blending mode for muzzle flash
+    if (pooledSprite.sprite.material instanceof THREE.SpriteMaterial) {
+      pooledSprite.sprite.material.blending = THREE.AdditiveBlending;
+    }
+
+    // Activate sprite with base position, duration, and scale
+    pooledSprite.activate(position, 0.1, 1.5);
+
+    // Offset slightly forward in firing direction (avoid allocation)
+    pooledSprite.sprite.position.addScaledVector(direction, 2);
+
+    // Set render order for proper layering
+    pooledSprite.sprite.renderOrder = 1500;
 
     const effect: Effect = {
       id,
-      mesh: sprite,
+      mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.1, // Very short duration (100ms)
+      pooledSprite, // Store reference for efficient pool release
     };
 
     this.effects.set(id, effect);
@@ -340,7 +461,7 @@ export class VisualEffectsManager {
     const muzzleLight = this.lightPool.acquire();
     if (muzzleLight) {
       muzzleLight.light.position.copy(position);
-      muzzleLight.light.position.add(direction.clone().multiplyScalar(2));
+      muzzleLight.light.position.addScaledVector(direction, 2);
       muzzleLight.light.intensity = muzzleLight.initialIntensity;
       muzzleLight.light.visible = true;
       muzzleLight.duration = 0.12; // 120ms duration
@@ -562,15 +683,21 @@ export class VisualEffectsManager {
     // Create a larger explosion
     this.createExplosion(position, 2);
 
-    // Create multiple smoke puffs
+    // Pre-compute smoke positions before setTimeout (VectorPool uses
+    // frame-based reset so cannot be used across async boundaries)
+    const smokePositions: THREE.Vector3[] = [];
     for (let i = 0; i < 3; i++) {
+      smokePositions.push(new THREE.Vector3(
+        position.x + (Math.random() - 0.5) * 2,
+        position.y,
+        position.z + (Math.random() - 0.5) * 2
+      ));
+    }
+
+    for (let i = 0; i < 3; i++) {
+      const smokePos = smokePositions[i]!;
       setTimeout(() => {
-        const offset = new THREE.Vector3(
-          (Math.random() - 0.5) * 2,
-          0,
-          (Math.random() - 0.5) * 2
-        );
-        this.createSmokePuff(position.clone().add(offset));
+        this.createSmokePuff(smokePos);
       }, i * 100);
     }
   }
@@ -616,19 +743,31 @@ export class VisualEffectsManager {
   }
 
   /**
-   * Remove an effect
+   * Remove an effect and return sprite to pool
    */
   private removeEffect(id: string): void {
     const effect = this.effects.get(id);
     if (!effect) return;
 
-    this.game.scene.remove(effect.mesh);
-
-    if (effect.mesh instanceof THREE.Sprite) {
+    // Check if this is a pooled sprite
+    if (effect.pooledSprite) {
+      // Return to appropriate pool based on effect type
+      if (id.startsWith('muzzle_')) {
+        this.muzzleFlashPool.release(effect.pooledSprite);
+      } else if (id.startsWith('explosion_')) {
+        this.explosionPool.release(effect.pooledSprite);
+      } else if (id.startsWith('smoke_')) {
+        this.smokePuffPool.release(effect.pooledSprite);
+      }
+    } else if (effect.mesh instanceof THREE.Sprite) {
+      // Legacy non-pooled sprite - dispose normally
+      this.game.scene.remove(effect.mesh);
       const material = effect.mesh.material as THREE.SpriteMaterial;
       if (material.map) material.map.dispose();
       material.dispose();
     } else if (effect.mesh instanceof THREE.Mesh) {
+      // Non-sprite effects (if any)
+      this.game.scene.remove(effect.mesh);
       effect.mesh.geometry.dispose();
       (effect.mesh.material as THREE.Material).dispose();
     }
@@ -645,5 +784,29 @@ export class VisualEffectsManager {
     }
     this.particlePool.clear();
     this.lightPool.clear();
+  }
+
+  /**
+   * Dispose all GPU resources (textures, materials, sprites)
+   */
+  dispose(): void {
+    this.clear();
+
+    const disposePool = (pool: ObjectPool<PooledSprite>) => {
+      pool.forEach((ps) => {
+        this.game.scene.remove(ps.sprite);
+        if (ps.sprite.material instanceof THREE.SpriteMaterial) {
+          ps.sprite.material.dispose();
+        }
+      });
+    };
+
+    if (this.muzzleFlashPool) disposePool(this.muzzleFlashPool);
+    if (this.explosionPool) disposePool(this.explosionPool);
+    if (this.smokePuffPool) disposePool(this.smokePuffPool);
+
+    this.muzzleFlashTexture.dispose();
+    this.explosionTexture.dispose();
+    this.smokePuffTexture.dispose();
   }
 }
