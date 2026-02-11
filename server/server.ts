@@ -514,6 +514,36 @@ class MultiplayerServer {
   }
 
   /**
+   * Get retry-after time for a connection and message type
+   * @returns milliseconds to wait before retrying
+   */
+  private getRetryAfter(connectionId: string, messageType: string): number {
+    switch (messageType) {
+      case 'game_command':
+        return this.rateLimitGameCommand.getRetryAfter(connectionId);
+
+      case 'update_state':
+      case 'game_state_update':
+        return this.rateLimitUpdateState.getRetryAfter(connectionId);
+
+      case 'create_lobby':
+      case 'join_lobby':
+      case 'leave_lobby':
+        return this.rateLimitLobbyActions.getRetryAfter(connectionId);
+
+      case 'kick_player':
+      case 'start_game':
+        return this.rateLimitHostActions.getRetryAfter(connectionId);
+
+      case 'reconnect':
+        return 0;
+
+      default:
+        return this.rateLimitLobbyActions.getRetryAfter(connectionId);
+    }
+  }
+
+  /**
    * Clear rate limit data for a connection (called on disconnect)
    */
   private clearRateLimits(connectionId: string): void {
@@ -579,9 +609,11 @@ Bun.serve({
 
         // Check rate limit before processing message
         if (!server.data.checkRateLimit(connectionId, data.type)) {
+          const retryAfter = server.data.getRetryAfter(connectionId, data.type);
           ws.send(JSON.stringify({
             type: 'rate_limit_exceeded',
             messageType: data.type,
+            retryAfter,
           }));
           return;
         }

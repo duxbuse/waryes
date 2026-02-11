@@ -100,4 +100,29 @@ export class RateLimiter {
 
     return Math.min(this.capacity, bucket.tokens + tokensToAdd);
   }
+
+  /**
+   * Get milliseconds until next token is available for an identifier
+   * @param identifier - Unique identifier
+   * @returns Milliseconds to wait, or 0 if tokens are available
+   */
+  getRetryAfter(identifier: string): number {
+    const bucket = this.buckets.get(identifier);
+    if (!bucket) return 0;
+
+    // Refill tokens based on elapsed time
+    const now = Date.now();
+    const elapsed = now - bucket.lastRefill;
+    const tokensToAdd = elapsed * this.refillRate;
+    const currentTokens = Math.min(this.capacity, bucket.tokens + tokensToAdd);
+
+    // If we have tokens, no wait needed
+    if (currentTokens >= 1) return 0;
+
+    // Calculate time needed to get 1 token
+    const tokensNeeded = 1 - currentTokens;
+    const msNeeded = tokensNeeded / this.refillRate;
+
+    return Math.ceil(msNeeded);
+  }
 }
