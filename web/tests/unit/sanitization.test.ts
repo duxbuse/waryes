@@ -231,7 +231,9 @@ describe('Sanitization', () => {
         const result = Sanitization.escapeHTML(malicious);
         expect(result).not.toContain('<script>');
         expect(result).not.toContain('<img');
-        expect(result).not.toContain('onerror=');
+        // Note: 'onerror=' will still be present as text, but it's safe because the HTML tags are escaped
+        expect(result).toContain('&lt;');
+        expect(result).toContain('&gt;');
       });
     });
 
@@ -252,7 +254,10 @@ describe('Sanitization', () => {
         const malicious = '<div style="position:absolute;top:0;left:0;width:100%;height:100%"></div>';
         const result = Sanitization.escapeHTML(malicious);
         expect(result).not.toContain('<div');
-        expect(result).not.toContain('position:absolute');
+        // Note: 'position:absolute' will still be present as text, but it's safe because the HTML tags are escaped
+        expect(result).toContain('&lt;');
+        expect(result).toContain('&gt;');
+        expect(result).toContain('&quot;');
       });
 
       it('should prevent meta refresh redirect', () => {

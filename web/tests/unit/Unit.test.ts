@@ -26,7 +26,9 @@ const createMockGame = () => ({
     findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
   },
   getElevationAt: vi.fn().mockReturnValue(0),
-} as unknown as Game;
+} as unknown as Game);
+
+let mockGame: Game;
 
 const createTestUnit = (overrides: Partial<UnitConfig> = {}): Unit => {
   const config: UnitConfig = {
