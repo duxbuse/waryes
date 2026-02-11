@@ -61,6 +61,19 @@ export function opticsToNumber(optics: OpticsRating): number {
   return map[optics] ?? 3;
 }
 
+// Vision radius (meters) indexed by numeric optics value
+export const VISION_RADIUS: Record<number, number> = {
+  2: 100,   // Poor
+  3: 150,   // Normal
+  4: 200,   // Good
+  5: 250,   // Very Good
+  6: 300,   // Exceptional
+};
+
+export function getVisionRadiusForOptics(optics: OpticsRating): number {
+  return VISION_RADIUS[opticsToNumber(optics)] ?? 150;
+}
+
 // Convert stealth rating string to number (0-5)
 export function stealthToNumber(stealth: StealthRating): number {
   const map: Record<StealthRating, number> = {
@@ -270,21 +283,21 @@ export interface ElevationConfig {
 export const ELEVATION_CONFIGS: Record<MapSize, ElevationConfig> = {
   small: {
     baseNoiseScale: 0.02,
-    baseNoiseAmplitude: 8,
+    baseNoiseAmplitude: 3,
     baseElevation: 5,
     featureChances: { hill: 0.30, plains: 0.25, valley: 0.15, ridge: 0.15, mountain: 0.10, plateau: 0.05 },
     featureCount: { min: 0, max: 2 }
   },
   medium: {
     baseNoiseScale: 0.015,
-    baseNoiseAmplitude: 15,
+    baseNoiseAmplitude: 5,
     baseElevation: 10,
     featureChances: { ridge: 0.25, hill: 0.25, mountain: 0.20, valley: 0.15, plateau: 0.15, plains: 0.0 },
     featureCount: { min: 2, max: 4 }
   },
   large: {
     baseNoiseScale: 0.01,
-    baseNoiseAmplitude: 25,
+    baseNoiseAmplitude: 8,
     baseElevation: 15,
     featureChances: { mountain: 0.30, ridge: 0.25, hill: 0.15, valley: 0.15, plateau: 0.10, plains: 0.05 },
     featureCount: { min: 4, max: 8 }
@@ -574,6 +587,7 @@ export interface QueuedReinforcement {
   unitType: string; // Unit ID to spawn
   destination: { x: number; z: number } | null; // Where unit should move after spawning
   moveType: 'normal' | 'attack' | 'reverse' | 'fast' | null; // Movement modifier
+  ownerId?: string; // For allied AI units (e.g. 'ally1') — omitted defaults to team owner
 }
 
 export interface EntryPoint {

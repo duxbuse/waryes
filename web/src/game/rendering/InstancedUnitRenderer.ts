@@ -182,7 +182,7 @@ export class InstancedUnitRenderer {
       // Update matrices for all units in this group
       for (const unitId of group.units) {
         const unit = this.game.unitManager.getUnitById(unitId);
-        if (!unit || unit.health <= 0) continue;
+        if (!unit || unit.health <= 0 || !this.game.fogOfWarManager.isUnitVisible(unit)) continue;
 
         // Get unit transform
         const unitMesh = unit.mesh;

@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import type { Game } from '../../core/Game';
+import { type Game, GamePhase } from '../../core/Game';
 import type { GameMap } from '../../data/types';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 
@@ -337,11 +337,17 @@ export class MinimapRenderer {
   private renderDeploymentZones(): void {
     if (!this.map) return;
 
+    // Only show deployment zones during setup phase
+    if (this.game.phase !== GamePhase.Setup) return;
+
     const ctx = this.ctx;
     const mapCenterX = this.map.width / 2;
     const mapCenterZ = this.map.height / 2;
 
     for (const zone of this.map.deploymentZones) {
+      // Don't show enemy deployment zone - hidden by fog of war
+      if (zone.team === 'enemy') continue;
+
       // Convert world coordinates to minimap coordinates
       const minX = (zone.minX + mapCenterX) * this.pixelsPerMeter;
       const minZ = (zone.minZ + mapCenterZ) * this.pixelsPerMeter;
@@ -388,8 +394,9 @@ export class MinimapRenderer {
       ctx.fillStyle = color + '40'; // Semi-transparent fill
       ctx.fillRect(x - w / 2, z - h / 2, w, h);
 
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      // Neutral zones use a bright white border for visibility on all biomes
+      ctx.strokeStyle = zone.owner === 'neutral' ? '#ffffff' : color;
+      ctx.lineWidth = zone.owner === 'neutral' ? 3 : 2;
       ctx.strokeRect(x - w / 2, z - h / 2, w, h);
     }
   }
@@ -402,6 +409,9 @@ export class MinimapRenderer {
     const mapCenterZ = this.map.height / 2;
 
     for (const point of this.map.resupplyPoints) {
+      // Don't show enemy resupply points - hidden by fog of war
+      if (point.team === 'enemy') continue;
+
       // Convert world coordinates to minimap coordinates
       const x = (point.x + mapCenterX) * this.pixelsPerMeter;
       const y = (point.z + mapCenterZ) * this.pixelsPerMeter;

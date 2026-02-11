@@ -333,7 +333,7 @@ export class VisualEffectsManager {
 
     // Add color stops
     for (let i = 0; i < colors.length; i++) {
-      gradient.addColorStop(i / (colors.length - 1), colors[i]);
+      gradient.addColorStop(i / (colors.length - 1), colors[i]!);
     }
 
     context.fillStyle = gradient;

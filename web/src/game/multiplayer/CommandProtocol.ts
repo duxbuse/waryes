@@ -128,9 +128,9 @@ export function createQueueReinforcementCommand(
     playerId,
     unitIds: [entryPointId], // Use unitIds array to store entry point ID
     unitType,
-    targetX,
-    targetZ,
-    moveType: moveType || undefined,
+    ...(targetX !== undefined ? { targetX } : {}),
+    ...(targetZ !== undefined ? { targetZ } : {}),
+    ...(moveType ? { moveType } : {}),
   };
 }
 

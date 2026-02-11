@@ -979,7 +979,7 @@ export class DeploymentManager {
       // Find next undeployed unit of the same type
       const unitTypeId = du.unitData.id;
       const nextUnitIndex = this.deployableUnits.findIndex(
-        d => d.unitData.id === unitTypeId && !d.deployed
+        d => d.unitData.id === unitTypeId && d.deployedCount < d.totalQuantity
       );
 
       if (nextUnitIndex !== -1) {
@@ -1009,9 +1009,6 @@ export class DeploymentManager {
   private processQueueReinforcementLocal(du: DeployableUnit, entryPointId: string): void {
     // Deduct credits
     this.credits -= du.unitData.cost;
-
-    // Mark as deployed
-    du.deployed = true;
 
     // Increment deployment count
     du.deployedCount++;

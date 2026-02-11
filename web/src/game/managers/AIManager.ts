@@ -45,14 +45,14 @@
 import * as THREE from 'three';
 import { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
-import { UnitCommand } from '../units/Unit';
 import type { CaptureZone } from '../../data/types';
 import { VectorPool } from '../utils/VectorPool';
 import { gameRNG } from '../utils/DeterministicRNG';
+import { getUnitById, getWeaponById } from '../../data/factions';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
-type AIBehavior = 'idle' | 'attacking' | 'moving' | 'capturing' | 'defending' | 'retreating' | 'supporting';
+type AIBehavior = 'idle' | 'attacking' | 'moving' | 'capturing' | 'defending' | 'retreating' | 'supporting' | 'clearing';
 
 interface AIUnitState {
   behavior: AIBehavior;
@@ -119,6 +119,13 @@ interface GroupComposition {
   antiInfantryCapability: number; // Units good against soft targets
 }
 
+interface AITeamReinforcementState {
+  team: 'player' | 'enemy';
+  initialUnitCount: number;
+  deckUnitTypes: string[];      // From deck data
+  availableUnitTypes: string[]; // Merged deck + deployed types
+}
+
 export class AIManager {
   private readonly game: Game;
   private readonly aiStates: Map<string, AIUnitState> = new Map();
@@ -136,7 +143,6 @@ export class AIManager {
 
   // Strategic parameters
   private readonly engageRange = 80;
-  private readonly retreatHealthThreshold = 0.25; // Base threshold (medium/hard)
   private readonly smokeCooldown = 15; // seconds between smoke deployments
   private readonly damageThresholdForSmoke = 0.15; // 15% health lost triggers smoke
   private readonly suppressionThresholdForRetreat = 70; // High suppression triggers retreat
@@ -144,7 +150,6 @@ export class AIManager {
   private readonly flankWaypointDistance = 60; // Distance of waypoint from unit's start position (for curved path)
 
   // Hard difficulty tactical parameters (more aggressive, better coordination)
-  private readonly hardDifficultyAggressionBonus = 1.5; // 50% more aggressive on Hard
   private readonly hardDifficultyFlankersPerOpportunity = 3; // Assign 3 flankers instead of 2
   private readonly hardDifficultyFrontalUnits = 6; // Assign 6 frontal units instead of 4
   private readonly hardDifficultyEngageRange = 100; // Longer engagement range (vs 80 on Easy/Medium)
@@ -163,6 +168,7 @@ export class AIManager {
   private readonly flankingUpdateInterval = 20.0; // Update flanking opportunities every 20 seconds (expensive operation)
   private zoneAssessments: ZoneAssessment[] = [];
   private flankingOpportunities: FlankingOpportunity[] = [];
+  private zoneCoverPositions: Map<string, THREE.Vector3> = new Map();
 
   // OPTIMIZATION: Stagger AI updates across frames
   private updateFrameCounter = 0;
@@ -183,6 +189,11 @@ export class AIManager {
   private cachedFriendlyUnits: readonly Unit[] = [];
   private cachedEnemyUnits: readonly Unit[] = [];
 
+  // Reinforcement system (per-team: enemy group and ally group)
+  private lastReinforcementCheck = 0;
+  private readonly reinforcementCheckInterval = 10.0; // Check every 10 seconds
+  private reinforcementState: AITeamReinforcementState[] = [];
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -191,15 +202,37 @@ export class AIManager {
     this.difficulty = difficulty;
     this.aiStates.clear();
     this.zoneAssessments = [];
+    this.zoneCoverPositions.clear();
     this.lastStrategicUpdate = 0;
     this.cachedCpuUnits = [];
     this.lastCpuUnitsCacheUpdate = 0;
     this.cachedFriendlyUnits = [];
     this.cachedEnemyUnits = [];
+    this.lastReinforcementCheck = 0;
+    this.reinforcementState = [];
   }
 
   setDifficulty(difficulty: AIDifficulty): void {
     this.difficulty = difficulty;
+  }
+
+  /**
+   * Set the full roster of unit types available to the AI from its deck(s).
+   * Called from Game.ts after deploying AI units so the AI can reinforce
+   * with any unit in the deck, not just those initially deployed.
+   */
+  setDeckData(team: 'player' | 'enemy', unitTypeIds: string[]): void {
+    // Deduplicate
+    const deduped = [...new Set(unitTypeIds)];
+
+    // Find or create state for this team
+    let state = this.reinforcementState.find(s => s.team === team);
+    if (!state) {
+      state = { team, initialUnitCount: 0, deckUnitTypes: [], availableUnitTypes: [] };
+      this.reinforcementState.push(state);
+    }
+    state.deckUnitTypes = deduped;
+    console.log(`[AIManager] Deck data set for ${team}: ${deduped.length} unique unit types available for reinforcement`);
   }
 
   /**
@@ -242,7 +275,7 @@ export class AIManager {
       totalHealthPercent += unit.health / unit.maxHealth;
       composition.totalStrength += unit.health;
 
-      const category = unit.unitData.category;
+      const category = unit.category;
 
       // Count by category
       composition.categoryCounts[category] = (composition.categoryCounts[category] ?? 0) + 1;
@@ -260,8 +293,8 @@ export class AIManager {
       if (category === 'HEL' || category === 'AIR') composition.hasAir = true;
 
       // Analyze weapons for capabilities
-      for (const weaponSlot of unit.unitData.weapons) {
-        const weaponData = this.game.getWeaponById(weaponSlot.weaponId);
+      for (const weaponSlot of unit.getWeapons()) {
+        const weaponData = getWeaponById(weaponSlot.weaponId);
         if (!weaponData) continue;
 
         // Track maximum weapon range
@@ -361,7 +394,43 @@ export class AIManager {
       if (staggerOffset > decisionInterval) staggerOffset = 0; // Wrap around
     }
 
+    // Record initial unit counts and available types for reinforcement decisions (per-team)
+    // Enemy team
+    const enemyUnits = this.game.unitManager.getAllUnits('enemy');
+    if (enemyUnits.length > 0) {
+      let enemyState = this.reinforcementState.find(s => s.team === 'enemy');
+      if (!enemyState) {
+        enemyState = { team: 'enemy', initialUnitCount: 0, deckUnitTypes: [], availableUnitTypes: [] };
+        this.reinforcementState.push(enemyState);
+      }
+      enemyState.initialUnitCount = enemyUnits.length;
+      const enemyTypeSet = new Set<string>(enemyState.deckUnitTypes);
+      for (const unit of enemyUnits) {
+        enemyTypeSet.add(unit.unitDataId);
+      }
+      enemyState.availableUnitTypes = Array.from(enemyTypeSet);
+    }
+
+    // Ally team (CPU units on player team with ownerId !== 'player')
+    const allyUnits = this.game.unitManager.getAllUnits('player').filter(u => u.ownerId !== 'player');
+    if (allyUnits.length > 0) {
+      let allyState = this.reinforcementState.find(s => s.team === 'player');
+      if (!allyState) {
+        allyState = { team: 'player', initialUnitCount: 0, deckUnitTypes: [], availableUnitTypes: [] };
+        this.reinforcementState.push(allyState);
+      }
+      allyState.initialUnitCount = allyUnits.length;
+      const allyTypeSet = new Set<string>(allyState.deckUnitTypes);
+      for (const unit of allyUnits) {
+        allyTypeSet.add(unit.unitDataId);
+      }
+      allyState.availableUnitTypes = Array.from(allyTypeSet);
+    }
+
     console.log(`[AIManager] Initialized ${this.cachedCpuUnits.length} AI units with initial orders`);
+    for (const rs of this.reinforcementState) {
+      console.log(`[AIManager]   ${rs.team}: initial=${rs.initialUnitCount}, reinforcement types=${rs.availableUnitTypes.length}`);
+    }
   }
 
   /**
@@ -404,6 +473,13 @@ export class AIManager {
         }
       }
       this.lastFlankingUpdate = currentTime;
+    }
+
+    // Check if AI should call reinforcements
+    if (currentTime - this.lastReinforcementCheck >= this.reinforcementCheckInterval) {
+      console.log(`[AIManager] Reinforcement check triggered (${this.reinforcementState.length} team states)`);
+      this.checkReinforcements();
+      this.lastReinforcementCheck = currentTime;
     }
 
     // OPTIMIZATION: Stagger AI updates - only process subset of units per frame
@@ -588,7 +664,7 @@ export class AIManager {
    * Update flanking opportunities for fast units
    * Identifies enemy clusters that can be flanked and assigns fast units to flank them
    */
-  private updateFlankingOpportunities(aiTeam: number): void {
+  private updateFlankingOpportunities(aiTeam: string): void {
     // Clear previous assignments
     this.flankingOpportunities = [];
 
@@ -801,12 +877,13 @@ export class AIManager {
     for (const assessment of contestedZones) {
       if (availableUnits.length === 0) break;
 
-      // 2-4 units for contested zones depending on situation
+      // 2-5 units for contested zones depending on situation
       let unitsNeeded = assessment.needsCapture ? 3 : 2;
       if (assessment.enemyPresence > 0) {
-        unitsNeeded = Math.max(unitsNeeded, Math.ceil(assessment.enemyPresence * 1.2));
+        // Commit extra force to contested zones for active clearing
+        unitsNeeded = Math.max(unitsNeeded, Math.ceil(assessment.enemyPresence * 1.5));
       }
-      unitsNeeded = Math.min(unitsNeeded, 4); // Cap at 4 units per contested zone
+      unitsNeeded = Math.min(unitsNeeded, 5); // Cap at 5 units per contested zone
 
       const selectedUnits = this.selectCombinedArmsGroup(availableUnits, assessment, unitsNeeded);
 
@@ -867,6 +944,57 @@ export class AIManager {
   }
 
   /**
+   * Find a position with cover (heavy or full) within a capture zone.
+   * Results are cached per zone since terrain doesn't change during a match.
+   * Falls back to zone center if no covered position is found.
+   */
+  private findCoveredPositionInZone(zone: CaptureZone): THREE.Vector3 {
+    // Check cache first
+    const cached = this.zoneCoverPositions.get(zone.id);
+    if (cached) return cached;
+
+    const halfW = zone.width / 2;
+    const halfH = zone.height / 2;
+    const step = 5; // Sample every 5 meters
+
+    let bestX = zone.x;
+    let bestZ = zone.z;
+    let bestScore = -1;
+
+    for (let dx = -halfW; dx <= halfW; dx += step) {
+      for (let dz = -halfH; dz <= halfH; dz += step) {
+        const sx = zone.x + dx;
+        const sz = zone.z + dz;
+        const terrain = this.game.getTerrainAt(sx, sz);
+        if (!terrain) continue;
+
+        const cover = terrain.cover;
+        if (cover !== 'heavy' && cover !== 'full') continue;
+
+        // Prefer positions closer to zone center (harder to shoot from outside)
+        const distFromCenter = Math.abs(dx) + Math.abs(dz);
+        const maxDist = halfW + halfH;
+        const centralityScore = maxDist > 0 ? 1 - distFromCenter / maxDist : 1;
+
+        // Full cover slightly preferred over heavy
+        const coverScore = cover === 'full' ? 1.2 : 1.0;
+        const score = centralityScore * coverScore;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestX = sx;
+          bestZ = sz;
+        }
+      }
+    }
+
+    const y = this.game.getElevationAt(bestX, bestZ);
+    const result = new THREE.Vector3(bestX, y, bestZ);
+    this.zoneCoverPositions.set(zone.id, result);
+    return result;
+  }
+
+  /**
    * Allocate units to coordinated flanking maneuvers
    * Assigns fast units to flank and slow units to frontal assault
    * Removes assigned units from the availableUnits array
@@ -880,13 +1008,13 @@ export class AIManager {
 
     // Get fast units from available units (speed > 15, REC or HEL categories)
     const fastUnits = availableUnits.filter(u =>
-      (u.unitData.category === 'REC' || u.unitData.category === 'HEL') &&
-      u.unitData.speed > this.flankingSpeed
+      (u.category === 'REC' || u.category === 'HEL') &&
+      u.speed > this.flankingSpeed
     );
 
     // Get slow units for frontal assault (INF, TNK, ART)
     const slowUnits = availableUnits.filter(u =>
-      (u.unitData.category === 'INF' || u.unitData.category === 'TNK' || u.unitData.category === 'ART')
+      (u.category === 'INF' || u.category === 'TNK' || u.category === 'ART')
     );
 
     if (fastUnits.length === 0) return; // Need flankers for coordination
@@ -993,7 +1121,7 @@ export class AIManager {
     const unitsByCategory: Record<string, Unit[]> = {};
 
     for (const unit of availableUnits) {
-      const category = unit.unitData.category;
+      const category = unit.category;
       if (!unitsByCategory[category]) {
         unitsByCategory[category] = [];
       }
@@ -1204,19 +1332,25 @@ export class AIManager {
         const zoneRadiusEstimate = Math.max(zone.zone.width, zone.zone.height) / 2;
 
         if (distToZone <= zoneRadiusEstimate + 5) {
-          // At the zone - defend or capture
-          const bestTarget = this.selectBestTarget(unit, this.engageRange);
-
-          if (bestTarget) {
-            this.orderAttack(unit, state, bestTarget);
+          // At the zone
+          if (zone.isContested) {
+            // Contested zone: actively hunt enemies within it
+            this.executeZoneClearing(unit, state, zone);
           } else {
-            // Hold position in zone
-            state.behavior = zone.needsDefense ? 'defending' : 'capturing';
-            state.targetZone = zone.zone;
+            // Uncontested: defend or capture from cover
+            const bestTarget = this.selectBestTarget(unit, this.engageRange);
+
+            if (bestTarget) {
+              this.orderAttack(unit, state, bestTarget);
+            } else {
+              state.behavior = zone.needsDefense ? 'defending' : 'capturing';
+              state.targetZone = zone.zone;
+            }
           }
         } else {
-          // Move to zone
-          this.orderMove(unit, state, zonePos);
+          // Move to zone - use covered position instead of zone center
+          const coveredPos = this.findCoveredPositionInZone(zone.zone);
+          this.orderMove(unit, state, coveredPos);
           state.targetZone = zone.zone;
         }
 
@@ -1311,7 +1445,7 @@ export class AIManager {
    * AIR (aircraft) = 20
    */
   private getUnitCategoryValue(unit: Unit): number {
-    const category = unit.unitData?.category ?? 'INF';
+    const category = unit.category;
 
     const categoryValues: Record<string, number> = {
       'LOG': 100, // Commanders - highest priority
@@ -1499,39 +1633,6 @@ export class AIManager {
     return nearest;
   }
 
-  private findNearestEnemyInRange(unit: Unit, range: number): Unit | null {
-    // Use spatial query limited to the actual range for efficiency
-    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
-    const enemyUnits = this.game.unitManager.getUnitsInRadius(
-      unit.position,
-      range,
-      enemyTeam
-    );
-
-    let nearest: Unit | null = null;
-    let nearestDist = range;
-
-    for (const enemy of enemyUnits) {
-      if (enemy.health <= 0) continue;
-
-      // On easy difficulty, AI sees all units (helps new players)
-      // On medium/hard difficulty, AI only sees units revealed by fog of war
-      if (this.difficulty !== 'easy' && this.game.fogOfWarManager && this.game.fogOfWarManager.isEnabled()) {
-        if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) {
-          continue; // Skip invisible enemies
-        }
-      }
-
-      const dist = unit.position.distanceTo(enemy.position);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = enemy;
-      }
-    }
-
-    return nearest;
-  }
-
   private findStrategicTarget(unit: Unit, state: AIUnitState): THREE.Vector3 | null {
     // STRATEGIC: Check if unit completed backfield objective and should move to frontline
     if (state.targetZone) {
@@ -1582,16 +1683,14 @@ export class AIManager {
         // If we found a frontline zone, reassign to it
         if (bestFrontlineZone) {
           state.targetZone = bestFrontlineZone;
-          const zoneY = this.game.getElevationAt(bestFrontlineZone.x, bestFrontlineZone.z);
-          return new THREE.Vector3(bestFrontlineZone.x, zoneY, bestFrontlineZone.z);
+          return this.findCoveredPositionInZone(bestFrontlineZone).clone();
         }
 
         // No frontline zones found, keep current zone (defend it)
       }
 
-      // Still moving to assigned zone or defending it
-      const zoneY = this.game.getElevationAt(state.targetZone.x, state.targetZone.z);
-      return new THREE.Vector3(state.targetZone.x, zoneY, state.targetZone.z);
+      // Still moving to assigned zone or defending it - use covered position
+      return this.findCoveredPositionInZone(state.targetZone).clone();
     }
 
     // Find the best zone to move toward
@@ -1867,7 +1966,7 @@ export class AIManager {
    * Infantry leads, tanks follow, artillery stays at range
    */
   private calculateRoleBasedPosition(unit: Unit, objectivePosition: THREE.Vector3): THREE.Vector3 {
-    const category = unit.unitData.category;
+    const category = unit.category;
 
     // Infantry: Front line (use objective position directly)
     if (category === 'INF') {
@@ -1924,12 +2023,7 @@ export class AIManager {
 
     // PERFORMANCE: Use simple direct movement without pathfinding for AI
     // Set up direct movement (straight line to target)
-    unit.commandQueue = [];
-    unit.currentCommand = { type: UnitCommand.Move, target: adjustedPosition.clone() };
-    unit.waypoints = [adjustedPosition.clone()]; // Direct path to target
-    unit.currentWaypointIndex = 0;
-    unit.targetPosition = adjustedPosition.clone();
-    unit.stuckTimer = 0;
+    unit.setDirectMovement(adjustedPosition);
 
     // Skip pathfinding and path visualization for AI (performance)
     // Units will navigate using separation/avoidance
@@ -2038,6 +2132,47 @@ export class AIManager {
   }
 
   /**
+   * Actively hunt enemy units inside a contested zone to clear it
+   */
+  private executeZoneClearing(unit: Unit, state: AIUnitState, zone: ZoneAssessment): void {
+    const enemyTeam = unit.team === 'enemy' ? 'player' : 'enemy';
+    const zonePos = VectorPool.acquire().set(zone.zone.x, 0, zone.zone.z);
+    const zoneRadius = Math.max(zone.zone.width, zone.zone.height) / 2;
+
+    const enemiesInZone = this.game.unitManager.getUnitsInRadius(zonePos, zoneRadius + 10, enemyTeam);
+    VectorPool.release(zonePos);
+
+    // Filter to alive enemies visible to AI
+    let targetEnemy: Unit | null = null;
+    for (const enemy of enemiesInZone) {
+      if (enemy.health <= 0) continue;
+      if (this.difficulty !== 'easy' && this.game.fogOfWarManager?.isEnabled()) {
+        if (!this.game.fogOfWarManager.isUnitVisibleToTeam(enemy, unit.team)) continue;
+      }
+      // Pick best target among zone enemies
+      if (!targetEnemy) {
+        targetEnemy = enemy;
+      } else {
+        const currentDist = unit.position.distanceTo(targetEnemy.position);
+        const newDist = unit.position.distanceTo(enemy.position);
+        if (newDist < currentDist) targetEnemy = enemy;
+      }
+    }
+
+    if (targetEnemy) {
+      state.behavior = 'clearing';
+      state.targetZone = zone.zone;
+      this.orderAttack(unit, state, targetEnemy);
+    } else {
+      // Zone is clear of enemies - switch to capturing from cover
+      state.behavior = 'capturing';
+      state.targetZone = zone.zone;
+      const coveredPos = this.findCoveredPositionInZone(zone.zone);
+      this.orderMove(unit, state, coveredPos);
+    }
+  }
+
+  /**
    * Execute the current behavior (called every frame)
    */
   private executeBehavior(unit: Unit, state: AIUnitState, _dt: number): void {
@@ -2065,6 +2200,15 @@ export class AIManager {
       case 'defending':
         // Stay in zone, look for threats
         // Decision making will handle combat
+        break;
+
+      case 'clearing':
+        // Actively hunting enemies in a contested zone
+        // If target dies or leaves, re-scan on next decision cycle
+        if (state.targetUnit && state.targetUnit.health <= 0) {
+          state.behavior = 'idle';
+          state.targetUnit = null;
+        }
         break;
 
       case 'retreating':
@@ -2211,8 +2355,8 @@ export class AIManager {
     const fastUnits: Unit[] = [];
 
     for (const unit of friendlyUnits) {
-      const category = unit.unitData.category;
-      const speed = unit.unitData.speed;
+      const category = unit.category;
+      const speed = unit.speed;
 
       // REC and HEL units are fast and suitable for flanking
       // Must have speed > 15 to be effective flankers
@@ -2228,7 +2372,7 @@ export class AIManager {
    * Identify flanking opportunities for AI units
    * Returns array of flanking opportunities with target clusters and flank positions
    */
-  identifyFlankingOpportunities(aiTeam: number): Array<{
+  identifyFlankingOpportunities(aiTeam: string): Array<{
     cluster: Unit[];
     flankPositions: {
       left: THREE.Vector3;
@@ -2252,7 +2396,7 @@ export class AIManager {
     }> = [];
 
     // Get friendly and enemy units
-    const friendlyUnits = this.game.unitManager.getAllUnits(aiTeam);
+    const friendlyUnits = this.game.unitManager.getAllUnits(aiTeam as 'player' | 'enemy');
     const enemyUnits = this.game.unitManager
       .getAllUnits()
       .filter(u => u.team !== aiTeam && u.health > 0);
@@ -2332,11 +2476,236 @@ export class AIManager {
   /**
    * Clear all AI state
    */
+  /**
+   * Check if AI should call reinforcements and queue them.
+   * Uses battlefield analysis to select strategically valuable units.
+   * Buys up to 3 units per team per check to avoid accumulating unspent credits.
+   * Handles both enemy AI and allied AI reinforcements.
+   */
+  private checkReinforcements(): void {
+    if (this.reinforcementState.length === 0) {
+      console.log('[AIManager] checkReinforcements: no reinforcementState entries, skipping');
+      return;
+    }
+
+    const zones = this.game.economyManager.getCaptureZones();
+    const enemyZoneCount = zones.filter(z => z.owner === 'enemy').length;
+    const playerZoneCount = zones.filter(z => z.owner === 'player').length;
+
+    for (const teamState of this.reinforcementState) {
+      if (teamState.availableUnitTypes.length === 0) {
+        console.log(`[AIManager] checkReinforcements(${teamState.team}): no availableUnitTypes, skipping`);
+        continue;
+      }
+      if (teamState.initialUnitCount === 0) {
+        console.log(`[AIManager] checkReinforcements(${teamState.team}): initialUnitCount=0, skipping`);
+        continue;
+      }
+
+      // Count current alive AI units for this team
+      let aliveCount: number;
+      let ownComp: GroupComposition;
+      let opposingComp: GroupComposition;
+      let ownZones: number;
+      let opposingZones: number;
+
+      if (teamState.team === 'enemy') {
+        const aliveUnits = this.game.unitManager.getAllUnits('enemy').filter(u => u.health > 0) as Unit[];
+        aliveCount = aliveUnits.length;
+        ownComp = this.analyzeGroupComposition(aliveUnits);
+        opposingComp = this.analyzeGroupComposition(
+          this.game.unitManager.getAllUnits('player').filter(u => u.health > 0) as Unit[]
+        );
+        ownZones = enemyZoneCount;
+        opposingZones = playerZoneCount;
+      } else {
+        // Ally AI: only count CPU-owned units on player team
+        const allyAlive = this.game.unitManager.getAllUnits('player').filter(
+          u => u.health > 0 && u.ownerId !== 'player'
+        ) as Unit[];
+        aliveCount = allyAlive.length;
+        ownComp = this.analyzeGroupComposition(allyAlive);
+        opposingComp = this.analyzeGroupComposition(
+          this.game.unitManager.getAllUnits('enemy').filter(u => u.health > 0) as Unit[]
+        );
+        ownZones = playerZoneCount;
+        opposingZones = enemyZoneCount;
+      }
+
+      console.log(`[AIManager] checkReinforcements(${teamState.team}): alive=${aliveCount}, initial=${teamState.initialUnitCount}, availableTypes=${teamState.availableUnitTypes.length}`);
+
+      // Buy up to 3 units per team per check
+      let unitsBought = 0;
+      const maxPerCheck = 3;
+
+      while (unitsBought < maxPerCheck) {
+        // Use appropriate credit pool
+        const credits = teamState.team === 'enemy'
+          ? this.game.economyManager.getEnemyCredits()
+          : this.game.economyManager.getPlayerCredits();
+
+        console.log(`[AIManager] checkReinforcements(${teamState.team}): buy attempt #${unitsBought + 1}, credits=${credits}`);
+
+        // Score each available unit type and pick the best affordable one
+        let bestType: string | null = null;
+        let bestScore = -1;
+        let bestCost = 0;
+        let affordableCount = 0;
+
+        for (const typeId of teamState.availableUnitTypes) {
+          const unitData = getUnitById(typeId);
+          if (!unitData) continue;
+          if (unitData.cost > credits) continue;
+          affordableCount++;
+
+          const score = this.scoreReinforcementUnit(
+            unitData.category,
+            ownComp,
+            opposingComp,
+            ownZones,
+            opposingZones,
+          );
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestType = typeId;
+            bestCost = unitData.cost;
+          }
+        }
+
+        if (!bestType) {
+          console.log(`[AIManager] checkReinforcements(${teamState.team}): no affordable unit found (affordable=${affordableCount}, credits=${credits})`);
+          break;
+        }
+
+        console.log(`[AIManager] checkReinforcements(${teamState.team}): best pick=${bestType}, cost=${bestCost}, score=${bestScore.toFixed(1)}`);
+
+        // Spend credits from appropriate pool
+        const spent = teamState.team === 'enemy'
+          ? this.game.economyManager.spendEnemyCredits(bestCost)
+          : this.game.economyManager.spendCredits(bestCost);
+        if (!spent) {
+          console.log(`[AIManager] checkReinforcements(${teamState.team}): spendCredits failed for ${bestCost}`);
+          break;
+        }
+
+        // Find a strategic destination and queue the unit
+        const dest = this.pickReinforcementDestination(zones, teamState.team);
+
+        let success: boolean;
+        if (teamState.team === 'enemy') {
+          success = this.game.reinforcementManager.queueEnemyUnit(bestType, dest);
+        } else {
+          // Pick an ownerId for the ally unit (round-robin ally1, ally2, etc.)
+          const allyOwnerIds = this.cachedCpuUnits
+            .filter(u => u.team === 'player' && u.ownerId !== 'player')
+            .map(u => u.ownerId);
+          const ownerId = allyOwnerIds.length > 0 ? allyOwnerIds[unitsBought % allyOwnerIds.length]! : 'ally1';
+          success = this.game.reinforcementManager.queueAllyUnit(bestType, ownerId, dest);
+        }
+
+        if (success) {
+          const remainingCredits = teamState.team === 'enemy'
+            ? this.game.economyManager.getEnemyCredits()
+            : this.game.economyManager.getPlayerCredits();
+          console.log(`[AIManager] Queued ${teamState.team} reinforcement: ${bestType} (cost: ${bestCost}, remaining credits: ${remainingCredits}, dest: ${dest ? `(${dest.x.toFixed(0)},${dest.z.toFixed(0)})` : 'none'})`);
+
+          // Update composition counts so subsequent buys in this loop reflect what we just bought
+          const boughtData = getUnitById(bestType);
+          if (boughtData) {
+            const cat = boughtData.category;
+            ownComp.categoryCounts[cat] = (ownComp.categoryCounts[cat] ?? 0) + 1;
+            ownComp.totalUnits++;
+          }
+        } else {
+          console.log(`[AIManager] checkReinforcements(${teamState.team}): queue FAILED for ${bestType}`);
+        }
+
+        unitsBought++;
+      }
+    }
+  }
+
+  /**
+   * Score a unit type for reinforcement priority based on battlefield needs.
+   * Higher score = more needed.
+   */
+  private scoreReinforcementUnit(
+    category: string,
+    aiComp: GroupComposition,
+    playerComp: GroupComposition,
+    aiZones: number,
+    playerZones: number,
+  ): number {
+    let score = 10; // Base score
+
+    // Counter-play: If enemy has air units and AI has no AA, strongly prioritize AA
+    if (category === 'AA' && playerComp.hasAir && !aiComp.hasAA) {
+      score += 50;
+    } else if (category === 'AA' && playerComp.hasAir) {
+      score += 15; // Still valuable if enemy has air
+    }
+
+    // Counter-play: If enemy has tanks and AI lacks anti-armor, prioritize TNK
+    if (category === 'TNK' && playerComp.hasArmor && (aiComp.categoryCounts['TNK'] ?? 0) < 2) {
+      score += 30;
+    }
+
+    // Zone capture: If AI owns fewer zones and has no LOG, prioritize LOG
+    if (category === 'LOG' && (aiComp.categoryCounts['LOG'] ?? 0) === 0 && aiZones < playerZones) {
+      score += 40;
+    }
+
+    // Attrition replacement: Prioritize INF if running low
+    if (category === 'INF' && (aiComp.categoryCounts['INF'] ?? 0) < 3) {
+      score += 20;
+    }
+
+    // Artillery support: If AI has none, it's useful for fire support
+    if (category === 'ART' && (aiComp.categoryCounts['ART'] ?? 0) === 0) {
+      score += 15;
+    }
+
+    // Recon for spotting
+    if (category === 'REC' && (aiComp.categoryCounts['REC'] ?? 0) === 0) {
+      score += 10;
+    }
+
+    // Small random jitter for variety (deterministic via gameRNG)
+    score += gameRNG.next() * 10;
+
+    return score;
+  }
+
+  /**
+   * Pick a destination for a reinforcement unit based on zone priorities.
+   */
+  private pickReinforcementDestination(zones: readonly CaptureZone[], team: 'player' | 'enemy'): { x: number; z: number } | undefined {
+    let bestDest: { x: number; z: number } | undefined;
+    let bestPriority = -1;
+    const opposingTeam = team === 'enemy' ? 'player' : 'enemy';
+
+    for (const zone of zones) {
+      let priority = 0;
+      if (zone.owner === opposingTeam) priority = 3; // Highest - attack opposing zones
+      else if (zone.owner === 'neutral') priority = 2; // Capture neutral zones
+      else if (zone.owner === team) priority = 0; // Already owned
+
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestDest = { x: zone.x, z: zone.z };
+      }
+    }
+
+    return bestDest;
+  }
+
   clear(): void {
     this.aiStates.clear();
     this.zoneAssessments = [];
     this.cachedCpuUnits = [];
     this.cachedFriendlyUnits = [];
     this.cachedEnemyUnits = [];
+    this.reinforcementState = [];
   }
 }

@@ -40,6 +40,27 @@ export class PathfindingManager {
   }
 
   /**
+   * Public accessor for debug visualization of the navigation grid
+   */
+  getNavGridData(): {
+    navGrid: number[][];
+    gridWidth: number;
+    gridHeight: number;
+    gridSize: number;
+    mapWidth: number;
+    mapHeight: number;
+  } {
+    return {
+      navGrid: this.navGrid,
+      gridWidth: this.gridWidth,
+      gridHeight: this.gridHeight,
+      gridSize: this.gridSize,
+      mapWidth: this.mapWidth,
+      mapHeight: this.mapHeight,
+    };
+  }
+
+  /**
    * Reset pathfinding budget at start of each frame
    * Called by Game.fixedUpdate()
    */

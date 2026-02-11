@@ -12,13 +12,17 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { GameMap, Building, Road, RoadType, CaptureZone, DeploymentZone, ResupplyPoint, EntryPoint, Bridge, Intersection, WaterBody, BiomeType, ObjectiveType } from '../../data/types';
 import { BIOME_CONFIGS } from '../../data/biomeConfigs';
 import { ZoneFillRenderer, type FillEntry } from './ZoneFillRenderer';
+import { TerrainZoneShader } from './TerrainZoneShader';
 
 export class MapRenderer {
   private scene: THREE.Scene;
   private mapGroup: THREE.Group;
   private captureZoneMeshes: Map<string, THREE.Group> = new Map();
-  private deploymentZonesGroup: THREE.Group | null = null; // Track deployment zones for hiding
+  private captureZoneIds: string[] = []; // Ordered list for shader index lookup
   private animationTime: number = 0; // For pulsing animations
+
+  // Shader-based terrain zone tinting
+  private terrainZoneShader: TerrainZoneShader | null = null;
   private biomeGroundColor: number; // Store biome ground color for terrain rendering
   private biome: BiomeType;
 
@@ -35,11 +39,6 @@ export class MapRenderer {
     church: THREE.MeshStandardMaterial;
     factory: THREE.MeshStandardMaterial;
     roof: THREE.MeshStandardMaterial;
-    deploymentPlayer: THREE.MeshBasicMaterial;
-    deploymentEnemy: THREE.MeshBasicMaterial;
-    captureNeutral: THREE.MeshBasicMaterial;
-    capturePlayer: THREE.MeshBasicMaterial;
-    captureEnemy: THREE.MeshBasicMaterial;
   };
 
   // Road materials by type
@@ -143,26 +142,47 @@ export class MapRenderer {
           waveSpeed: { value: 0.3 },
         },
         vertexShader: `
-          varying vec2 vUv;
+          varying vec3 vWorldPos;
           varying vec3 vNormal;
           varying vec3 vViewPosition;
           uniform float time;
           uniform float waveScale;
           uniform float waveSpeed;
 
+          // Hash-based noise for vertex displacement (no periodic stripes)
+          float hash(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+          }
+
+          float valueNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(
+              mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+              mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+              u.y
+            );
+          }
+
           void main() {
-            vUv = uv;
-
-            // Apply wave animation in vertex shader
             vec3 pos = position;
-            float wave1 = sin(pos.x * 0.5 + time * waveSpeed) * waveScale;
-            float wave2 = cos(pos.z * 0.3 + time * waveSpeed * 1.3) * waveScale * 0.7;
-            pos.y += wave1 + wave2;
+            vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
+            vWorldPos = worldPosition.xyz;
 
-            // Calculate animated normal for lighting
-            float dx = cos(pos.x * 0.5 + time * waveSpeed) * 0.5 * waveScale;
-            float dz = -sin(pos.z * 0.3 + time * waveSpeed * 1.3) * 0.3 * waveScale * 0.7;
-            vNormal = normalize(vec3(-dx, 1.0, -dz));
+            // Wave displacement using hash noise instead of sin/cos
+            float wave = (valueNoise(pos.xz * 0.08 + time * waveSpeed * 0.5) - 0.5) * waveScale * 2.0;
+            pos.y += wave;
+
+            // Approximate normal from noise gradient
+            float eps = 0.5;
+            float wL = (valueNoise(vec2(pos.x - eps, pos.z) * 0.08 + time * waveSpeed * 0.5) - 0.5) * waveScale * 2.0;
+            float wR = (valueNoise(vec2(pos.x + eps, pos.z) * 0.08 + time * waveSpeed * 0.5) - 0.5) * waveScale * 2.0;
+            float wD = (valueNoise(vec2(pos.x, pos.z - eps) * 0.08 + time * waveSpeed * 0.5) - 0.5) * waveScale * 2.0;
+            float wU = (valueNoise(vec2(pos.x, pos.z + eps) * 0.08 + time * waveSpeed * 0.5) - 0.5) * waveScale * 2.0;
+            vNormal = normalize(vec3(wL - wR, 2.0 * eps, wD - wU));
 
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             vViewPosition = -mvPosition.xyz;
@@ -170,7 +190,7 @@ export class MapRenderer {
           }
         `,
         fragmentShader: `
-          varying vec2 vUv;
+          varying vec3 vWorldPos;
           varying vec3 vNormal;
           varying vec3 vViewPosition;
           uniform vec3 waterColor;
@@ -178,23 +198,51 @@ export class MapRenderer {
           uniform float opacity;
           uniform float time;
 
+          // Hash-based noise (no periodic grid artifacts)
+          float hash(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+          }
+
+          float valueNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(
+              mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+              mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+              u.y
+            );
+          }
+
+          float fbm(vec2 p) {
+            float v = 0.0;
+            v += 0.5 * valueNoise(p); p *= 2.01;
+            v += 0.25 * valueNoise(p); p *= 2.02;
+            v += 0.125 * valueNoise(p);
+            return v;
+          }
+
           void main() {
+            // Use world-space XZ for noise (works on any geometry, even without UVs)
+            vec2 wp = vWorldPos.xz * 0.05;
+
             // Calculate view direction for Fresnel effect
             vec3 viewDir = normalize(vViewPosition);
             float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
 
-            // Animated distortion for dynamic feel
-            vec2 distortedUv = vUv + vec2(
-              sin(vUv.y * 10.0 + time * 0.3) * 0.01,
-              cos(vUv.x * 10.0 + time * 0.3) * 0.01
+            // Animated distortion using world-space hash noise
+            vec2 distorted = wp + vec2(
+              fbm(wp * 1.6 + vec2(time * 0.2, 0.0)) * 0.02 - 0.01,
+              fbm(wp * 1.6 + vec2(0.0, time * 0.2) + 5.0) * 0.02 - 0.01
             );
 
             // Mix water colors based on Fresnel
             vec3 finalColor = mix(deepWaterColor, waterColor, fresnel);
 
-            // Add subtle shimmer effect
-            float shimmer = sin(distortedUv.x * 20.0 + time) *
-                           cos(distortedUv.y * 20.0 + time * 1.3) * 0.1 + 0.9;
+            // Subtle shimmer using layered noise
+            float shimmer = fbm(distorted * 2.4 + time * 0.4) * 0.15 + 0.925;
             finalColor *= shimmer;
 
             // Add reflection highlights
@@ -207,6 +255,9 @@ export class MapRenderer {
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
         stencilWrite: true,
         stencilFunc: THREE.NotEqualStencilFunc,
         stencilRef: 1,
@@ -232,46 +283,6 @@ export class MapRenderer {
         roughness: 0.8,
         metalness: 0.0,
       }),
-      deploymentPlayer: new THREE.MeshBasicMaterial({
-        color: 0x4a9eff,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.FrontSide, // Only render outside faces
-        depthWrite: false,
-        depthTest: true,
-      }),
-      deploymentEnemy: new THREE.MeshBasicMaterial({
-        color: 0xff4a4a,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.FrontSide, // Only render outside faces
-        depthWrite: false,
-        depthTest: true,
-      }),
-      captureNeutral: new THREE.MeshBasicMaterial({
-        color: 0xffff00,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        depthTest: true,
-      }),
-      capturePlayer: new THREE.MeshBasicMaterial({
-        color: 0x4a9eff,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        depthTest: true,
-      }),
-      captureEnemy: new THREE.MeshBasicMaterial({
-        color: 0xff4a4a,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        depthTest: true,
-      }),
     };
   }
 
@@ -282,94 +293,113 @@ export class MapRenderer {
    *
    * Performance: Created once and shared across all terrain chunks.
    */
+  /**
+   * Hash-based pseudo-random for value noise (no periodic artifacts like sin/cos).
+   * Returns value in [0, 1].
+   */
+  private static hashNoise(ix: number, iy: number): number {
+    // Fast integer hash (adapted from xxHash-style mixing)
+    let h = (ix * 374761393 + iy * 668265263 + 1013904223) | 0;
+    h = (h ^ (h >> 13)) * 1274126177;
+    h = h ^ (h >> 16);
+    return (h & 0x7fffffff) / 0x7fffffff;
+  }
+
+  /**
+   * Smooth value noise with bilinear interpolation.
+   * Uses hash-based randomness so it tiles without visible grid artifacts.
+   */
+  private static valueNoise(x: number, y: number): number {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+
+    // Smoothstep for C1 continuity (no visible seams at cell boundaries)
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+
+    const n00 = MapRenderer.hashNoise(ix, iy);
+    const n10 = MapRenderer.hashNoise(ix + 1, iy);
+    const n01 = MapRenderer.hashNoise(ix, iy + 1);
+    const n11 = MapRenderer.hashNoise(ix + 1, iy + 1);
+
+    const nx0 = n00 + sx * (n10 - n00);
+    const nx1 = n01 + sx * (n11 - n01);
+    return nx0 + sy * (nx1 - nx0);
+  }
+
+  /**
+   * Fractal Brownian Motion: layer multiple octaves of value noise
+   * for natural-looking terrain detail.
+   */
+  private static fbm(x: number, y: number, octaves: number): number {
+    let value = 0;
+    let amplitude = 0.5;
+    let frequency = 1;
+    for (let i = 0; i < octaves; i++) {
+      value += amplitude * MapRenderer.valueNoise(x * frequency, y * frequency);
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value;
+  }
+
   private createProceduralNormalMap(): THREE.Texture {
-    const size = 256; // Texture resolution (256x256 is good balance of quality/memory)
+    const size = 256;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      // Fallback: return empty texture if canvas context fails
       return new THREE.Texture();
     }
 
-    // Create image data for manipulation
     const imageData = ctx.createImageData(size, size);
     const data = imageData.data;
 
-    // Generate tileable Perlin-like noise for normal map
-    // Normal maps use RGB channels to encode XYZ normal directions
-    // R=X (left-right), G=Y (up-down), B=Z (depth)
-    // Center value (128, 128, 255) = flat surface pointing up
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const i = (y * size + x) * 4;
-
-        // Generate height value using simple noise
-        // Combine multiple octaves for natural-looking variation
-        const scale1 = 0.05; // Large features
-        const scale2 = 0.15; // Medium features
-        const scale3 = 0.3;  // Small details
-
-        const noise1 = Math.sin(x * scale1) * Math.cos(y * scale1);
-        const noise2 = Math.sin(x * scale2 + 10) * Math.cos(y * scale2 + 10);
-        const noise3 = Math.sin(x * scale3 + 20) * Math.cos(y * scale3 + 20);
-
-        // Combine octaves with different weights
-        const height = (noise1 * 0.5 + noise2 * 0.3 + noise3 * 0.2);
-
-        // Calculate normal from height gradient
-        // Sample neighboring pixels to get slope
-        const heightL = Math.sin((x - 1) * scale1) * Math.cos(y * scale1) * 0.5 +
-                       Math.sin((x - 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
-                       Math.sin((x - 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
-
-        const heightR = Math.sin((x + 1) * scale1) * Math.cos(y * scale1) * 0.5 +
-                       Math.sin((x + 1) * scale2 + 10) * Math.cos(y * scale2 + 10) * 0.3 +
-                       Math.sin((x + 1) * scale3 + 20) * Math.cos(y * scale3 + 20) * 0.2;
-
-        const heightD = Math.sin(x * scale1) * Math.cos((y - 1) * scale1) * 0.5 +
-                       Math.sin(x * scale2 + 10) * Math.cos((y - 1) * scale2 + 10) * 0.3 +
-                       Math.sin(x * scale3 + 20) * Math.cos((y - 1) * scale3 + 20) * 0.2;
-
-        const heightU = Math.sin(x * scale1) * Math.cos((y + 1) * scale1) * 0.5 +
-                       Math.sin(x * scale2 + 10) * Math.cos((y + 1) * scale2 + 10) * 0.3 +
-                       Math.sin(x * scale3 + 20) * Math.cos((y + 1) * scale3 + 20) * 0.2;
-
-        // Calculate gradients
-        const dx = (heightR - heightL) * 0.5;
-        const dy = (heightU - heightD) * 0.5;
-
-        // Convert to normal vector and encode in RGB
-        // Normal map convention: R=X+128, G=Y+128, B=Z (mostly 255 for upward facing)
-        const nx = dx * 255;
-        const ny = dy * 255;
-        const nz = 1.0;
-
-        // Normalize the vector
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-
-        // Encode normal in 0-255 range (128 = 0, 255 = +1, 0 = -1)
-        data[i] = ((nx / len) * 0.5 + 0.5) * 255;     // R: X component
-        data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255; // G: Y component
-        data[i + 2] = ((nz / len) * 0.5 + 0.5) * 255; // B: Z component (pointing up)
-        data[i + 3] = 255;                              // A: fully opaque
+    // Pre-compute height field using hash-based FBM noise
+    const noiseScale = 0.04; // Controls feature size
+    const heights = new Float32Array((size + 2) * (size + 2));
+    for (let y = 0; y < size + 2; y++) {
+      for (let x = 0; x < size + 2; x++) {
+        heights[y * (size + 2) + x] = MapRenderer.fbm(x * noiseScale, y * noiseScale, 4);
       }
     }
 
-    // Put image data on canvas
+    // Derive normals from height gradient (central differences)
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        const stride = size + 2;
+        // Sample with +1 offset since heights array has 1px border
+        const hL = heights[(y + 1) * stride + x]!;
+        const hR = heights[(y + 1) * stride + (x + 2)]!;
+        const hD = heights[y * stride + (x + 1)]!;
+        const hU = heights[(y + 2) * stride + (x + 1)]!;
+
+        const dx = (hR - hL) * 0.5;
+        const dy = (hU - hD) * 0.5;
+
+        const nx = -dx;
+        const ny = -dy;
+        const nz = 0.15; // Controls perturbation strength (smaller = stronger, larger = subtler)
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+        data[i]     = ((nx / len) * 0.5 + 0.5) * 255; // R: X
+        data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255; // G: Y
+        data[i + 2] = ((nz / len) * 0.5 + 0.5) * 255; // B: Z
+        data[i + 3] = 255;
+      }
+    }
+
     ctx.putImageData(imageData, 0, 0);
 
-    // Create Three.js texture from canvas
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-
-    // Set repeat to tile the normal map across terrain
-    // Larger repeat values = more tiling = finer detail
-    texture.repeat.set(16, 16); // Repeat 16x across terrain chunks
-
+    texture.repeat.set(16, 16);
     texture.needsUpdate = true;
 
     return texture;
@@ -378,6 +408,10 @@ export class MapRenderer {
   render(map: GameMap): void {
     // Clear existing map
     this.clear();
+
+    // Create terrain zone shader and apply to ground material before rendering terrain
+    this.terrainZoneShader = new TerrainZoneShader();
+    this.terrainZoneShader.applyToMaterial(this.materials.ground);
 
     // Render terrain
     this.renderTerrain(map);
@@ -427,11 +461,18 @@ export class MapRenderer {
 
     this.mapGroup.clear();
     this.captureZoneMeshes.clear();
+    this.captureZoneIds = [];
 
     // Clear zone fill renderer
     if (this.zoneFillRenderer) {
       this.zoneFillRenderer.dispose();
       this.zoneFillRenderer = null;
+    }
+
+    // Clear terrain zone shader
+    if (this.terrainZoneShader) {
+      this.terrainZoneShader.dispose();
+      this.terrainZoneShader = null;
     }
   }
 
@@ -589,53 +630,9 @@ export class MapRenderer {
     this.renderTerrainOverlays(map);
   }
 
-  private renderTerrainOverlays(map: GameMap): void {
-    const cols = map.terrain[0]?.length ?? 0;
-    const rows = map.terrain.length;
-
-    // Calculate actual cell size from map dimensions and grid size
-    const cellSizeX = map.width / cols;
-    const cellSizeZ = map.height / rows;
-    const cellSize = Math.max(cellSizeX, cellSizeZ);
-
-    // Adaptive overlay spacing for large maps (reduce geometry count)
-    const mapSize = Math.max(map.width, map.height);
-    const overlayStep = mapSize > 5000 ? 4 : mapSize > 1000 ? 2 : 1;
-    const overlayCellSize = cellSize * overlayStep;
-
-    // Collect geometries for merging (much more efficient than individual meshes)
-    const waterGeometries: THREE.BufferGeometry[] = [];
-
-    for (let z = 0; z < rows; z += overlayStep) {
-      for (let x = 0; x < cols; x += overlayStep) {
-        const cell = map.terrain[z]![x]!;
-        const worldX = x * cellSize - map.width / 2 + overlayCellSize / 2;
-        const worldZ = z * cellSize - map.height / 2 + overlayCellSize / 2;
-
-        if (cell.type === 'water') {
-          // Only render lakes/ponds from terrain cells
-          // Rivers will be rendered separately as smooth strips
-          const geo = new THREE.PlaneGeometry(overlayCellSize, overlayCellSize);
-          geo.rotateX(-Math.PI / 2);
-          // Position water elevated above terrain for visibility
-          geo.translate(worldX, cell.elevation + 1.2, worldZ);
-          waterGeometries.push(geo);
-        }
-      }
-    }
-
-    // Merge and render water as single mesh
-    if (waterGeometries.length > 0) {
-      const mergedWater = mergeGeometries(waterGeometries, false);
-      if (mergedWater) {
-        const waterMesh = new THREE.Mesh(mergedWater, this.materials.water);
-        waterMesh.name = 'water';
-        waterMesh.renderOrder = 0; // Lakes render first
-        this.mapGroup.add(waterMesh);
-      }
-      // Dispose individual geometries after merging
-      waterGeometries.forEach(geo => geo.dispose());
-    }
+  private renderTerrainOverlays(_map: GameMap): void {
+    // Water is now rendered entirely by renderWaterBodies() as smooth geometry.
+    // The old cell-based water overlay created blocky grid artifacts.
   }
 
   /**
@@ -856,7 +853,10 @@ export class MapRenderer {
     const last = smoothedPoints[smoothedPoints.length - 1]!;
     densePoints.push({ x: last.x, z: last.z });
 
-    // 3. Generate geometry with averaged normals
+    // 3. Generate geometry with averaged normals and width subdivisions
+    //    Multiple vertices across the width prevent visible segment boundaries.
+    const WIDTH_SEGMENTS = 4; // Subdivisions across width (creates WIDTH_SEGMENTS+1 verts per row)
+    const vertsPerRow = WIDTH_SEGMENTS + 1;
     const vertices: number[] = [];
     const indices: number[] = [];
 
@@ -893,54 +893,50 @@ export class MapRenderer {
         }
       }
 
-      // Generate left and right vertices with width tapering for lake connections
+      // Generate vertices across the width with widening for lake connections
       let effectiveHalfWidth = halfWidth;
 
-      // Check if this river connects to a lake and taper width near the end
+      // Check if this river connects to a lake and WIDEN near the end (river mouth)
       const connectsToLake = (river as any).connectsToLake === true;
       if (connectsToLake) {
-        // Calculate distance from end of river
         const totalPoints = densePoints.length;
         const pointsFromEnd = totalPoints - 1 - i;
+        const widenDistance = 40;
+        const widenPoints = Math.ceil(widenDistance / maxSegmentLength);
 
-        // Taper over the last 30m (approximately 6 points at 5m spacing)
-        const taperDistance = 30; // meters
-        const taperPoints = Math.ceil(taperDistance / maxSegmentLength);
-
-        if (pointsFromEnd < taperPoints) {
-          // Calculate taper factor (1.0 at start of taper, 0.0 at end)
-          const taperFactor = pointsFromEnd / taperPoints;
-          // Use smooth cubic easing for natural taper
-          const smoothTaper = taperFactor * taperFactor * (3 - 2 * taperFactor);
-          effectiveHalfWidth = halfWidth * smoothTaper;
+        if (pointsFromEnd < widenPoints) {
+          const t = 1 - (pointsFromEnd / widenPoints); // 0 at start of widening, 1 at lake
+          const smoothT = t * t * (3 - 2 * t);
+          // Widen to 2.5x at the lake connection for a natural river mouth
+          effectiveHalfWidth = halfWidth * (1 + 1.5 * smoothT);
         }
       }
 
-      const leftX = p.x + perpX * effectiveHalfWidth;
-      const leftZ = p.z + perpZ * effectiveHalfWidth;
-      const rightX = p.x - perpX * effectiveHalfWidth;
-      const rightZ = p.z - perpZ * effectiveHalfWidth;
-
       const centerElev = getElevationAt(p.x, p.z);
-
-      // Check lake connection
       const nearLake = isNearLake(p.x, p.z);
       const heightBoost = nearLake ? 0.05 : 0;
 
-      // Use center elevation only for water height to ensure longitudinal smoothness
-      // Banks can be noisy in mountains, but center path should be smooth after generation
-      const waterY = centerElev + waterHeight + heightBoost;
-      const leftY = waterY;
-      const rightY = waterY;
+      // Emit WIDTH_SEGMENTS+1 vertices across the width (left to right)
+      // Each vertex samples its own terrain elevation to stay above the bank slope
+      for (let w = 0; w <= WIDTH_SEGMENTS; w++) {
+        const t = w / WIDTH_SEGMENTS;                // 0 = left edge, 1 = right edge
+        const offset = (1 - 2 * t) * effectiveHalfWidth; // +halfWidth to -halfWidth
+        const vx = p.x + perpX * offset;
+        const vz = p.z + perpZ * offset;
+        const vertexElev = getElevationAt(vx, vz);
+        // Use the higher of center or local elevation so water always sits above terrain
+        const waterY = Math.max(centerElev, vertexElev) + waterHeight + heightBoost;
+        vertices.push(vx, waterY, vz);
+      }
 
-      vertices.push(leftX, leftY, leftZ);
-      vertices.push(rightX, rightY, rightZ);
-
-      // Add indices
+      // Build triangle strip indices between this row and the next
       if (i < densePoints.length - 1) {
-        const baseIdx = i * 2;
-        indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
-        indices.push(baseIdx + 1, baseIdx + 3, baseIdx + 2);
+        const row0 = i * vertsPerRow;
+        const row1 = (i + 1) * vertsPerRow;
+        for (let w = 0; w < WIDTH_SEGMENTS; w++) {
+          indices.push(row0 + w, row0 + w + 1, row1 + w);
+          indices.push(row0 + w + 1, row1 + w + 1, row1 + w);
+        }
       }
     }
 
@@ -2440,194 +2436,19 @@ export class MapRenderer {
     return group;
   }
 
-  private renderDeploymentZones(zones: DeploymentZone[], map: GameMap): void {
-    const zoneGroup = new THREE.Group();
-    zoneGroup.name = 'deployment-zones';
-
-    // Helper to get elevation at world position
-    const rows = map.terrain.length;
-    const cols = map.terrain[0]?.length ?? 0;
-    const cellSizeX = map.width / cols;
-    const cellSizeZ = map.height / rows;
-
-    const getElevationAt = (worldX: number, worldZ: number): number => {
-      const gx = (worldX + map.width / 2) / cellSizeX;
-      const gz = (worldZ + map.height / 2) / cellSizeZ;
-      const x0 = Math.floor(gx);
-      const z0 = Math.floor(gz);
-      const cx0 = Math.max(0, Math.min(cols - 1, x0));
-      const cx1 = Math.max(0, Math.min(cols - 1, x0 + 1));
-      const cz0 = Math.max(0, Math.min(rows - 1, z0));
-      const cz1 = Math.max(0, Math.min(rows - 1, z0 + 1));
-      const e00 = map.terrain[cz0]?.[cx0]?.elevation ?? 0;
-      const e10 = map.terrain[cz0]?.[cx1]?.elevation ?? 0;
-      const e01 = map.terrain[cz1]?.[cx0]?.elevation ?? 0;
-      const e11 = map.terrain[cz1]?.[cx1]?.elevation ?? 0;
-      const fx = gx - x0;
-      const fz = gz - z0;
-      const e0 = e00 + (e10 - e00) * fx;
-      const e1 = e01 + (e11 - e01) * fx;
-      return e0 + (e1 - e0) * fz;
-    };
-
-    // Update materials for flat overlay rendering
-    if (this.materials.deploymentPlayer.side !== THREE.DoubleSide) {
-      this.materials.deploymentPlayer.side = THREE.DoubleSide;
-      this.materials.deploymentPlayer.depthTest = true;
-      this.materials.deploymentPlayer.depthWrite = false;
-      this.materials.deploymentPlayer.polygonOffset = true;
-      this.materials.deploymentPlayer.polygonOffsetFactor = -1;
-      this.materials.deploymentPlayer.polygonOffsetUnits = -1;
+  private renderDeploymentZones(zones: DeploymentZone[], _map: GameMap): void {
+    // Pass deployment zone data to shader for terrain-tinted rendering
+    if (this.terrainZoneShader) {
+      this.terrainZoneShader.setDeploymentZones(zones);
     }
-    if (this.materials.deploymentEnemy.side !== THREE.DoubleSide) {
-      this.materials.deploymentEnemy.side = THREE.DoubleSide;
-      this.materials.deploymentEnemy.depthTest = true;
-      this.materials.deploymentEnemy.depthWrite = false;
-      this.materials.deploymentEnemy.polygonOffset = true;
-      this.materials.deploymentEnemy.polygonOffsetFactor = -1;
-      this.materials.deploymentEnemy.polygonOffsetUnits = -1;
-    }
-
-    // Phase 4 Optimization: Collect geometries for merging
-    const playerGeometries: THREE.BufferGeometry[] = [];
-    const enemyGeometries: THREE.BufferGeometry[] = [];
-    const playerBorderPoints: THREE.Vector3[] = [];
-    const enemyBorderPoints: THREE.Vector3[] = [];
-
-    for (const zone of zones) {
-      const width = zone.maxX - zone.minX;
-      const depth = zone.maxZ - zone.minZ;
-      const centerX = (zone.minX + zone.maxX) / 2;
-      const centerZ = (zone.minZ + zone.maxZ) / 2;
-
-      // Sample terrain densely to find max elevation (don't miss peaks/hills)
-      // Sample every 5 meters to ensure we catch terrain features
-      let maxElevation = 0;
-      const sampleSpacing = 5; // meters between samples
-      const samplesX = Math.max(3, Math.ceil(width / sampleSpacing));
-      const samplesZ = Math.max(3, Math.ceil(depth / sampleSpacing));
-
-      for (let sz = 0; sz < samplesZ; sz++) {
-        for (let sx = 0; sx < samplesX; sx++) {
-          const sampleX = zone.minX + (sx / (samplesX - 1)) * width;
-          const sampleZ = zone.minZ + (sz / (samplesZ - 1)) * depth;
-          const elevation = getElevationAt(sampleX, sampleZ);
-          maxElevation = Math.max(maxElevation, elevation);
-        }
-      }
-
-      // Use simple flat plane positioned above max elevation
-      const geometry = new THREE.PlaneGeometry(width, depth);
-      geometry.rotateX(-Math.PI / 2);
-
-      // Translate geometry to world position (for merging)
-      // Position 1.0m above the highest point in the zone
-      geometry.translate(centerX, maxElevation + 1.0, centerZ);
-
-      // Collect by team
-      if (zone.team === 'player') {
-        playerGeometries.push(geometry);
-      } else {
-        enemyGeometries.push(geometry);
-      }
-
-      // Create border points (in world space) at the same height as the zone overlay
-      const borderPoints: THREE.Vector3[] = [];
-      const steps = 20; // Number of steps per side for smooth lines
-      const borderHeight = maxElevation + 1.5; // Slightly above the overlay for visibility
-
-      // Helper to add segments along a line
-      const addEdge = (x1: number, z1: number, x2: number, z2: number) => {
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const px = x1 + (x2 - x1) * t;
-          const pz = z1 + (z2 - z1) * t;
-          borderPoints.push(new THREE.Vector3(px, borderHeight, pz));
-        }
-      };
-
-      // Edges: Top, Right, Bottom, Left
-      addEdge(zone.minX, zone.minZ, zone.maxX, zone.minZ);
-      addEdge(zone.maxX, zone.minZ, zone.maxX, zone.maxZ);
-      addEdge(zone.maxX, zone.maxZ, zone.minX, zone.maxZ);
-      addEdge(zone.minX, zone.maxZ, zone.minX, zone.minZ);
-
-      // Collect border points by team
-      if (zone.team === 'player') {
-        playerBorderPoints.push(...borderPoints);
-      } else {
-        enemyBorderPoints.push(...borderPoints);
-      }
-    }
-
-    // Phase 4: Merge player zone geometries
-    if (playerGeometries.length > 0) {
-      const merged = mergeGeometries(playerGeometries, false);
-      if (merged) {
-        const mesh = new THREE.Mesh(merged, this.materials.deploymentPlayer);
-        mesh.name = 'merged-deployment-player';
-        mesh.renderOrder = 99;
-        zoneGroup.add(mesh);
-
-        // Dispose individual geometries after merging
-        playerGeometries.forEach(g => g.dispose());
-      }
-    }
-
-    // Phase 4: Merge enemy zone geometries
-    if (enemyGeometries.length > 0) {
-      const merged = mergeGeometries(enemyGeometries, false);
-      if (merged) {
-        const mesh = new THREE.Mesh(merged, this.materials.deploymentEnemy);
-        mesh.name = 'merged-deployment-enemy';
-        mesh.renderOrder = 99;
-        zoneGroup.add(mesh);
-
-        // Dispose individual geometries after merging
-        enemyGeometries.forEach(g => g.dispose());
-      }
-    }
-
-    // Phase 4: Create merged border lines
-    if (playerBorderPoints.length > 0) {
-      const borderGeometry = new THREE.BufferGeometry().setFromPoints(playerBorderPoints);
-      const borderMaterial = new THREE.LineBasicMaterial({
-        color: 0x4a9eff,
-        depthWrite: false,
-        depthTest: false,
-        linewidth: 2,
-      });
-      const border = new THREE.LineSegments(borderGeometry, borderMaterial); // Use LineSegments instead of LineLoop
-      border.name = 'merged-border-player';
-      border.renderOrder = 100;
-      zoneGroup.add(border);
-    }
-
-    if (enemyBorderPoints.length > 0) {
-      const borderGeometry = new THREE.BufferGeometry().setFromPoints(enemyBorderPoints);
-      const borderMaterial = new THREE.LineBasicMaterial({
-        color: 0xff4a4a,
-        depthWrite: false,
-        depthTest: false,
-        linewidth: 2,
-      });
-      const border = new THREE.LineSegments(borderGeometry, borderMaterial); // Use LineSegments instead of LineLoop
-      border.name = 'merged-border-enemy';
-      border.renderOrder = 100;
-      zoneGroup.add(border);
-    }
-
-    // Store reference for hiding during battle
-    this.deploymentZonesGroup = zoneGroup;
-    this.mapGroup.add(zoneGroup);
   }
 
   /**
    * Show or hide deployment zones (hide during battle phase)
    */
   setDeploymentZonesVisible(visible: boolean): void {
-    if (this.deploymentZonesGroup) {
-      this.deploymentZonesGroup.visible = visible;
+    if (this.terrainZoneShader) {
+      this.terrainZoneShader.setDeploymentVisible(visible);
     }
   }
 
@@ -2636,7 +2457,6 @@ export class MapRenderer {
     zoneGroup.name = 'capture-zones';
 
     const getElevationAt = (worldX: number, worldZ: number): number => {
-      // Re-use logic from renderTerrain for consistency
       const rows = map.terrain.length;
       const cols = map.terrain[0]?.length ?? 0;
       const gx = (worldX + map.width / 2) / (map.width / cols);
@@ -2658,8 +2478,11 @@ export class MapRenderer {
       return e0 + (e1 - e0) * fz;
     };
 
-    // Create zone fill renderer with terrain elevation sampling
-    this.zoneFillRenderer = new ZoneFillRenderer(this.mapGroup, getElevationAt);
+    // Create zone fill renderer with shader-based output
+    this.zoneFillRenderer = new ZoneFillRenderer(this.terrainZoneShader);
+
+    // Track ordered zone IDs for shader index lookup
+    this.captureZoneIds = [];
 
     for (const zone of zones) {
       const group = new THREE.Group();
@@ -2671,32 +2494,13 @@ export class MapRenderer {
 
       // Get terrain elevation at objective position
       const objElevation = getElevationAt(objX, objZ);
-      const centerElevation = getElevationAt(zone.x, zone.z);
 
-      // Zone border (rectangular outline) - stays at zone center
-      const borderGeometry = new THREE.EdgesGeometry(
-        new THREE.PlaneGeometry(zone.width, zone.height)
-      );
-      const borderMaterial = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.6,
-        depthWrite: false,
-        depthTest: false,
-      });
-      const borderMesh = new THREE.LineSegments(borderGeometry, borderMaterial);
-      borderMesh.rotation.x = -Math.PI / 2;
-      borderMesh.position.set(zone.x, centerElevation + 1.5, zone.z);
-      borderMesh.userData.isBorderRing = true;
-      borderMesh.renderOrder = 92;
-      group.add(borderMesh);
+      // Border is now rendered via TerrainZoneShader - no mesh needed
 
       // FLAG POLE (always present but small if objective is large)
-      // Place flag near the objective model
       const poleGeometry = new THREE.CylinderGeometry(0.15, 0.15, 10, 8);
       const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
       const poleMesh = new THREE.Mesh(poleGeometry, poleMaterial);
-      // Offset slightly to NOT be dead center of the building
       const poleOffsetX = zone.objectiveType ? 4 : 0;
       poleMesh.position.set(objX + poleOffsetX, objElevation + 5, objZ);
       poleMesh.castShadow = true;
@@ -2713,9 +2517,14 @@ export class MapRenderer {
       flagMesh.userData.isFlag = true;
       group.add(flagMesh);
 
+      // ZONE LABEL SPRITE - shows name and point value
+      const labelSprite = this.createZoneLabelSprite(zone.name, zone.pointsPerTick);
+      labelSprite.position.set(objX + poleOffsetX, objElevation + 20, objZ);
+      labelSprite.userData.isZoneLabel = true;
+      group.add(labelSprite);
+
       // STRATEGIC OBJECTIVE MODEL
       if (zone.objectiveType) {
-        // Pass location and map for context-aware generation (e.g., avoiding roads)
         const objectiveModel = this.createObjectiveModel(
           zone.objectiveType,
           zone.visualVariant || 0,
@@ -2728,10 +2537,16 @@ export class MapRenderer {
       }
 
       this.captureZoneMeshes.set(zone.id, group);
+      this.captureZoneIds.push(zone.id);
       zoneGroup.add(group);
 
       // Initialize zone in fill renderer
       this.zoneFillRenderer.initializeZone(zone.id, zone.x, zone.z, zone.width, zone.height);
+    }
+
+    // Pass capture zone data to shader
+    if (this.terrainZoneShader) {
+      this.terrainZoneShader.setCaptureZones(zones);
     }
 
     this.mapGroup.add(zoneGroup);
@@ -4135,6 +3950,9 @@ export class MapRenderer {
     const heightOffset = 0.6; // Height above terrain
 
     for (const entry of entryPoints) {
+      // Don't render enemy entry points - they are hidden by fog of war
+      if (entry.team === 'enemy') continue;
+
       const group = new THREE.Group();
       group.name = `entry-point-${entry.id}`;
 
@@ -4327,7 +4145,6 @@ export class MapRenderer {
     // Chunk trees for frustum culling
     // Divide map into regions so off-screen trees can be culled
     const TREE_CHUNK_SIZE = map.width / 8; // 8x8 grid of tree chunks
-    const numChunks = 8;
 
     // Group trees by chunk
     const treeChunks: Map<string, typeof treePositions> = new Map();
@@ -4348,7 +4165,7 @@ export class MapRenderer {
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
 
-    for (const [chunkKey, chunkTrees] of treeChunks.entries()) {
+    for (const [_chunkKey, chunkTrees] of treeChunks.entries()) {
       if (chunkTrees.length === 0) continue;
 
       // Create instanced meshes for this chunk
@@ -4391,47 +4208,37 @@ export class MapRenderer {
     const group = this.captureZoneMeshes.get(zoneId);
     if (!group) return;
 
-    const ringMesh = group.children[0] as THREE.Mesh; // Border ring
+    // Determine color based on owner
+    let colorHex: number;
+    switch (owner) {
+      case 'player':
+        colorHex = 0x4a9eff;
+        break;
+      case 'enemy':
+        colorHex = 0xff4a4a;
+        break;
+      default:
+        colorHex = 0xffffff;
+    }
+
+    // Update shader border color and contested state
+    if (this.terrainZoneShader) {
+      const idx = this.captureZoneIds.indexOf(zoneId);
+      if (idx >= 0) {
+        const color = new THREE.Color(colorHex);
+        this.terrainZoneShader.updateCaptureBorderColor(idx, color);
+        this.terrainZoneShader.updateCaptureContested(idx, isContested);
+      }
+    }
+
+    // Update flag color (flag is a 3D mesh, not a terrain overlay)
     const flagMesh = group.children.find(c => c.userData.isFlag) as THREE.Mesh;
-
-    // Mark border ring as contested for pulsing animation
-    if (ringMesh?.userData.isBorderRing && ringMesh.material instanceof THREE.MeshBasicMaterial) {
-      ringMesh.userData.isContested = isContested;
-
-      // Update ring color based on owner
-      let ringColor: number;
-      switch (owner) {
-        case 'player':
-          ringColor = 0x4a9eff;
-          break;
-        case 'enemy':
-          ringColor = 0xff4a4a;
-          break;
-        default:
-          ringColor = 0xffffff;
-      }
-      ringMesh.material.color.setHex(ringColor);
-
-      // Reset to normal opacity when not contested
-      if (!isContested) {
-        ringMesh.material.opacity = 0.6;
-      }
-    }
-
     if (flagMesh?.material instanceof THREE.MeshBasicMaterial) {
-      let flagColor: number;
-      switch (owner) {
-        case 'player':
-          flagColor = 0x4a9eff;
-          break;
-        case 'enemy':
-          flagColor = 0xff4a4a;
-          break;
-        default:
-          flagColor = 0xffffff;
-      }
-      flagMesh.material.color.setHex(flagColor);
+      flagMesh.material.color.setHex(colorHex);
     }
+
+    // Update zone label tint to match ownership
+    this.updateZoneLabelColor(group, colorHex);
   }
 
   /**
@@ -4456,6 +4263,73 @@ export class MapRenderer {
     return this.mapGroup;
   }
 
+  getTerrainZoneShader(): TerrainZoneShader | null {
+    return this.terrainZoneShader;
+  }
+
+  /**
+   * Create a billboard sprite label for a capture zone
+   * Shows the NATO phonetic name and point value
+   */
+  private createZoneLabelSprite(name: string, pointsPerTick: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    // Clear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw zone name (large, bold)
+    ctx.font = 'bold 42px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Dark outline for readability
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(name, 128, 42);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(name, 128, 42);
+
+    // Draw point value (smaller, below name)
+    const pointsText = pointsPerTick === 1 ? '+1 pt/tick' : `+${pointsPerTick} pts/tick`;
+    ctx.font = 'bold 28px Arial, sans-serif';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.strokeText(pointsText, 128, 90);
+    ctx.fillStyle = '#ffdd44';
+    ctx.fillText(pointsText, 128, 90);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(36, 18, 1);
+    sprite.renderOrder = 200;
+
+    return sprite;
+  }
+
+  /**
+   * Update zone label color to match ownership
+   */
+  private updateZoneLabelColor(group: THREE.Group, colorHex: number): void {
+    const labelSprite = group.children.find(c => c.userData.isZoneLabel) as THREE.Sprite | undefined;
+    if (!labelSprite) return;
+
+    const material = labelSprite.material as THREE.SpriteMaterial;
+    material.color.setHex(colorHex);
+  }
+
   /**
    * Update animations (border pulsing, etc.)
    */
@@ -4463,20 +4337,14 @@ export class MapRenderer {
     this.animationTime += dt;
 
     // Animate water shader
-    if (this.materials.water && this.materials.water.uniforms) {
-      this.materials.water.uniforms.time.value = this.animationTime;
+    if (this.materials.water && this.materials.water.uniforms && this.materials.water.uniforms['time']) {
+      this.materials.water.uniforms['time'].value = this.animationTime;
     }
 
-    // Animate border rings for contested zones
-    this.captureZoneMeshes.forEach((group) => {
-      const ringMesh = group.children.find(child => child.userData.isBorderRing) as THREE.Mesh | undefined;
-      if (ringMesh && ringMesh.userData.isContested) {
-        // Pulsing effect: oscillate opacity between 0.3 and 1.0
-        const pulseSpeed = 3; // Hz
-        const opacity = 0.5 + 0.5 * Math.sin(this.animationTime * pulseSpeed * Math.PI * 2);
-        (ringMesh.material as THREE.MeshBasicMaterial).opacity = opacity;
-      }
-    });
+    // Pass time to terrain zone shader for contested pulsing animation
+    if (this.terrainZoneShader) {
+      this.terrainZoneShader.setTime(this.animationTime);
+    }
   }
 
   dispose(): void {

@@ -387,7 +387,7 @@ export class MultiplayerBattleSync {
 
       case CommandType.QueueReinforcement:
         if (cmd.unitType && cmd.unitIds.length > 0) {
-          const entryPointId = cmd.unitIds[0];
+          const entryPointId = cmd.unitIds[0]!;
           this.game.reinforcementManager.processReinforcementCommand(
             entryPointId,
             cmd.unitType,

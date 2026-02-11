@@ -45,6 +45,7 @@ import type { PlayerSlot } from '../screens/SkirmishSetupScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
 import { BenchmarkManager } from '../game/debug/BenchmarkManager';
+import { TraversabilityDebugRenderer } from '../game/debug/TraversabilityDebugRenderer';
 import { VectorPool } from '../game/utils/VectorPool';
 import { QuaternionPool } from '../game/utils/QuaternionPool';
 import { SoundLibrary } from '../game/audio/SoundLibrary';
@@ -66,6 +67,7 @@ export class Game {
   // Debug flags
   public static verbose = false; // Enable verbose logging (AI profiling, detailed logs)
   public static showPoolStats = false; // Show object pool statistics in FPS overlay
+  public static showTraversability = false; // Show navGrid traversability overlay
   // Three.js core
   public readonly renderer: THREE.WebGLRenderer;
   public readonly scene: THREE.Scene;
@@ -104,6 +106,7 @@ export class Game {
   public fogOfWarRenderer: FogOfWarRenderer | null = null;
   public tacticalIconRenderer: TacticalIconRenderer | null = null;
   public benchmarkManager: BenchmarkManager;
+  private traversabilityRenderer: TraversabilityDebugRenderer | null = null;
 
   // Game state
   private _phase: GamePhase = GamePhase.Loading;
@@ -113,6 +116,10 @@ export class Game {
 
   // Pause menu elements
   private pauseMenu: HTMLElement | null = null;
+
+  // Debug panel
+  private debugPanel: HTMLElement | null = null;
+  private debugPanelVisible = false;
 
   // Last skirmish config (for rematch)
   private lastDeck: DeckData | null = null;
@@ -275,9 +282,9 @@ export class Game {
     this.sunLight.shadow.camera.top = 150;
     this.sunLight.shadow.camera.bottom = -150;
 
-    // Optimized shadow bias values to reduce shadow acne while maintaining quality
-    this.sunLight.shadow.bias = -0.0003;    // Slightly reduced for better edge quality
-    this.sunLight.shadow.normalBias = 0.03; // Increased for better surface handling
+    // Shadow bias values tuned to prevent shadow acne with terrain normal maps
+    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.normalBias = 0.08; // Must exceed normalScale-induced perturbation
 
     // PCF shadow radius for even softer, more realistic shadows
     this.sunLight.shadow.radius = 2.0;
@@ -399,9 +406,9 @@ export class Game {
         this.sunLight.shadow.camera.near = 10;
         this.sunLight.shadow.camera.far = Math.min(450, mapSize * 0.35);
 
-        // Adjust bias for larger areas
-        this.sunLight.shadow.bias = -0.0004;
-        this.sunLight.shadow.normalBias = 0.025;
+        // Bias tuned for terrain normal map perturbation at lower shadow resolution
+        this.sunLight.shadow.bias = -0.0008;
+        this.sunLight.shadow.normalBias = 0.1;
 
         this.sunLight.shadow.camera.updateProjectionMatrix();
       } else if (mapSize > 500) {
@@ -435,7 +442,9 @@ export class Game {
     console.log('[Game] Preloading audio files...');
     const soundManifest: Record<string, string> = {};
     for (const sound of AUDIO_MANIFEST) {
-      soundManifest[sound.id] = sound.filePath;
+      if (sound.filePath) {
+        soundManifest[sound.id] = sound.filePath;
+      }
     }
     await this.soundLibrary.preloadSounds(soundManifest);
     const cachedCount = this.soundLibrary.getCachedSoundCount();
@@ -615,6 +624,11 @@ export class Game {
       }
     }
 
+    // Update fog of war renderer during setup phase (visual overlay only, no vision recalc)
+    if (!this._isPaused && this._phase === GamePhase.Setup) {
+      this.fogOfWarRenderer?.update(dt);
+    }
+
     let t7, t8, t9, t10, t11, t12, t13, t14, t15, t16;
     if (!this._isPaused && this._phase === GamePhase.Battle) {
       t7 = performance.now();
@@ -734,6 +748,122 @@ export class Game {
     }
 
     console.log(`Game ${this._isPaused ? 'paused' : 'resumed'}`);
+  }
+
+  /**
+   * Toggle debug panel visibility (F3 key)
+   */
+  toggleDebugPanel(): void {
+    this.debugPanelVisible = !this.debugPanelVisible;
+
+    if (!this.debugPanel) {
+      this.createDebugPanel();
+    }
+
+    if (this.debugPanel) {
+      this.debugPanel.style.display = this.debugPanelVisible ? 'block' : 'none';
+    }
+  }
+
+  private createDebugPanel(): void {
+    this.debugPanel = document.createElement('div');
+    this.debugPanel.id = 'debug-panel';
+    this.debugPanel.style.cssText = `
+      position: fixed;
+      top: 5px;
+      right: 5px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px;
+      border-radius: 6px;
+      z-index: 10001;
+      min-width: 200px;
+      border: 1px solid #444;
+    `;
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight: bold; margin-bottom: 8px; color: #4a9eff; font-size: 13px;';
+    title.textContent = 'DEBUG (F3)';
+    this.debugPanel.appendChild(title);
+
+    // FOW toggle
+    const fowLabel = document.createElement('label');
+    fowLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 6px; cursor: pointer;';
+    const fowCheckbox = document.createElement('input');
+    fowCheckbox.type = 'checkbox';
+    fowCheckbox.checked = this.fogOfWarManager.isEnabled();
+    fowCheckbox.addEventListener('change', () => {
+      this.fogOfWarManager.setEnabled(fowCheckbox.checked);
+      if (this.fogOfWarRenderer) {
+        // Toggle renderer visibility
+        if (!fowCheckbox.checked) {
+          this.fogOfWarRenderer.dispose();
+          this.fogOfWarRenderer = null;
+        } else if (this.currentMap) {
+          this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+          this.fogOfWarRenderer.initialize();
+          this.fogOfWarManager.forceImmediateUpdate();
+        }
+      } else if (fowCheckbox.checked && this.currentMap) {
+        this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+        this.fogOfWarRenderer.initialize();
+        this.fogOfWarManager.forceImmediateUpdate();
+      }
+    });
+    fowLabel.appendChild(fowCheckbox);
+    fowLabel.appendChild(document.createTextNode('Fog of War'));
+    this.debugPanel.appendChild(fowLabel);
+
+    // Pool stats toggle
+    const poolLabel = document.createElement('label');
+    poolLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 6px; cursor: pointer;';
+    const poolCheckbox = document.createElement('input');
+    poolCheckbox.type = 'checkbox';
+    poolCheckbox.checked = Game.showPoolStats;
+    poolCheckbox.addEventListener('change', () => {
+      Game.showPoolStats = poolCheckbox.checked;
+    });
+    poolLabel.appendChild(poolCheckbox);
+    poolLabel.appendChild(document.createTextNode('Pool Stats'));
+    this.debugPanel.appendChild(poolLabel);
+
+    // Verbose logging toggle
+    const verboseLabel = document.createElement('label');
+    verboseLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 6px; cursor: pointer;';
+    const verboseCheckbox = document.createElement('input');
+    verboseCheckbox.type = 'checkbox';
+    verboseCheckbox.checked = Game.verbose;
+    verboseCheckbox.addEventListener('change', () => {
+      Game.verbose = verboseCheckbox.checked;
+    });
+    verboseLabel.appendChild(verboseCheckbox);
+    verboseLabel.appendChild(document.createTextNode('Verbose Logging'));
+    this.debugPanel.appendChild(verboseLabel);
+
+    // Traversability overlay toggle
+    const travLabel = document.createElement('label');
+    travLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;';
+    const travCheckbox = document.createElement('input');
+    travCheckbox.type = 'checkbox';
+    travCheckbox.checked = Game.showTraversability;
+    travCheckbox.addEventListener('change', () => {
+      Game.showTraversability = travCheckbox.checked;
+      if (travCheckbox.checked) {
+        if (!this.traversabilityRenderer) {
+          this.traversabilityRenderer = new TraversabilityDebugRenderer(this, this.scene);
+        }
+        this.traversabilityRenderer.build();
+      } else {
+        this.traversabilityRenderer?.dispose();
+      }
+    });
+    travLabel.appendChild(travCheckbox);
+    travLabel.appendChild(document.createTextNode('Traversability'));
+    this.debugPanel.appendChild(travLabel);
+
+    document.body.appendChild(this.debugPanel);
   }
 
   /**
@@ -900,6 +1030,11 @@ export class Game {
     // Render map
     if (this.mapRenderer) {
       this.mapRenderer.render(this.currentMap);
+
+      // Wire terrain zone shader to LOS preview renderer
+      if (this.losPreviewRenderer) {
+        this.losPreviewRenderer.setTerrainZoneShader(this.mapRenderer.getTerrainZoneShader());
+      }
     }
 
     // Set map for minimap
@@ -959,6 +1094,21 @@ export class Game {
     // Spawn ally CPU units (teammates that share vision with player)
     this.spawnAllyAIUnits();
 
+    // Initialize fog of war during deployment so map starts black
+    this.fogOfWarManager.initialize();
+
+    // Create fog of war renderer if it doesn't exist
+    if (!this.fogOfWarRenderer) {
+      this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+    }
+    this.fogOfWarRenderer.initialize();
+
+    // Reveal player deployment zones (not unit-based vision, just the zone rectangles)
+    const playerDeployZones = this.currentMap.deploymentZones.filter(z => z.team === 'player');
+    for (const zone of playerDeployZones) {
+      this.fogOfWarManager.revealArea(zone.minX, zone.minZ, zone.maxX, zone.maxZ, 'player');
+    }
+
     // Enter setup phase
     this.setPhase(GamePhase.Setup);
     this.screenManager.switchTo(ScreenType.Battle);
@@ -967,18 +1117,19 @@ export class Game {
   private spawnEnemyUnits(): void {
     if (!this.currentMap) return;
 
-    const enemyZone = this.currentMap.deploymentZones.find(z => z.team === 'enemy');
-    if (!enemyZone) return;
+    const enemyZones = this.currentMap.deploymentZones.filter(z => z.team === 'enemy');
+    if (enemyZones.length === 0) return;
 
     // Get enemy CPU players from team2
     const enemyCPUs = this.lastTeam2.filter(slot => slot.type === 'CPU');
 
     if (enemyCPUs.length === 0) {
       // Fallback: spawn default enemy units if no CPUs configured
+      const fallbackZone = enemyZones[0]!;
       const defaultUnits = ['vanguard_infantry', 'vanguard_infantry', 'vanguard_hunter_tank'];
       defaultUnits.forEach((unitType, i) => {
-        const x = enemyZone.minX + (enemyZone.maxX - enemyZone.minX) * (0.3 + 0.2 * i);
-        const z = (enemyZone.minZ + enemyZone.maxZ) / 2;
+        const x = fallbackZone.minX + (fallbackZone.maxX - fallbackZone.minX) * (0.3 + 0.2 * i);
+        const z = (fallbackZone.minZ + fallbackZone.maxZ) / 2;
         const y = this.getElevationAt(x, z);
         this.unitManager.spawnUnit({
           position: new THREE.Vector3(x, y, z),
@@ -990,28 +1141,44 @@ export class Game {
       return;
     }
 
-    // Each enemy CPU deploys from their deck
+    // Distribute CPUs across all available enemy deployment zones
+    // Collect all deck unit types for AIManager reinforcement pool
+    const allDeckUnitTypes: string[] = [];
+
     enemyCPUs.forEach((cpu, cpuIndex) => {
+      const zone = enemyZones[cpuIndex % enemyZones.length]!;
+      const cpusInThisZone = enemyCPUs.filter((_, i) => i % enemyZones.length === cpuIndex % enemyZones.length).length;
+      const slotInZone = Math.floor(cpuIndex / enemyZones.length);
       const deck = this.getAIDeck(cpu.deckId);
       const budget = this.getBudgetForDifficulty(cpu.difficulty);
 
       this.deployAIUnits(
         deck,
         budget,
-        enemyZone,
+        zone,
         'enemy',
         `enemy${cpuIndex + 1}`,
-        cpuIndex,
-        enemyCPUs.length
+        slotInZone,
+        cpusInThisZone
       );
+
+      // Collect all unit type IDs from this CPU's deck for reinforcement availability
+      for (const deckUnit of deck.units) {
+        allDeckUnitTypes.push(deckUnit.unitId);
+      }
     });
+
+    // Pass full deck roster to AIManager so it can reinforce with any unit type, not just deployed ones
+    if (allDeckUnitTypes.length > 0) {
+      this.aiManager.setDeckData('enemy', allDeckUnitTypes);
+    }
   }
 
   private spawnAllyAIUnits(): void {
     if (!this.currentMap) return;
 
-    const playerZone = this.currentMap.deploymentZones.find(z => z.team === 'player');
-    if (!playerZone) return;
+    const playerZones = this.currentMap.deploymentZones.filter(z => z.team === 'player');
+    if (playerZones.length === 0) return;
 
     // Get ally CPU players from team1 (exclude human player)
     const allyCPUs = this.lastTeam1.filter(slot => slot.type === 'CPU');
@@ -1020,21 +1187,61 @@ export class Game {
       return; // No ally CPUs to spawn
     }
 
-    // Each ally CPU deploys from their deck
-    allyCPUs.forEach((cpu, cpuIndex) => {
-      const deck = this.getAIDeck(cpu.deckId);
-      const budget = this.getBudgetForDifficulty(cpu.difficulty);
+    // Collect all deck unit types for AIManager reinforcement pool
+    const allAllyDeckUnitTypes: string[] = [];
 
-      this.deployAIUnits(
-        deck,
-        budget,
-        playerZone,
-        'player',
-        `ally${cpuIndex + 1}`,
-        cpuIndex + 1, // Offset to not overlap with human player's area
-        allyCPUs.length + 1
-      );
-    });
+    // Distribute ally CPUs across all available player deployment zones
+    // Human player gets zone 0 (slot 0), ally CPUs prefer other zones first
+    if (playerZones.length > 1) {
+      // Multiple zones: assign ally CPUs to non-human zones first, then overflow
+      const allyZones = playerZones.slice(1); // Zones without the human player
+      allyCPUs.forEach((cpu, cpuIndex) => {
+        const zone = allyZones[cpuIndex % allyZones.length]!;
+        const cpusInThisZone = allyCPUs.filter((_, i) => i % allyZones.length === cpuIndex % allyZones.length).length;
+        const slotInZone = Math.floor(cpuIndex / allyZones.length);
+        const deck = this.getAIDeck(cpu.deckId);
+        const budget = this.getBudgetForDifficulty(cpu.difficulty);
+
+        this.deployAIUnits(
+          deck,
+          budget,
+          zone,
+          'player',
+          `ally${cpuIndex + 1}`,
+          slotInZone,
+          cpusInThisZone
+        );
+
+        for (const deckUnit of deck.units) {
+          allAllyDeckUnitTypes.push(deckUnit.unitId);
+        }
+      });
+    } else {
+      // Single zone: share with human player (human is slot 0)
+      allyCPUs.forEach((cpu, cpuIndex) => {
+        const deck = this.getAIDeck(cpu.deckId);
+        const budget = this.getBudgetForDifficulty(cpu.difficulty);
+
+        this.deployAIUnits(
+          deck,
+          budget,
+          playerZones[0]!,
+          'player',
+          `ally${cpuIndex + 1}`,
+          cpuIndex + 1,
+          allyCPUs.length + 1
+        );
+
+        for (const deckUnit of deck.units) {
+          allAllyDeckUnitTypes.push(deckUnit.unitId);
+        }
+      });
+    }
+
+    // Pass full ally deck roster to AIManager for reinforcement availability
+    if (allAllyDeckUnitTypes.length > 0) {
+      this.aiManager.setDeckData('player', allAllyDeckUnitTypes);
+    }
   }
 
   /**
@@ -1212,7 +1419,7 @@ export class Game {
     // Record battle start time
     this.gameStartTime = performance.now();
 
-    // Initialize fog of war
+    // Re-initialize fog of war for battle (clears deployment-only vision)
     this.fogOfWarManager.initialize();
 
     // Initialize fog of war renderer
@@ -1220,6 +1427,9 @@ export class Game {
       this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
     }
     this.fogOfWarRenderer.initialize();
+
+    // Immediately compute vision for all units so fog clears around them
+    this.fogOfWarManager.forceImmediateUpdate();
 
     // Initialize pathfinding
     this.pathfindingManager.initialize();
@@ -1570,6 +1780,13 @@ export class Game {
     if (this.fogOfWarRenderer) {
       this.fogOfWarRenderer.dispose();
       this.fogOfWarRenderer = null;
+    }
+
+    // Clean up traversability debug overlay
+    if (this.traversabilityRenderer) {
+      this.traversabilityRenderer.dispose();
+      this.traversabilityRenderer = null;
+      Game.showTraversability = false;
     }
 
     // Clean up visual effects

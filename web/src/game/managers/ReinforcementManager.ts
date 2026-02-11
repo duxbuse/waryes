@@ -16,6 +16,8 @@ import type { EntryPoint, QueuedReinforcement } from '../../data/types';
 export class ReinforcementManager {
   private readonly game: Game;
   private entryPoints: EntryPoint[] = [];
+  private enemyEntryPoints: EntryPoint[] = [];
+  private enemySpawnTimers: Map<string, number> = new Map();
   private spawnTimers: Map<string, number> = new Map(); // entry point ID -> time until next spawn
   private selectedEntryPoint: EntryPoint | null = null;
 
@@ -25,6 +27,7 @@ export class ReinforcementManager {
 
   // Waiting for destination click
   private pendingUnitType: string | null = null;
+  private pendingEntryPoint: EntryPoint | null = null;
   private waitingForDestination = false;
 
   // Path preview visualization
@@ -40,12 +43,15 @@ export class ReinforcementManager {
   initialize(entryPoints: EntryPoint[]): void {
     console.log(`[REINFORCE] Initializing with ${entryPoints.length} total entry points`);
     this.entryPoints = entryPoints.filter(ep => ep.team === 'player');
-    console.log(`[REINFORCE] Filtered to ${this.entryPoints.length} player entry points:`,
-      this.entryPoints.map(ep => `${ep.id} (${ep.type}) at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)})`));
+    this.enemyEntryPoints = entryPoints.filter(ep => ep.team === 'enemy');
+    console.log(`[REINFORCE] Filtered to ${this.entryPoints.length} player and ${this.enemyEntryPoints.length} enemy entry points`);
 
     // Initialize spawn timers
     for (const ep of this.entryPoints) {
       this.spawnTimers.set(ep.id, 0);
+    }
+    for (const ep of this.enemyEntryPoints) {
+      this.enemySpawnTimers.set(ep.id, 0);
     }
 
     // Setup UI
@@ -203,7 +209,8 @@ export class ReinforcementManager {
       return false;
     }
 
-    // Enter waiting mode for destination click
+    // Save entry point reference before hide() clears it
+    this.pendingEntryPoint = this.selectedEntryPoint;
     this.pendingUnitType = unitType;
     this.waitingForDestination = true;
 
@@ -220,7 +227,7 @@ export class ReinforcementManager {
    * Handle destination click for pending reinforcement
    */
   handleDestinationClick(worldPos: THREE.Vector3): void {
-    if (!this.waitingForDestination || !this.pendingUnitType || !this.selectedEntryPoint) {
+    if (!this.waitingForDestination || !this.pendingUnitType || !this.pendingEntryPoint) {
       return;
     }
 
@@ -239,13 +246,13 @@ export class ReinforcementManager {
     // Send multiplayer command if in command sync mode
     if (this.game.multiplayerBattleSync?.isUsingCommandSync()) {
       this.game.multiplayerBattleSync.sendQueueReinforcementCommand(
-        this.selectedEntryPoint.id,
+        this.pendingEntryPoint.id,
         this.pendingUnitType,
         worldPos.x,
         worldPos.z,
         moveType
       );
-      console.log(`[REINFORCE] Sent MP command to queue ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+      console.log(`[REINFORCE] Sent MP command to queue ${this.pendingUnitType} at ${this.pendingEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
     } else {
       // Local mode: add to queue directly
       const reinforcement: QueuedReinforcement = {
@@ -254,12 +261,13 @@ export class ReinforcementManager {
         moveType,
       };
 
-      this.selectedEntryPoint.queue.push(reinforcement);
-      console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.selectedEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
+      this.pendingEntryPoint.queue.push(reinforcement);
+      console.log(`[REINFORCE] Queued ${this.pendingUnitType} at ${this.pendingEntryPoint.type} entry with ${moveType} move to (${worldPos.x.toFixed(0)}, ${worldPos.z.toFixed(0)})`);
     }
 
     // Clear waiting state
     this.pendingUnitType = null;
+    this.pendingEntryPoint = null;
     this.waitingForDestination = false;
     this.clearPreviewPath();
 
@@ -273,6 +281,7 @@ export class ReinforcementManager {
     if (this.waitingForDestination) {
       console.log('[REINFORCE] Cancelled destination wait');
       this.pendingUnitType = null;
+      this.pendingEntryPoint = null;
       this.waitingForDestination = false;
       this.clearPreviewPath();
     }
@@ -508,6 +517,21 @@ export class ReinforcementManager {
       }
     }
 
+    // Process enemy entry point queues
+    for (const ep of this.enemyEntryPoints) {
+      if (ep.queue.length === 0) continue;
+
+      const currentTimer = this.enemySpawnTimers.get(ep.id) || 0;
+      const newTimer = currentTimer - dt;
+
+      if (newTimer <= 0) {
+        this.spawnEnemyUnitFromQueue(ep);
+        this.enemySpawnTimers.set(ep.id, ep.spawnRate);
+      } else {
+        this.enemySpawnTimers.set(ep.id, newTimer);
+      }
+    }
+
     // Update UI if panel is visible and timers changed
     if (timersChanged && this.reinforcementPanel && this.reinforcementPanel.style.display !== 'none') {
       this.updateUI();
@@ -521,32 +545,30 @@ export class ReinforcementManager {
     const reinforcement = ep.queue.shift();
     if (!reinforcement) return;
 
-    // Spawn unit at entry point
-    const spawnPos = new THREE.Vector3(ep.x, 0, ep.z);
+    // Spawn unit at entry point (use terrain elevation)
+    const spawnPos = new THREE.Vector3(ep.x, this.game.getElevationAt(ep.x, ep.z), ep.z);
 
     const unit = this.game.unitManager.spawnUnit({
       position: spawnPos,
       team: 'player',
       unitType: reinforcement.unitType,
+      ...(reinforcement.ownerId && { ownerId: reinforcement.ownerId }),
     });
 
     // Create spawn effect
     this.createSpawnEffect(spawnPos);
 
-    console.log(`Spawned ${reinforcement.unitType} from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) - vulnerable immediately`);
+    console.log(`Spawned ${reinforcement.unitType} (owner: ${reinforcement.ownerId ?? 'player'}) from ${ep.type} entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)}) - vulnerable immediately`);
 
-    // Mark unit as no longer deployed in deployment manager so it can be called again
-    const deck = this.game.deploymentManager.getDeck();
-    if (deck) {
-      const du = this.game.deploymentManager['deployableUnits']?.find((u: {unitData: {id: string}}) => u.unitData.id === reinforcement.unitType);
-      if (du) {
-        du.deployed = false;
-      }
-    }
+    // Note: deployedCount is managed by DeploymentManager when units are queued
 
     // Apply movement command if destination was set
     if (reinforcement.destination) {
-      const destPos = new THREE.Vector3(reinforcement.destination.x, 0, reinforcement.destination.z);
+      const destPos = new THREE.Vector3(
+        reinforcement.destination.x,
+        this.game.getElevationAt(reinforcement.destination.x, reinforcement.destination.z),
+        reinforcement.destination.z
+      );
 
       switch (reinforcement.moveType) {
         case 'attack':
@@ -569,7 +591,11 @@ export class ReinforcementManager {
     }
     // Fallback to old rally point system if no destination was set
     else if (ep.rallyPoint) {
-      const rallyPos = new THREE.Vector3(ep.rallyPoint.x, 0, ep.rallyPoint.z);
+      const rallyPos = new THREE.Vector3(
+        ep.rallyPoint.x,
+        this.game.getElevationAt(ep.rallyPoint.x, ep.rallyPoint.z),
+        ep.rallyPoint.z
+      );
       unit.setMoveCommand(rallyPos);
       console.log(`Unit auto-moving to rally point at (${ep.rallyPoint.x.toFixed(0)}, ${ep.rallyPoint.z.toFixed(0)})`);
     }
@@ -643,6 +669,87 @@ export class ReinforcementManager {
 
     // Start animation
     requestAnimationFrame(() => animateEffect(1 / 60));
+  }
+
+  /**
+   * Spawn an enemy unit from an enemy entry point queue
+   */
+  private spawnEnemyUnitFromQueue(ep: EntryPoint): void {
+    const reinforcement = ep.queue.shift();
+    if (!reinforcement) return;
+
+    const spawnPos = new THREE.Vector3(ep.x, this.game.getElevationAt(ep.x, ep.z), ep.z);
+
+    const unit = this.game.unitManager.spawnUnit({
+      position: spawnPos,
+      team: 'enemy',
+      unitType: reinforcement.unitType,
+    });
+
+    this.createSpawnEffect(spawnPos);
+
+    console.log(`[REINFORCE] Enemy spawned ${reinforcement.unitType} from entry at (${ep.x.toFixed(0)}, ${ep.z.toFixed(0)})`);
+
+    // Apply movement command if destination was set
+    if (reinforcement.destination) {
+      const destPos = new THREE.Vector3(
+        reinforcement.destination.x,
+        this.game.getElevationAt(reinforcement.destination.x, reinforcement.destination.z),
+        reinforcement.destination.z
+      );
+      unit.setMoveCommand(destPos);
+    }
+  }
+
+  /**
+   * Queue an enemy unit for spawning at the best enemy entry point
+   */
+  queueEnemyUnit(unitType: string, destination?: { x: number; z: number }): boolean {
+    const bestEntry = this.getBestEnemyEntryPoint();
+    if (!bestEntry) {
+      console.warn('[REINFORCE] No enemy entry points available');
+      return false;
+    }
+
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination: destination || null,
+      moveType: 'normal',
+    };
+    bestEntry.queue.push(reinforcement);
+    console.log(`[REINFORCE] Enemy queued ${unitType} at entry (${bestEntry.x.toFixed(0)}, ${bestEntry.z.toFixed(0)}), queue: ${bestEntry.queue.length}`);
+    return true;
+  }
+
+  /**
+   * Queue an ally AI unit for spawning at the best player entry point
+   */
+  queueAllyUnit(unitType: string, ownerId: string, destination?: { x: number; z: number }): boolean {
+    const bestEntry = this.getBestEntryPoint();
+    if (!bestEntry) {
+      console.warn('[REINFORCE] No player entry points available for ally unit');
+      return false;
+    }
+
+    const reinforcement: QueuedReinforcement = {
+      unitType,
+      destination: destination || null,
+      moveType: 'normal',
+      ownerId,
+    };
+    bestEntry.queue.push(reinforcement);
+    console.log(`[REINFORCE] Ally (${ownerId}) queued ${unitType} at entry (${bestEntry.x.toFixed(0)}, ${bestEntry.z.toFixed(0)}), queue: ${bestEntry.queue.length}`);
+    return true;
+  }
+
+  /**
+   * Get the best enemy entry point for spawning (shortest queue)
+   */
+  getBestEnemyEntryPoint(): EntryPoint | null {
+    if (this.enemyEntryPoints.length === 0) return null;
+
+    const sorted = [...this.enemyEntryPoints].sort((a, b) => a.queue.length - b.queue.length);
+    return sorted[0] || null;
   }
 
   /**

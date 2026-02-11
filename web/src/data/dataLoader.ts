@@ -87,6 +87,6 @@ export function getDivisionsByFaction(factionId: string): DivisionData[] {
 // Debug: log loaded data counts (only in non-test environments)
 if (UNITS.length > 0 || WEAPONS.length > 0 || DIVISIONS.length > 0) {
   console.log(`Loaded ${UNITS.length} units, ${WEAPONS.length} weapons, and ${DIVISIONS.length} divisions from JSON`);
-} else if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+} else if (import.meta.env.MODE !== 'test') {
   console.warn('dataLoader: Running in test environment - JSON data not loaded via import.meta.glob (this is expected)');
 }

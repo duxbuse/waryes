@@ -10,6 +10,22 @@ import type { Unit } from '../../src/game/units/Unit';
 import type { UnitData, WeaponData } from '../../src/data/types';
 import { setGameSeed, getGameRNGState } from '../../src/game/utils/DeterministicRNG';
 
+// Mock the factions module so AIManager's imported getWeaponById uses our test weapons
+vi.mock('../../src/data/factions', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/data/factions')>();
+  return {
+    ...original,
+    getWeaponById: (id: string) => {
+      const weapons: Record<string, WeaponData> = {
+        'test_rifle': { id: 'test_rifle', name: 'Test Rifle', damage: 25, rateOfFire: 60, range: 50, accuracy: 0.7, penetration: 2, suppression: 5, isAntiAir: false, canTargetGround: true },
+        'test_at': { id: 'test_at', name: 'Test AT Weapon', damage: 80, rateOfFire: 10, range: 100, accuracy: 0.8, penetration: 15, suppression: 10, isAntiAir: false, canTargetGround: true },
+        'test_aa': { id: 'test_aa', name: 'Test AA Weapon', damage: 40, rateOfFire: 120, range: 150, accuracy: 0.6, penetration: 3, suppression: 2, isAntiAir: true, canTargetGround: false },
+      };
+      return weapons[id] ?? original.getWeaponById(id);
+    },
+  };
+});
+
 // Mock weapon data
 const mockWeapon: WeaponData = {
   id: 'test_rifle',
@@ -95,6 +111,8 @@ const createMockUnit = (category: string, health: number = 100, maxHealth: numbe
     health,
     maxHealth,
     unitData,
+    category: unitData.category,
+    getWeapons: () => unitData.weapons,
     position: new THREE.Vector3(0, 0, 0),
     team: 'player',
   } as unknown as Unit;

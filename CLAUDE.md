@@ -23,20 +23,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Buffer: ~0.67ms
 
 **Before implementing ANY new feature:**
-1. Run existing tests to ensure nothing breaks (`bun test`)
+1. Run existing tests to ensure nothing breaks (`bun run test`)
 2. Profile the performance impact with realistic load (100+ units)
 3. Run `BenchmarkManager` to verify 60 FPS is maintained
 4. Verify FPS remains at 60 with the in-game FPS overlay
 5. If a feature drops FPS below 60, it must be optimized or redesigned before merging
 
 **After implementing a feature:**
-1. Run all tests (`bun test`) - all must pass
+1. Run all tests (`bun run test`) - all must pass
 2. Run `BenchmarkManager` - must meet acceptance criteria (min >55 FPS, avg ≈60 FPS)
 3. Add unit tests for new functionality
 4. Add performance tests for performance-critical code
 5. Verify no performance regressions with manual testing (100+ units)
 
 ## Development Commands
+
+### ⚠️ CRITICAL: Windows Environment Rules
+
+**This project runs on native Windows (NOT WSL).** Follow these rules exactly:
+
+1. **Use Windows paths** — e.g. `C:\Users\duxbu\Documents\code\waryes\web`. NEVER use `/mnt/c/...` or Unix-style paths.
+2. **Always quote Windows paths** — Use `cd "C:\Users\duxbu\Documents\code\waryes\web"` with double quotes. Without quotes, backslashes are interpreted as escape characters and the path breaks.
+3. **Use `bun run typecheck`** — NEVER use `npx tsc --noEmit` or call `tsc` directly. The project uses Bun, not npx.
+4. **Use `bun run test`** — NEVER use `npx vitest` or call vitest directly.
+5. **Use `bun run lint`** — NEVER use `npx eslint` or call eslint directly.
+
+**Correct example:**
+```bash
+cd "C:\Users\duxbu\Documents\code\waryes\web" && bun run test
+```
+
+**Wrong examples (DO NOT USE):**
+```bash
+cd /mnt/c/Users/duxbu/Documents/code/waryes/web && bun run test   # Wrong: Unix path
+cd C:\Users\duxbu\Documents\code\waryes\web && bun run test        # Wrong: unquoted path
+bun run test --prefix C:\Users\duxbu\Documents\code\waryes\web     # Wrong: --prefix is not a bun flag
+cd C:\Users\duxbu\Documents\code\waryes\web && npx tsc --noEmit    # Wrong: npx tsc
+```
+
+### Commands
 
 All commands should be run from the `web/` directory:
 
@@ -47,7 +72,7 @@ bun run build            # TypeScript check + production build
 bun run preview          # Preview production build
 
 # Testing
-bun test                 # Run unit tests (Vitest)
+bun run test             # Run unit tests (Vitest)
 bun test:ui              # Visual test UI
 bun test:e2e             # End-to-end tests (Playwright)
 
@@ -311,7 +336,7 @@ These systems are critical for maintaining 60 FPS:
 
 Before committing new features:
 
-- [ ] **All unit tests pass** (`bun test`)
+- [ ] **All unit tests pass** (`bun run test`)
 - [ ] **Run BenchmarkManager** and verify results meet acceptance criteria
   - Min FPS > 55
   - Avg FPS ≈ 60
@@ -487,7 +512,7 @@ web/src/
 
 ```bash
 # Run all tests
-bun test
+bun run test
 
 # Run tests with UI
 bun test:ui
@@ -774,7 +799,7 @@ Focus areas for future development:
 ## Final Reminder: Performance and Testing are Non-Negotiable
 
 **Every feature, no matter how small, must:**
-1. **Pass all tests** - Run `bun test` before committing
+1. **Pass all tests** - Run `bun run test` before committing
 2. **Pass benchmark tests** - Run `game.benchmarkManager.startBenchmark()` and meet acceptance criteria
 3. **Maintain 60 FPS** - Verify with FPS overlay during manual testing
 
@@ -793,13 +818,13 @@ This is not a suggestion or a nice-to-have. The game's core experience depends o
 **Development Workflow:**
 ```bash
 # Before starting work
-bun test                                      # Ensure baseline passes
+bun run test                                  # Ensure baseline passes
 
 # During development
 # ... make changes ...
 
 # After implementation
-bun test                                      # Must pass
+bun run test                                  # Must pass
 bun run dev                                   # Start game
 # In browser console:
 game.benchmarkManager.startBenchmark()        # Must meet criteria (min >55 FPS, avg ≈60)
@@ -815,7 +840,7 @@ game.benchmarkManager.startBenchmark()        # Must meet criteria (min >55 FPS,
 - 0.67ms buffer for browser overhead
 
 **Tools:**
-- ✅ Unit tests (`bun test`)
+- ✅ Unit tests (`bun run test`)
 - ✅ BenchmarkManager (automated 30-second FPS test)
 - ✅ FPS overlay (in-game top-right)
 - ✅ Chrome DevTools Performance tab

@@ -932,6 +932,13 @@ export class UnitUI {
   }
 
   update(): void {
+    // Hide UI for units not visible through fog of war
+    if (!this.game.fogOfWarManager.isUnitVisible(this.unit)) {
+      this.container.visible = false;
+      return;
+    }
+    this.container.visible = true;
+
     // Update health bar (skip if using batched renderer)
     if (this.healthBarFg && this.healthBarBg) {
       const healthPercent = this.unit.health / this.unit.maxHealth;

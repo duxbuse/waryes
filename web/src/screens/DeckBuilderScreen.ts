@@ -1032,8 +1032,8 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       };
 
       opt.addEventListener('click', selectTransport);
-      opt.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+      opt.addEventListener('keydown', (e: Event) => {
+        if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
           e.preventDefault();
           selectTransport();
         }
@@ -1184,8 +1184,8 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }
     });
 
-    element.querySelector('#unit-library')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+    element.querySelector('#unit-library')?.addEventListener('keydown', (e: Event) => {
+      if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
         const card = (e.target as HTMLElement).closest('.unit-card') as HTMLElement;
         if (card && !card.dataset['unavailable']) {
           e.preventDefault();
@@ -1261,8 +1261,8 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }
     });
 
-    element.querySelector('#saved-decks-list')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+    element.querySelector('#saved-decks-list')?.addEventListener('keydown', (e: Event) => {
+      if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
         const item = (e.target as HTMLElement).closest('.saved-deck-item') as HTMLElement;
         if (item) {
           e.preventDefault();

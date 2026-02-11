@@ -24,7 +24,14 @@ export class SpatialAudioManager {
   private enabled: boolean = true;
 
   // Default spatial audio settings
-  private defaultSpatialSettings = {
+  private defaultSpatialSettings: {
+    refDistance: number;
+    maxDistance: number;
+    rolloffFactor: number;
+    coneInnerAngle?: number;
+    coneOuterAngle?: number;
+    coneOuterGain?: number;
+  } = {
     refDistance: 50, // Volume starts reducing at 50m
     maxDistance: 500, // Inaudible beyond 500m
     rolloffFactor: 1.0, // Linear distance model
@@ -236,7 +243,7 @@ export class SpatialAudioManager {
 
     // Find sounds that have finished playing
     for (let i = 0; i < this.activeSounds.length; i++) {
-      const activeSound = this.activeSounds[i];
+      const activeSound = this.activeSounds[i]!;
       const elapsed = now - activeSound.startTime;
 
       // Check if sound has finished or is no longer playing
@@ -253,7 +260,7 @@ export class SpatialAudioManager {
 
     // Remove finished sounds (iterate in reverse to avoid index issues)
     for (let i = soundsToRemove.length - 1; i >= 0; i--) {
-      this.activeSounds.splice(soundsToRemove[i], 1);
+      this.activeSounds.splice(soundsToRemove[i]!, 1);
     }
   }
 

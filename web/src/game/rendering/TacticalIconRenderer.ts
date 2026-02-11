@@ -51,9 +51,6 @@ export class TacticalIconRenderer {
     enemy: '#EF4444', // Red
   };
 
-  // Reusable temp objects (avoid GC pressure)
-  private readonly tempColor = new THREE.Color();
-
   // Icon shapes per category (NATO-style simplified)
   private readonly ICON_SHAPES: Record<UnitCategory, string> = {
     LOG: 'diamond', // Logistics - diamond
@@ -275,16 +272,6 @@ export class TacticalIconRenderer {
   }
 
   /**
-   * Get health indicator color based on health percentage
-   * Follows same pattern as BatchedUnitUIRenderer
-   */
-  private getHealthColor(healthPercent: number): number {
-    if (healthPercent > 0.6) return 0x00ff00; // Green
-    if (healthPercent > 0.3) return 0xffff00; // Yellow
-    return 0xff0000; // Red
-  }
-
-  /**
    * Update icon positions and visibility - called every frame
    */
   update(): void {
@@ -308,6 +295,12 @@ export class TacticalIconRenderer {
     for (const [unitId, iconData] of this.unitIcons) {
       const unit = this.game.unitManager.getUnitById(unitId);
       if (!unit || unit.health <= 0) {
+        iconData.sprite.visible = false;
+        continue;
+      }
+
+      // Hide icon if unit is hidden by fog of war
+      if (!this.game.fogOfWarManager.isUnitVisible(unit)) {
         iconData.sprite.visible = false;
         continue;
       }
@@ -339,11 +332,6 @@ export class TacticalIconRenderer {
         1
       );
 
-      // Apply health indicator color tint
-      const healthPercent = unit.health / unit.maxHealth;
-      const healthColor = this.getHealthColor(healthPercent);
-      this.tempColor.setHex(healthColor);
-      iconData.sprite.material.color.copy(this.tempColor);
     }
   }
 

@@ -64,6 +64,9 @@ export class EconomyManager {
     this.score = { player: 0, enemy: 0 };
     this.tickTimer = 0;
 
+    // Pass capture zone bounds to fog of war renderer for fog reduction
+    this.game.fogOfWarRenderer?.setCaptureZones(captureZones);
+
     this.setupUI();
     this.updateUI();
   }
@@ -207,11 +210,17 @@ export class EconomyManager {
             zone.owner = 'player';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'player');
+            // Reduce fog over player-captured zones so fill color is visible
+            const zoneIdx = this.captureZones.indexOf(zone);
+            if (zoneIdx >= 0) this.game.fogOfWarRenderer?.updateCaptureZoneOwner(zoneIdx, true);
           } else if (fillState.capturedBy === 'enemy' && zone.owner !== 'enemy') {
             console.log(`[CAPTURE] ${zone.name} (id=${zone.id}) owner changing from '${zone.owner}' to 'enemy'. captureZones length: ${this.captureZones.length}, zone ref: ${this.captureZones.indexOf(zone)}`);
             zone.owner = 'enemy';
             zone.captureProgress = 100;
             this.onZoneCaptured(zone, 'enemy');
+            // Enemy captured - restore full fog over this zone
+            const zoneIdx = this.captureZones.indexOf(zone);
+            if (zoneIdx >= 0) this.game.fogOfWarRenderer?.updateCaptureZoneOwner(zoneIdx, false);
           }
         }
 
@@ -300,6 +309,18 @@ export class EconomyManager {
   addPlayerCredits(amount: number): void {
     this.playerCredits += amount;
     this.updateUI();
+  }
+
+  getEnemyCredits(): number {
+    return this.enemyCredits;
+  }
+
+  spendEnemyCredits(amount: number): boolean {
+    if (this.enemyCredits >= amount) {
+      this.enemyCredits -= amount;
+      return true;
+    }
+    return false;
   }
 
   getScore(): TeamScore {

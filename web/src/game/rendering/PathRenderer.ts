@@ -15,7 +15,7 @@ import type { Game } from '../../core/Game';
 import { VectorPool } from '../utils/VectorPool';
 
 interface PathData {
-  line: THREE.Mesh | THREE.Line; // Can be Mesh (ribbon) or Line (fallback)
+  line: THREE.Mesh | THREE.Line | THREE.Group; // Can be Mesh (ribbon), Line (fallback), or Group (dashed)
   unit: Unit;
   target: THREE.Vector3;
   fadeTimer: number; // Time remaining before path fades out completely (in seconds)
@@ -287,7 +287,7 @@ export class PathRenderer {
     let startPos = unit.position.clone();
 
     for (let i = 0; i < waypoints.length; i++) {
-      const waypoint = waypoints[i];
+      const waypoint = waypoints[i]!;
       const endPos = waypoint.position.clone();
       const commandType = waypoint.commandType;
 
@@ -357,14 +357,14 @@ export class PathRenderer {
     // Create a visible ribbon for pre-order path
     const pathWidth = 0.25; // Slightly thinner than regular paths
     const direction = VectorPool.acquire();
-    direction.subVectors(points[1], points[0]).normalize();
+    direction.subVectors(points[1]!, points[0]!).normalize();
     const perpendicular = VectorPool.acquire();
     perpendicular.set(-direction.z, 0, direction.x).multiplyScalar(pathWidth / 2);
 
     // Create dashed ribbon by creating multiple small segments
     const segmentLength = 2; // Length of each dash
     const gapLength = 1; // Length of each gap
-    const totalDistance = points[0].distanceTo(points[1]);
+    const totalDistance = points[0]!.distanceTo(points[1]!);
     const dashPattern = segmentLength + gapLength;
     const numDashes = Math.floor(totalDistance / dashPattern);
 
@@ -375,9 +375,9 @@ export class PathRenderer {
       const t2 = Math.min((i * dashPattern + segmentLength) / totalDistance, 1);
 
       const p1 = VectorPool.acquire();
-      p1.lerpVectors(points[0], points[1], t1);
+      p1.lerpVectors(points[0]!, points[1]!, t1);
       const p2 = VectorPool.acquire();
-      p2.lerpVectors(points[0], points[1], t2);
+      p2.lerpVectors(points[0]!, points[1]!, t2);
 
       const segmentVertices = new Float32Array([
         p1.x - perpendicular.x, p1.y, p1.z - perpendicular.z,
@@ -532,7 +532,7 @@ export class PathRenderer {
       if (dataList.length === 0) continue;
 
       // Get the first segment (active segment unit is moving toward)
-      const firstSegment = dataList[0];
+      const firstSegment = dataList[0]!;
       const unit = firstSegment.unit;
       const target = firstSegment.target;
 

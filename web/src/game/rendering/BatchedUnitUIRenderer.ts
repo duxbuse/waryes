@@ -247,7 +247,7 @@ export class BatchedUnitUIRenderer {
 
     for (const [unitId, data] of this.unitData) {
       const unit = this.game.unitManager.getUnitById(unitId);
-      if (!unit || unit.health <= 0) continue;
+      if (!unit || unit.health <= 0 || !this.game.fogOfWarManager.isUnitVisible(unit)) continue;
 
       // Calculate billboard quaternion (face camera)
       unit.mesh.getWorldQuaternion(this.unitWorldQuat);
@@ -304,7 +304,7 @@ export class BatchedUnitUIRenderer {
         distScale,
         moraleYOffset,
         moralePercent,
-        this.getMoraleColor(unit.moraleState, moralePercent),
+        this.getMoraleColor(unit.isRouting ? 'routing' : moralePercent > 0.5 ? 'normal' : moralePercent > 0.25 ? 'shaken' : 'pinned', moralePercent),
         this.moraleBarFgMesh
       );
     }

@@ -240,7 +240,7 @@ export class SelectionManager {
       // Add transport/garrison status
       if (unit.isGarrisoned && unit.garrisonedBuilding) {
         const building = unit.garrisonedBuilding;
-        statsHtml += `<div style="margin-top: 4px; color: #4aff4a;">🏠 Garrisoned in ${building.name}</div>`;
+        statsHtml += `<div style="margin-top: 4px; color: #4aff4a;">🏠 Garrisoned in ${building.type}</div>`;
       }
 
       // Check if unit is a transport with passengers

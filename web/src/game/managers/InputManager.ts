@@ -177,7 +177,12 @@ export class InputManager {
       }
 
       if (this.state.isRightDragging) {
-        this.handleFormationDrag(event);
+        if (this.state.modifiers.shift) {
+          // Shift held: treat as queued move, not formation
+          this.handleRightClick(event);
+        } else {
+          this.handleFormationDrag(event);
+        }
         this.clearFormationPreview(); // Clear ghosts after formation is set
       } else {
         this.handleRightClick(event);
@@ -369,6 +374,12 @@ export class InputManager {
       case 'KeyC':
         // LOS preview mode - hold C to preview line of sight from mouse position
         this.state.losPreviewActive = true;
+        break;
+
+      case 'F3':
+        // Toggle debug panel
+        event.preventDefault();
+        this.game.toggleDebugPanel();
         break;
 
       case 'Delete':

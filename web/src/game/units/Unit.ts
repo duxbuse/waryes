@@ -13,7 +13,7 @@ import type { Game } from '../../core/Game';
 import type { UnitData, WeaponSlot, Building } from '../../data/types';
 import { getUnitById, getWeaponById } from '../../data/factions';
 import { UnitUI } from '../ui/UnitUI';
-import { getUnitMaterial, getWireframeMaterial, getSelectionRingMaterial } from './SharedMaterials';
+import { getUnitMaterial, getWireframeMaterial } from './SharedMaterials';
 import { getUnitGeometry, CATEGORY_HEIGHTS, FLYING_ALTITUDES } from '../utils/SharedGeometryCache';
 import { gameRNG } from '../utils/DeterministicRNG';
 import { LAYERS } from '../utils/LayerConstants';
@@ -130,7 +130,7 @@ export class Unit {
   private readonly bodyMesh: THREE.Mesh;
   private readonly wireframe: THREE.LineSegments;
   private readonly selectionRing: THREE.Mesh;
-  private readonly selectionRingMaterial: THREE.MeshBasicMaterial;
+  private readonly selectionRingMaterial: THREE.MeshStandardMaterial;
   private selectionRingTime: number = 0; // Animation time tracker
 
   // Movement
@@ -234,7 +234,7 @@ export class Unit {
     // Create selection ring with per-unit emissive material for glow effect
     const ringGeometry = new THREE.RingGeometry(1.5, 1.8, 32);
     // Create per-unit material with emissive properties for glowing effect
-    this.selectionRingMaterial = new THREE.MeshBasicMaterial({
+    this.selectionRingMaterial = new THREE.MeshStandardMaterial({
       color: 0x00ff00,
       emissive: 0x00ff00,
       emissiveIntensity: 0.5, // Initial intensity
@@ -282,6 +282,11 @@ export class Unit {
   // Category getter
   get category(): string {
     return this.unitData?.category || 'UNK';
+  }
+
+  // Unit data ID getter (for reinforcement/type tracking)
+  get unitDataId(): string {
+    return this.unitData?.id ?? this.unitType;
   }
 
   // Health
@@ -486,7 +491,7 @@ export class Unit {
     if (this._isRouting || this._suppression >= 80) return false;
     // Check if any weapon has cooled down
     for (let i = 0; i < this.weaponCooldowns.length; i++) {
-      if (this.weaponCooldowns[i] <= 0) return true;
+      if (this.weaponCooldowns[i]! <= 0) return true;
     }
     return false;
   }
@@ -544,7 +549,7 @@ export class Unit {
    */
   addWeaponDamage(weaponIndex: number, damage: number): void {
     if (weaponIndex >= 0 && weaponIndex < this.weaponDamageDealt.length) {
-      this.weaponDamageDealt[weaponIndex] += damage;
+      this.weaponDamageDealt[weaponIndex]! += damage;
     }
   }
 
@@ -1258,6 +1263,19 @@ export class Unit {
   }
 
   /**
+   * Set up direct movement to a target position (bypasses pathfinding).
+   * Used by AIManager for performance — AI units navigate via separation/avoidance.
+   */
+  setDirectMovement(target: THREE.Vector3): void {
+    this.commandQueue = [];
+    this.currentCommand = { type: UnitCommand.Move, target: target.clone() };
+    this.waypoints = [target.clone()];
+    this.currentWaypointIndex = 0;
+    this.targetPosition = target.clone();
+    this.stuckTimer = 0;
+  }
+
+  /**
    * Fixed timestep update for game logic
    */
   fixedUpdate(dt: number): void {
@@ -1265,8 +1283,8 @@ export class Unit {
 
     // Update weapon cooldowns
     for (let i = 0; i < this.weaponCooldowns.length; i++) {
-      if (this.weaponCooldowns[i] > 0) {
-        this.weaponCooldowns[i] -= dt;
+      if (this.weaponCooldowns[i]! > 0) {
+        this.weaponCooldowns[i]! -= dt;
       }
     }
 
@@ -1624,7 +1642,7 @@ export class Unit {
     const category = this.unitData?.category ?? 'INF';
     // Increased radii to give more spacing and prevent overlap
     if (category === 'TNK') return 3.5; // Tanks are larger (was 2.5)
-    if (category === 'VHC' || category === 'REC') return 3.0; // Vehicles (was 2.0)
+    if (category === 'REC') return 3.0; // Vehicles (was 2.0)
     if (category === 'ART' || category === 'LOG') return 3.5; // Artillery and logistics (was 2.5)
     return 2.5; // Infantry and others (was 1.5)
   }

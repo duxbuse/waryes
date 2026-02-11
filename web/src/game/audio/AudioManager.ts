@@ -307,7 +307,7 @@ export class AudioManager {
    * @param voiceType - Type of voice line ('move_order', 'attack_order', 'under_fire', 'low_morale', 'retreating')
    * @param position - 3D world position where the sound should play
    */
-  playVoiceLine(voiceType: UnitVoiceSound, position: THREE.Vector3): void {
+  playVoiceLine(voiceType: UnitVoiceSound, _position: THREE.Vector3): void {
     if (!this.enabled || !this.audioContext) {
       return;
     }

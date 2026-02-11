@@ -344,7 +344,7 @@ export class UnitManager {
   /**
    * Issue mount command to units (infantry boarding transport)
    */
-  issueMountCommand(units: readonly Unit[], transport: Unit, queue: boolean): void {
+  issueMountCommand(units: readonly Unit[], transport: Unit, _queue: boolean): void {
     for (const unit of units) {
       // Note: queue parameter currently ignored as Unit doesn't have queueMountCommand yet
       unit.setMountCommand(transport);
@@ -354,7 +354,7 @@ export class UnitManager {
   /**
    * Issue garrison command to units (infantry entering building)
    */
-  issueGarrisonCommand(units: readonly Unit[], building: Building, queue: boolean): void {
+  issueGarrisonCommand(units: readonly Unit[], building: Building, _queue: boolean): void {
     for (const unit of units) {
       // Note: queue parameter currently ignored as Unit doesn't have queueGarrisonCommand yet
       unit.setGarrisonCommand(building);

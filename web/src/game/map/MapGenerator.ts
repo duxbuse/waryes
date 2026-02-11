@@ -34,7 +34,6 @@ import type {
   TerrainFeatureType,
   BiomeType,
   BiomeConfig,
-  ObjectiveType,
 } from '../../data/types';
 import { MAP_SIZES, ROAD_WIDTHS, ELEVATION_CONFIGS, FEATURE_PARAMS } from '../../data/types';
 import { BIOME_CONFIGS, selectBiomeFromSeed } from '../../data/biomeConfigs';
@@ -612,9 +611,7 @@ export class MapGenerator {
 
       if (nearestSettlement) {
         nearestSettlement.captureZoneId = zone.id;
-        // Update zone name to be more descriptive: "Settlement Name - Objective"
-        const baseName = this.getObjectiveName(zone.objectiveType || 'radio_tower');
-        zone.name = `${nearestSettlement.name} ${baseName}`;
+        // Keep NATO phonetic callsign as primary name for clear comms
       }
     }
   }
@@ -1433,9 +1430,9 @@ export class MapGenerator {
         noiseValue = (noiseValue / maxValue) * config.baseNoiseAmplitude;
 
         // 1.5 Add gentle rolling hills (very large scale, low frequency)
-        // This prevents open areas from looking unnaturaly flat
+        // This prevents open areas from looking unnaturally flat
         const hillScale = 0.025; // Higher frequency for more visible hills
-        const hillAmplitude = 8.0; // Taller hills (8m) to ensure visibility
+        const hillAmplitude = 3.0; // Subtle hills (3m) - enough for visual interest without disrupting LOS
         // Use a different offset so it doesn't align with base noise
         const hillNoise = this.gradientNoise((worldX + 500) * hillScale, (worldZ - 500) * hillScale);
         noiseValue += hillNoise * hillAmplitude;
@@ -3693,71 +3690,6 @@ export class MapGenerator {
 
 
 
-  /**
-   * Get a thematic name for an objective type
-   */
-  private getObjectiveName(type: ObjectiveType): string {
-    const names: Record<ObjectiveType, string[]> = {
-      // Generic objectives
-      radio_tower: ['Radio Tower', 'Signal Relay', 'Comms Outpost', 'Antenna Hill'],
-      supply_cache: ['Supply Cache', 'Logistics Dump', 'Storage Site', 'Fuel Reserve'],
-      bunker: ['Fortified Bunker', 'Command Post', 'Observation Bunker', 'Defensive Node'],
-      hq_bunker: ['Command HQ', 'Strategic Command', 'Underground Base', 'General Staff HQ'],
-      radar_station: ['Radar Array', 'Early Warning Site', 'Scanning Station', 'Signal Intelligence'],
-      supply_depot: ['Main Supply Depot', 'Logistics Hub', 'Regional Warehouse', 'Army Supply Base'],
-      vehicle_park: ['Motor Pool', 'Armor Reserve', 'Vehicle Staging', 'Transport Hub'],
-      comms_array: ['Satellite Uplink', 'Global Comms Node', 'Encryption Center', 'Network Hub'],
-
-      // Settlement objectives (common for larger zones)
-      hamlet: ['Crossroads Hamlet', 'Rural Hamlet', 'Farmstead Cluster', 'Countryside Hamlet'],
-      village: ['Village Center', 'Market Village', 'River Village', 'Hillside Village'],
-      town: ['County Town', 'Regional Hub', 'Market Town', 'Provincial Capital'],
-      city: ['City Center', 'Metropolitan District', 'Urban Core', 'Capital City'],
-
-      // Rainforest objectives
-      oil_field: ['Oil Derrick Alpha', 'Petroleum Site', 'Refinery Complex', 'Drilling Station'],
-      logging_camp: ['Logging Camp', 'Timber Yard', 'Sawmill', 'Forest Station'],
-      indigenous_settlement: ['Village Site', 'Sacred Grove', 'River Settlement', 'Tribal Outpost'],
-      temple_complex: ['Ancient Temple', 'Ruined Plaza', 'Jungle Shrine', 'Sacred Site'],
-
-      // Tundra objectives
-      research_station: ['Research Base', 'Science Outpost', 'Observatory', 'Survey Station'],
-      mine: ['Mining Complex', 'Extraction Site', 'Ore Processing', 'Quarry'],
-      fuel_depot: ['Fuel Depot', 'Supply Cache', 'Heating Station', 'Energy Hub'],
-      bio_dome: ['Research Dome', 'Artificial Biosphere', 'Arctic Habitat', 'Life Support Station'],
-
-      // Mesa objectives
-      mining_operation: ['Mining Operation', 'Copper Mine', 'Extraction Point', 'Mineral Site'],
-      observation_post: ['Observation Post', 'Lookout Point', 'Survey Station', 'Watch Tower'],
-      water_well: ['Water Well', 'Oasis', 'Aquifer Station', 'Water Pump'],
-      harvester_rig: ['Extraction Rig', 'Mineral Harvester', 'Resource Platform', 'Mesa Rig'],
-
-      // Mountains objectives
-      communication_tower: ['Communication Tower', 'Radio Station', 'Signal Relay', 'Antenna Array'],
-      ski_resort: ['Ski Resort', 'Mountain Lodge', 'Alpine Station', 'Recreation Center'],
-      military_base: ['Military Base', 'Mountain Fortress', 'Strategic Point', 'Command Post'],
-      orbital_uplink: ['Orbital Uplink', 'Space Comms', 'High-Altitude Relay', 'Satellite Ground Station'],
-
-      // Plains objectives
-      grain_silo: ['Grain Elevator', 'Silo Complex', 'Storage Depot', 'Harvest Center'],
-      wind_farm: ['Wind Farm', 'Turbine Array', 'Energy Station', 'Power Grid'],
-      rail_junction: ['Rail Junction', 'Train Depot', 'Railway Hub', 'Station'],
-
-      // Farmland objectives
-      processing_plant: ['Processing Plant', 'Food Factory', 'Packaging Center', 'Distribution Hub'],
-      irrigation_station: ['Irrigation Station', 'Water Control', 'Pump Station', 'Canal Hub'],
-      market_town: ['Market Town', 'Trading Post', 'Commerce Center', 'Exchange'],
-      windmill: ['Old Windmill', 'Stone Mill', 'Rustic Windmill', 'Flour Mill'],
-
-      // Cities objectives
-      city_district: ['Financial District', 'Industrial Zone', 'Shopping Quarter', 'Old Town', 'Business Center', 'Waterfront', 'Tech Campus'],
-      cooling_tower: ['Power Plant Coolant', 'Reactor Cooling', 'Industrial Vent', 'Ventilation Stack'],
-    };
-
-    const options = names[type];
-    return options[this.rng.nextInt(0, options.length - 1)]!;
-  }
-
   private generateCaptureZones(deploymentZones: DeploymentZone[]): CaptureZone[] {
     const sizeConfig = MAP_SIZES[this.size];
     const numZones = sizeConfig.zones;
@@ -3790,10 +3722,17 @@ export class MapGenerator {
     const centerH = this.rng.nextFloat(100, 210);
     const centerPos = this.findHighGroundPosition(0, 0, 100, centerW, centerH, deploymentZones);
 
+    // NATO phonetic alphabet for zone callsigns
+    const NATO_PHONETIC = [
+      'ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO',
+      'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET',
+      'KILO', 'LIMA', 'MIKE', 'NOVEMBER', 'OSCAR',
+    ];
+
     if (centerPos) {
       zones.push({
         id: 'zone_central',
-        name: this.getObjectiveName('radio_tower'),
+        name: NATO_PHONETIC[0]!,
         x: centerPos.x,
         z: centerPos.z,
         width: centerW,
@@ -3824,8 +3763,7 @@ export class MapGenerator {
       const targetX = Math.cos(angle) * dist;
       const targetZ = Math.sin(angle) * dist;
 
-      // Determine size and points based on distance
-      // @ts-expect-error - _points unused but kept for future use
+      // Determine size and points based on distance from center
       let width: number, height: number, _points: number;
 
       if (distPercent < 0.3) {
@@ -3839,11 +3777,12 @@ export class MapGenerator {
         height = this.rng.nextFloat(60, 150);
         _points = 2;
       } else {
-        // Outer ring: Small size, high points
+        // Outer ring: Small size, high points - reward pushing to flanks
         width = this.rng.nextFloat(40, 105);
         height = this.rng.nextFloat(40, 105);
         _points = 3;
       }
+      const zonePoints = _points;
 
       // Try to find valid terrain
       const pos = this.findValidCaptureZonePosition(targetX, targetZ, width, height, 100, deploymentZones);
@@ -3851,16 +3790,17 @@ export class MapGenerator {
       if (pos) {
         // Check for overlap with buffer
         if (!checkOverlap(pos.x, pos.z, width, height)) {
+          const zoneIndex = zones.length;
           zones.push({
-            id: `zone_${String.fromCharCode(65 + zones.length)}`, // AZ
-            name: `Zone ${String.fromCharCode(65 + zones.length)}`,
+            id: `zone_${String.fromCharCode(65 + zoneIndex)}`,
+            name: NATO_PHONETIC[zoneIndex] ?? `ZONE ${String.fromCharCode(65 + zoneIndex)}`,
             x: pos.x,
             z: pos.z,
             objectiveX: pos.objectiveX ?? pos.x,
             objectiveZ: pos.objectiveZ ?? pos.z,
             width,
             height,
-            pointsPerTick: 1,
+            pointsPerTick: zonePoints,
             owner: 'neutral',
             captureProgress: 0,
             objectiveType: 'supply_cache', // Default, will be updated
@@ -4513,10 +4453,11 @@ export class MapGenerator {
       const teamZones = deploymentZones.filter(z => z.team === team);
       if (teamZones.length === 0) continue;
 
-      // Calculate team's edge area
+      // Calculate team's edge area (offset inward so spawn circles are fully on the map)
+      const edgeInset = 12; // Must be >= largest entry point radius (air=10) + buffer
       const teamEdgeZ = team === 'player'
-        ? -this.height / 2
-        : this.height / 2;
+        ? -this.height / 2 + edgeInset
+        : this.height / 2 - edgeInset;
       const edgeThreshold = this.height * 0.15;
 
       // Find roads near the team's map edge
@@ -4946,7 +4887,14 @@ export class MapGenerator {
       for (let z = 0; z < rows; z++) {
         for (let x = 0; x < cols; x++) {
           const val = bedElevations[z]?.[x];
-          if (val !== null && val !== undefined) this.terrain[z]![x]!.elevation = val;
+          if (val !== null && val !== undefined) {
+            // Never raise lake cells above 0 - prevents islands inside lakes
+            if (this.terrain[z]![x]!.type === 'water') {
+              this.terrain[z]![x]!.elevation = Math.min(0, val);
+            } else {
+              this.terrain[z]![x]!.elevation = val;
+            }
+          }
         }
       }
     }
@@ -5020,7 +4968,13 @@ export class MapGenerator {
       // Apply smoothed elevations to all cells involved
       for (let z = 0; z < rows; z++) {
         for (let x = 0; x < cols; x++) {
-          this.terrain[z]![x]!.elevation = newElevations[z]![x]!;
+          const cell = this.terrain[z]![x]!;
+          // Never raise lake/water cells above 0 - prevents islands appearing inside lakes
+          if (cell.type === 'water') {
+            cell.elevation = Math.min(0, newElevations[z]![x]!);
+          } else {
+            cell.elevation = newElevations[z]![x]!;
+          }
         }
       }
     }
