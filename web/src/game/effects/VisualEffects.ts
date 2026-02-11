@@ -249,39 +249,31 @@ export class VisualEffectsManager {
   createSmokePuff(position: THREE.Vector3): void {
     const id = `smoke_${this.nextId++}`;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const context = canvas.getContext('2d');
+    // Acquire pooled sprite
+    const pooledSprite = this.smokePuffPool.acquire();
 
-    if (!context) return;
+    if (!pooledSprite) {
+      console.warn('VisualEffects: Smoke puff pool exhausted');
+      return;
+    }
 
-    // Create radial gradient for smoke
-    const gradient = context.createRadialGradient(64, 64, 10, 64, 64, 64);
-    gradient.addColorStop(0, 'rgba(100, 100, 100, 0.8)');
-    gradient.addColorStop(0.5, 'rgba(80, 80, 80, 0.4)');
-    gradient.addColorStop(1, 'rgba(60, 60, 60, 0)');
+    // Set material blending mode for smoke puff
+    if (pooledSprite.sprite.material instanceof THREE.SpriteMaterial) {
+      pooledSprite.sprite.material.blending = THREE.NormalBlending;
+    }
 
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 128, 128);
+    // Activate sprite with base position, duration, and scale
+    pooledSprite.activate(position, 0.5, 2);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-    });
+    // Offset slightly above ground
+    pooledSprite.sprite.position.y += 1;
 
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    sprite.position.y += 1;
-    sprite.scale.set(2, 2, 1);
-    sprite.renderOrder = 1400;
-    this.game.scene.add(sprite);
+    // Set render order for proper layering
+    pooledSprite.sprite.renderOrder = 1400;
 
     const effect: Effect = {
       id,
-      mesh: sprite,
+      mesh: pooledSprite.sprite,
       timeAlive: 0,
       duration: 0.5, // 500ms
     };
@@ -349,13 +341,34 @@ export class VisualEffectsManager {
     const effect = this.effects.get(id);
     if (!effect) return;
 
-    this.game.scene.remove(effect.mesh);
-
+    // Check if this is a pooled sprite and return to pool
     if (effect.mesh instanceof THREE.Sprite) {
-      const material = effect.mesh.material as THREE.SpriteMaterial;
-      if (material.map) material.map.dispose();
-      material.dispose();
+      // Determine which pool based on effect ID
+      if (id.startsWith('muzzle_')) {
+        const pooledSprite = this.muzzleFlashPool.getAll().find((ps) => ps.sprite === effect.mesh);
+        if (pooledSprite) {
+          this.muzzleFlashPool.release(pooledSprite);
+        }
+      } else if (id.startsWith('explosion_')) {
+        const pooledSprite = this.explosionPool.getAll().find((ps) => ps.sprite === effect.mesh);
+        if (pooledSprite) {
+          this.explosionPool.release(pooledSprite);
+        }
+      } else if (id.startsWith('smoke_')) {
+        const pooledSprite = this.smokePuffPool.getAll().find((ps) => ps.sprite === effect.mesh);
+        if (pooledSprite) {
+          this.smokePuffPool.release(pooledSprite);
+        }
+      } else {
+        // Legacy non-pooled sprite - dispose normally
+        this.game.scene.remove(effect.mesh);
+        const material = effect.mesh.material as THREE.SpriteMaterial;
+        if (material.map) material.map.dispose();
+        material.dispose();
+      }
     } else if (effect.mesh instanceof THREE.Mesh) {
+      // Non-sprite effects (if any)
+      this.game.scene.remove(effect.mesh);
       effect.mesh.geometry.dispose();
       (effect.mesh.material as THREE.Material).dispose();
     }
