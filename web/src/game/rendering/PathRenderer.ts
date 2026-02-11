@@ -456,23 +456,21 @@ export class PathRenderer {
   }
 
   /**
-   * Create a waypoint marker
+   * Create a waypoint marker (small sphere)
    */
   private createWaypoint(unitId: string, position: THREE.Vector3, color: number): void {
-    const geometry = new THREE.CircleGeometry(0.5, 16);
+    const geometry = new THREE.SphereGeometry(0.4, 12, 8);
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.6,
-      side: THREE.DoubleSide,
+      opacity: 0.7,
     });
 
     const marker = new THREE.Mesh(geometry, material);
     marker.position.copy(position);
     // Sample terrain elevation and place marker above it
     const terrainHeight = this.game.getElevationAt(position.x, position.z);
-    marker.position.y = terrainHeight + this.PATH_HEIGHT_OFFSET - 0.1; // Slightly below path line
-    marker.rotation.x = -Math.PI / 2; // Face up
+    marker.position.y = terrainHeight + this.PATH_HEIGHT_OFFSET;
 
     this.scene.add(marker);
 
