@@ -291,6 +291,34 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
       transform: scale(1.02);
       box-shadow: 0 0 15px rgba(74, 158, 255, 0.3);
     }
+
+    /* Focus styles */
+    .back-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
+    .setting-select:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 8px rgba(74, 158, 255, 0.4);
+    }
+
+    .setting-checkbox:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
+    .setting-slider:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
+    .settings-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+      box-shadow: 0 0 12px rgba(74, 158, 255, 0.5);
+    }
   `;
   document.head.appendChild(style);
 
