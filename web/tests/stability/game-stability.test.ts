@@ -67,6 +67,7 @@ const createMockGame = () => ({
   pathRenderer: {
     updatePath: vi.fn(),
     clearPath: vi.fn(),
+    updatePathQueue: vi.fn(),
   },
   currentMap: null,
   getElevationAt: vi.fn().mockReturnValue(0),

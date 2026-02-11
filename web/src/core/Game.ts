@@ -45,6 +45,7 @@ import { STARTER_DECKS } from '../data/starterDecks';
 import { getUnitById } from '../data/factions';
 import { BenchmarkManager } from '../game/debug/BenchmarkManager';
 import { VectorPool } from '../game/utils/VectorPool';
+import { QuaternionPool } from '../game/utils/QuaternionPool';
 import { SoundLibrary } from '../game/audio/SoundLibrary';
 import { SpatialAudioManager } from '../game/audio/SpatialAudioManager';
 import { AUDIO_MANIFEST } from '../data/audioManifest';
@@ -545,6 +546,9 @@ export class Game {
 
     // Reset vector pool at start of each frame
     VectorPool.reset();
+
+    // Reset quaternion pool at start of each frame
+    QuaternionPool.reset();
 
     // Declare all timing variables at function scope
     let t0, t1, t2, t3, t4, t5, t6;
