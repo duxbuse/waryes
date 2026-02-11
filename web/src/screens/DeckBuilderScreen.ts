@@ -15,6 +15,14 @@ export interface DeckBuilderCallbacks {
 
 const CATEGORIES: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
 
+// Helper to sanitize HTML to prevent XSS
+function sanitizeHTML(str: string | number): string {
+  const text = String(str);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Helper to calculate total availability from UnitAvailability object
 function getTotalAvailability(avail: UnitAvailability): number {
   return avail.rookie + avail.trained + avail.veteran + avail.elite + avail.legend;
@@ -660,7 +668,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
   function renderFactionSelect(): void {
     const select = element.querySelector('#faction-select') as HTMLSelectElement;
     select.innerHTML = FACTIONS.map(f =>
-      `<option value="${f.id}">${f.name}</option>`
+      `<option value="${sanitizeHTML(f.id)}">${sanitizeHTML(f.name)}</option>`
     ).join('');
     select.value = currentFactionId;
   }
@@ -669,7 +677,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const select = element.querySelector('#division-select') as HTMLSelectElement;
     const divisions = getDivisionsByFaction(currentFactionId);
     select.innerHTML = divisions.map(d =>
-      `<option value="${d.id}">${d.name}</option>`
+      `<option value="${sanitizeHTML(d.id)}">${sanitizeHTML(d.name)}</option>`
     ).join('');
 
     if (divisions.length > 0 && !divisions.find(d => d.id === currentDivisionId)) {
@@ -681,7 +689,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
   function renderCategoryTabs(): void {
     const tabs = element.querySelector('#category-tabs')!;
     tabs.innerHTML = CATEGORIES.map(cat =>
-      `<button class="category-tab ${cat === currentCategory ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+      `<button class="category-tab ${cat === currentCategory ? 'active' : ''}" data-category="${sanitizeHTML(cat)}">${sanitizeHTML(cat)}</button>`
     ).join('');
   }
 
@@ -700,18 +708,18 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
       return `
         <div class="unit-card ${!isAvailable || remaining <= 0 ? 'unavailable' : ''}"
-             data-unit-id="${unit.id}"
+             data-unit-id="${sanitizeHTML(unit.id)}"
              ${isAvailable && remaining > 0 ? '' : 'data-unavailable="true"'}>
           <div class="unit-card-header">
-            <span class="unit-card-name">${unit.name}</span>
-            <span class="unit-card-cost">${unit.cost}</span>
+            <span class="unit-card-name">${sanitizeHTML(unit.name)}</span>
+            <span class="unit-card-cost">${sanitizeHTML(unit.cost)}</span>
           </div>
           <div class="unit-card-tags">
-            ${unit.tags.slice(0, 3).map(t => `<span class="unit-tag">${t}</span>`).join('')}
+            ${unit.tags.slice(0, 3).map(t => `<span class="unit-tag">${sanitizeHTML(t)}</span>`).join('')}
           </div>
           ${isAvailable ? `
             <div class="unit-card-availability">
-              Available: ${remaining}/${totalAvail}
+              Available: ${sanitizeHTML(remaining)}/${sanitizeHTML(totalAvail)}
             </div>
           ` : '<div class="unit-card-availability">Not in division</div>'}
         </div>
@@ -730,30 +738,30 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     content.innerHTML = `
       <div class="stat-row">
         <span class="stat-label">Name:</span>
-        <span class="stat-value">${unit.name}</span>
+        <span class="stat-value">${sanitizeHTML(unit.name)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Cost:</span>
-        <span class="stat-value" style="color: #ffd700">${unit.cost}</span>
+        <span class="stat-value" style="color: #ffd700">${sanitizeHTML(unit.cost)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Category:</span>
-        <span class="stat-value">${unit.category}</span>
+        <span class="stat-value">${sanitizeHTML(unit.category)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Health:</span>
-        <span class="stat-value">${unit.health}</span>
+        <span class="stat-value">${sanitizeHTML(unit.health)}</span>
       </div>
 
       <div class="stat-section">
         <div class="stat-section-title">Speed</div>
         <div class="stat-row">
           <span class="stat-label">Road:</span>
-          <span class="stat-value">${unit.speed.road} km/h</span>
+          <span class="stat-value">${sanitizeHTML(unit.speed.road)} km/h</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Off-road:</span>
-          <span class="stat-value">${unit.speed.offRoad} km/h</span>
+          <span class="stat-value">${sanitizeHTML(unit.speed.offRoad)} km/h</span>
         </div>
       </div>
 
@@ -761,19 +769,19 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         <div class="stat-section-title">Armor</div>
         <div class="stat-row">
           <span class="stat-label">Front:</span>
-          <span class="stat-value">${unit.armor.front}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.front)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Side:</span>
-          <span class="stat-value">${unit.armor.side}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.side)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Rear:</span>
-          <span class="stat-value">${unit.armor.rear}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.rear)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Top:</span>
-          <span class="stat-value">${unit.armor.top}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.top)}</span>
         </div>
       </div>
 
@@ -781,16 +789,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         <div class="stat-section-title">Other</div>
         <div class="stat-row">
           <span class="stat-label">Optics:</span>
-          <span class="stat-value">${unit.optics}</span>
+          <span class="stat-value">${sanitizeHTML(unit.optics)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Stealth:</span>
-          <span class="stat-value">${unit.stealth}</span>
+          <span class="stat-value">${sanitizeHTML(unit.stealth)}</span>
         </div>
         ${unit.transportCapacity > 0 ? `
         <div class="stat-row">
           <span class="stat-label">Transport:</span>
-          <span class="stat-value">${unit.transportCapacity} slots</span>
+          <span class="stat-value">${sanitizeHTML(unit.transportCapacity)} slots</span>
         </div>
         ` : ''}
         ${unit.isCommander ? `
@@ -802,10 +810,10 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       </div>
 
       <div class="stat-section">
-        <div class="stat-section-title">Weapons (${unit.weapons.length})</div>
+        <div class="stat-section-title">Weapons (${sanitizeHTML(unit.weapons.length)})</div>
         ${unit.weapons.map(w => `
           <div class="stat-row">
-            <span class="stat-value">${w.count}x ${w.weaponId}</span>
+            <span class="stat-value">${sanitizeHTML(w.count)}x ${sanitizeHTML(w.weaponId)}</span>
           </div>
         `).join('')}
       </div>
@@ -828,18 +836,18 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     pinBtn.textContent = 'Unpin';
 
     pinnedEl.innerHTML = `
-      <div class="pinned-header">Pinned: ${pinnedUnit.name}</div>
+      <div class="pinned-header">Pinned: ${sanitizeHTML(pinnedUnit.name)}</div>
       <div class="stat-row">
         <span class="stat-label">Cost:</span>
-        <span class="stat-value">${pinnedUnit.cost}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.cost)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Health:</span>
-        <span class="stat-value">${pinnedUnit.health}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.health)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Armor (F/S/R):</span>
-        <span class="stat-value">${pinnedUnit.armor.front}/${pinnedUnit.armor.side}/${pinnedUnit.armor.rear}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.armor.front)}/${sanitizeHTML(pinnedUnit.armor.side)}/${sanitizeHTML(pinnedUnit.armor.rear)}</span>
       </div>
     `;
   }
@@ -875,11 +883,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }, 0);
 
       return `
-        <div class="deck-unit-card" data-unit-id="${unitId}">
-          <button class="remove-btn" data-remove-unit="${unitId}">&times;</button>
-          <div class="unit-name">${unit.name}</div>
-          <div class="unit-meta">x${data.count}</div>
-          <div class="slot-cost">${totalCost}c | ${apCost}AP</div>
+        <div class="deck-unit-card" data-unit-id="${sanitizeHTML(unitId)}">
+          <button class="remove-btn" data-remove-unit="${sanitizeHTML(unitId)}">&times;</button>
+          <div class="unit-name">${sanitizeHTML(unit.name)}</div>
+          <div class="unit-meta">x${sanitizeHTML(data.count)}</div>
+          <div class="slot-cost">${sanitizeHTML(totalCost)}c | ${sanitizeHTML(apCost)}AP</div>
         </div>
       `;
     }).join('');
@@ -938,8 +946,8 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     });
 
     options.innerHTML = transports.map(t => `
-      <div class="transport-option" data-transport-id="${t.id}">
-        ${t.name} (${t.transportCapacity} slots, ${t.cost}c)
+      <div class="transport-option" data-transport-id="${sanitizeHTML(t.id)}">
+        ${sanitizeHTML(t.name)} (${sanitizeHTML(t.transportCapacity)} slots, ${sanitizeHTML(t.cost)}c)
       </div>
     `).join('');
 
@@ -1020,9 +1028,9 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       list.innerHTML = '<p style="color: #666; text-align: center;">No saved decks</p>';
     } else {
       list.innerHTML = savedDecks.map(d => `
-        <div class="saved-deck-item" data-deck-id="${d.id}">
-          <span>${d.name} (${d.units.length} units)</span>
-          <span class="delete-deck" data-delete-deck="${d.id}">&times;</span>
+        <div class="saved-deck-item" data-deck-id="${sanitizeHTML(d.id)}">
+          <span>${sanitizeHTML(d.name)} (${sanitizeHTML(d.units.length)} units)</span>
+          <span class="delete-deck" data-delete-deck="${sanitizeHTML(d.id)}">&times;</span>
         </div>
       `).join('');
     }
