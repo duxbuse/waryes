@@ -13,6 +13,7 @@ const mockGame = {
   unitManager: {
     destroyUnit: vi.fn(),
     getAllUnits: vi.fn().mockReturnValue([]),
+    getUnitsInRadius: vi.fn().mockReturnValue([]),
   },
   selectionManager: {
     removeFromSelection: vi.fn(),
@@ -87,17 +88,24 @@ vi.mock('../../src/data/factions', () => ({
 }));
 
 const createTestUnitWithWeapons = (weapons: WeaponSlot[]): Unit => {
-  const unitData: Partial<UnitData> = {
+  const unitData: UnitData = {
     id: 'test_unit_multi_weapon',
     name: 'Test Multi-Weapon Unit',
     category: 'TNK',
-    maxHealth: 100,
-    speed: 5,
-    rotationSpeed: 3,
-    frontArmor: 10,
-    sideArmor: 5,
-    rearArmor: 3,
-    topArmor: 2,
+    cost: 100,
+    tags: [],
+    health: 100,
+    speed: { road: 5, offRoad: 4, rotation: 3 },
+    armor: { front: 10, side: 5, rear: 3, top: 2 },
+    optics: 'Good',
+    stealth: 'Normal',
+    isCommander: false,
+    commanderAuraRadius: 0,
+    transportCapacity: 0,
+    canBeTransported: false,
+    transportSize: 1,
+    weapons: weapons,
+    veterancyBonus: 0,
   };
 
   const config: UnitConfig = {
@@ -109,7 +117,7 @@ const createTestUnitWithWeapons = (weapons: WeaponSlot[]): Unit => {
     maxHealth: 100,
     speed: 5,
     rotationSpeed: 3,
-    unitData: unitData as UnitData,
+    unitData: unitData,
   };
 
   return new Unit(config, mockGame);
@@ -151,13 +159,13 @@ describe('Weapon Cooldown System', () => {
     });
   });
 
-  describe('setWeaponCooldown', () => {
+  describe('resetWeaponCooldown', () => {
     it('should calculate cooldown from weapon rate of fire (60 rpm = 1s cooldown)', () => {
       const unit = createTestUnitWithWeapons([
         { weaponId: 'test_weapon_1', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       // 60 rounds per minute = 1 round per second = 1 second cooldown
       expect(unit.getWeaponCooldown(0)).toBe(1);
     });
@@ -167,7 +175,7 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_2', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_2', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_2');
       // 120 rounds per minute = 2 rounds per second = 0.5 second cooldown
       expect(unit.getWeaponCooldown(0)).toBe(0.5);
     });
@@ -177,7 +185,7 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_3', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_3', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_3');
       // 30 rounds per minute = 0.5 rounds per second = 2 second cooldown
       expect(unit.getWeaponCooldown(0)).toBe(2);
     });
@@ -189,9 +197,9 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_3', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
-      unit.setWeaponCooldown('test_weapon_2', 1);
-      unit.setWeaponCooldown('test_weapon_3', 2);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
+      unit.resetWeaponCooldown(1, 'test_weapon_2');
+      unit.resetWeaponCooldown(2, 'test_weapon_3');
 
       expect(unit.getWeaponCooldown(0)).toBe(1); // 60 rpm = 1s
       expect(unit.getWeaponCooldown(1)).toBe(0.5); // 120 rpm = 0.5s
@@ -213,7 +221,7 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_1', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       expect(unit.canWeaponFire(0)).toBe(false);
     });
 
@@ -224,7 +232,7 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       // Set only first weapon on cooldown
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
 
       expect(unit.canWeaponFire(0)).toBe(false); // On cooldown
       expect(unit.canWeaponFire(1)).toBe(true); // Ready to fire
@@ -238,7 +246,7 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       unit.setFrozen(false);
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       expect(unit.getWeaponCooldown(0)).toBe(1);
 
       // Update for 0.5 seconds
@@ -252,7 +260,7 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       unit.setFrozen(false);
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       expect(unit.getWeaponCooldown(0)).toBe(1);
 
       // Update for full cooldown duration
@@ -267,7 +275,7 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       unit.setFrozen(false);
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       expect(unit.getWeaponCooldown(0)).toBe(1);
 
       // Update beyond cooldown duration
@@ -283,9 +291,9 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       unit.setFrozen(false);
-      unit.setWeaponCooldown('test_weapon_1', 0); // 1s cooldown
-      unit.setWeaponCooldown('test_weapon_2', 1); // 0.5s cooldown
-      unit.setWeaponCooldown('test_weapon_3', 2); // 2s cooldown
+      unit.resetWeaponCooldown(0, 'test_weapon_1'); // 1s cooldown
+      unit.resetWeaponCooldown(1, 'test_weapon_2'); // 0.5s cooldown
+      unit.resetWeaponCooldown(2, 'test_weapon_3'); // 2s cooldown
 
       // Update for 0.5 seconds
       unit.fixedUpdate(0.5);
@@ -301,7 +309,7 @@ describe('Weapon Cooldown System', () => {
       ]);
 
       unit.setFrozen(true);
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       const initialCooldown = unit.getWeaponCooldown(0);
 
       unit.fixedUpdate(1.0);
@@ -316,7 +324,7 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_2', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0); // On cooldown
+      unit.resetWeaponCooldown(0, 'test_weapon_1'); // On cooldown
       // weapon 2 ready to fire
 
       expect(unit.canFire()).toBe(true);
@@ -328,8 +336,8 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_2', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
-      unit.setWeaponCooldown('test_weapon_2', 1);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
+      unit.resetWeaponCooldown(1, 'test_weapon_2');
 
       expect(unit.canFire()).toBe(false);
     });
@@ -410,8 +418,8 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_2', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
-      unit.setWeaponCooldown('test_weapon_2', 1);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
+      unit.resetWeaponCooldown(1, 'test_weapon_2');
 
       unit.resupplyAllWeapons();
 
@@ -425,8 +433,8 @@ describe('Weapon Cooldown System', () => {
         { weaponId: 'test_weapon_2', count: 1, maxAmmo: 100 },
       ]);
 
-      unit.setWeaponCooldown('test_weapon_1', 0);
-      unit.setWeaponCooldown('test_weapon_2', 1);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
+      unit.resetWeaponCooldown(1, 'test_weapon_2');
 
       unit.resupplyAllWeapons();
 
@@ -460,7 +468,7 @@ describe('Weapon Cooldown System', () => {
       expect(unit.canWeaponFire(0)).toBe(true);
 
       // Fire weapon
-      unit.setWeaponCooldown('test_weapon_1', 0);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
       unit.addWeaponDamage(0, 50);
 
       // Weapon on cooldown
@@ -486,8 +494,8 @@ describe('Weapon Cooldown System', () => {
       unit.setFrozen(false);
 
       // Fire both weapons at same time
-      unit.setWeaponCooldown('test_weapon_1', 0);
-      unit.setWeaponCooldown('test_weapon_2', 1);
+      unit.resetWeaponCooldown(0, 'test_weapon_1');
+      unit.resetWeaponCooldown(1, 'test_weapon_2');
 
       expect(unit.canWeaponFire(0)).toBe(false);
       expect(unit.canWeaponFire(1)).toBe(false);

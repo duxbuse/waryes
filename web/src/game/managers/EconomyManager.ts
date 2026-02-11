@@ -43,6 +43,9 @@ export class EconomyManager {
   private score: TeamScore = { player: 0, enemy: 0 };
   private readonly victoryThreshold: number = GAME_CONSTANTS.VICTORY_THRESHOLD;
 
+  // Track contested state per zone to prevent spam
+  private zoneContestedStates: Map<string, boolean> = new Map();
+
   // UI elements
   private creditsEl: HTMLElement | null = null;
   private incomeEl: HTMLElement | null = null;
@@ -109,6 +112,9 @@ export class EconomyManager {
 
     this.playerCredits += playerZoneIncome;
     this.enemyCredits += this.baseIncome + enemyZoneIncome;
+
+    // Play income tick sound
+    this.game.audioManager.playSound('income_tick');
 
     // Debug: Log score every tick
     if (this.score.player > 0 || this.score.enemy > 0) {
@@ -185,6 +191,13 @@ export class EconomyManager {
       const fillState = this.game.mapRenderer?.getZoneFillState(zone.id);
       const isContested = playerCount > 0 && enemyCount > 0;
 
+      // Play contested sound only on transition to contested state
+      const wasContested = this.zoneContestedStates.get(zone.id) || false;
+      if (isContested && !wasContested) {
+        this.game.audioManager.playSound('zone_contested');
+      }
+      this.zoneContestedStates.set(zone.id, isContested);
+
       // Determine zone ownership based on fill state
       if (fillState) {
         // Check if zone was captured
@@ -233,7 +246,7 @@ export class EconomyManager {
 
   private onZoneCaptured(zone: CaptureZone, team: 'player' | 'enemy'): void {
     console.log(`${zone.name} captured by ${team}!`);
-    // Could add UI notification here
+    this.game.audioManager.playSound('zone_capture');
   }
 
   private checkVictory(): void {

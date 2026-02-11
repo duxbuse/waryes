@@ -49,6 +49,7 @@ export class UnitUI {
   private aimRing: THREE.Line | null = null;  // Outer blue ring showing aim direction
   private weaponReloadRings: THREE.Line[] = []; // Inner green rings for weapon reloads
   private weaponReloadBgRings: THREE.Line[] = []; // Background rings for weapons
+  private weaponRangeRings: THREE.Line[] = []; // Attack range circles for each weapon
 
   // Ring constants
   private readonly AIM_RING_RADIUS = 2.5;
@@ -424,6 +425,11 @@ export class UnitUI {
     for (let i = 0; i < Math.min(weapons.length, 3); i++) { // Max 3 weapon rings
       this.createWeaponReloadRing(i);
     }
+
+    // Create weapon range rings - one per weapon
+    for (let i = 0; i < weapons.length; i++) {
+      this.createWeaponRangeRing(i);
+    }
   }
 
   /**
@@ -497,6 +503,48 @@ export class UnitUI {
     fgRing.visible = false;
     this.groundRingsGroup?.add(fgRing);
     this.weaponReloadRings.push(fgRing);
+  }
+
+  /**
+   * Create a weapon range ring (shows max attack range)
+   */
+  private createWeaponRangeRing(weaponIndex: number): void {
+    const weapons = this.unit.getWeapons();
+    if (weaponIndex >= weapons.length) return;
+
+    const weaponSlot = weapons[weaponIndex];
+    if (!weaponSlot) return;
+
+    const weapon = getWeaponById(weaponSlot.weaponId);
+    if (!weapon) return;
+
+    const radius = weapon.range;
+
+    // Determine color based on weapon type
+    let color: number;
+    if (weapon.isAntiAir && weapon.canTargetGround) {
+      color = 0xaa33ff; // Purple - can target both air and ground
+    } else if (weapon.isAntiAir) {
+      color = 0x4a9eff; // Blue - anti-air only
+    } else {
+      color = 0xff3333; // Red - ground attack
+    }
+
+    // Create full circle for range
+    const points = this.createArcPoints(radius, Math.PI * 2, 0);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: color,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: false,
+    });
+    const rangeRing = new THREE.Line(geometry, material);
+    rangeRing.renderOrder = 997; // Below other rings
+    rangeRing.visible = false;
+    this.groundRingsGroup?.add(rangeRing);
+    this.weaponRangeRings.push(rangeRing);
   }
 
   /**
@@ -633,11 +681,17 @@ export class UnitUI {
   }
 
   /**
-   * Update all ground ring indicators (aim + weapon reloads)
+   * Update all ground ring indicators (aim + weapon reloads + range rings)
    */
   private updateGroundRingIndicators(): void {
     // Get unit's current command
     const currentCommand = (this.unit as any).currentCommand;
+
+    // Update weapon range rings - show when unit is selected
+    const isSelected = this.unit.isSelected;
+    for (const rangeRing of this.weaponRangeRings) {
+      rangeRing.visible = isSelected;
+    }
 
     // Update aim ring - show when attacking or attack-moving with a target
     if (this.aimRing) {
@@ -760,6 +814,58 @@ export class UnitUI {
     this.container.add(this.categoryIcon);
   }
 
+  /**
+   * Interpolate between two colors based on a factor (0-1)
+   */
+  private lerpColor(color1: number, color2: number, factor: number): THREE.Color {
+    const c1 = new THREE.Color(color1);
+    const c2 = new THREE.Color(color2);
+    return c1.lerp(c2, factor);
+  }
+
+  /**
+   * Get health bar color with smooth gradient transitions
+   * Green (100%) -> Yellow (50%) -> Red (0%)
+   */
+  private getHealthBarColor(healthPercent: number): THREE.Color {
+    // Clamp to valid range
+    healthPercent = Math.max(0, Math.min(1, healthPercent));
+
+    if (healthPercent > 0.5) {
+      // Interpolate from green to yellow (100% -> 50%)
+      const factor = (1 - healthPercent) / 0.5; // 0 at 100%, 1 at 50%
+      return this.lerpColor(0x00ff00, 0xffff00, factor);
+    } else {
+      // Interpolate from yellow to red (50% -> 0%)
+      const factor = (0.5 - healthPercent) / 0.5; // 0 at 50%, 1 at 0%
+      return this.lerpColor(0xffff00, 0xff0000, factor);
+    }
+  }
+
+  /**
+   * Get morale bar color with smooth gradient transitions
+   * Bright blue (100%) -> Cyan (50%) -> Gray-blue (0%)
+   */
+  private getMoraleBarColor(moralePercent: number, isRouting: boolean): THREE.Color {
+    // Routing units get gray color
+    if (isRouting) {
+      return new THREE.Color(0x666666);
+    }
+
+    // Clamp to valid range
+    moralePercent = Math.max(0, Math.min(1, moralePercent));
+
+    if (moralePercent > 0.5) {
+      // Interpolate from bright blue to cyan (100% -> 50%)
+      const factor = (1 - moralePercent) / 0.5; // 0 at 100%, 1 at 50%
+      return this.lerpColor(0x4a9eff, 0x44ddff, factor);
+    } else {
+      // Interpolate from cyan to orange (50% -> 0%)
+      const factor = (0.5 - moralePercent) / 0.5; // 0 at 50%, 1 at 0%
+      return this.lerpColor(0x44ddff, 0xff8800, factor);
+    }
+  }
+
   private createPassengerCountIndicator(): void {
     // Only create for transport units
     if (this.unit.transportCapacity <= 0) {
@@ -832,15 +938,9 @@ export class UnitUI {
       this.healthBarFg.scale.x = Math.max(0.01, healthPercent); // Prevent zero scale
       this.healthBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - healthPercent);
 
-      // Color health bar based on percentage
+      // Smooth gradient color based on health percentage
       const healthMaterial = this.healthBarFg.material as THREE.MeshBasicMaterial;
-      if (healthPercent > 0.6) {
-        healthMaterial.color.setHex(0x00ff00); // Green
-      } else if (healthPercent > 0.3) {
-        healthMaterial.color.setHex(0xffff00); // Yellow
-      } else {
-        healthMaterial.color.setHex(0xff0000); // Red
-      }
+      healthMaterial.color.copy(this.getHealthBarColor(healthPercent));
     }
 
     // Update morale bar (skip if using batched renderer)
@@ -849,17 +949,9 @@ export class UnitUI {
       this.moraleBarFg.scale.x = Math.max(0.01, moralePercent);
       this.moraleBarFg.position.x = -(this.BAR_WIDTH / 2) * (1 - moralePercent);
 
-      // Color morale bar based on state
+      // Smooth gradient color based on morale state
       const moraleMaterial = this.moraleBarFg.material as THREE.MeshBasicMaterial;
-      if (this.unit.isRouting) {
-        moraleMaterial.color.setHex(0x666666); // Gray when routing
-      } else if (moralePercent < 0.25) {
-        moraleMaterial.color.setHex(0xff8800); // Orange when breaking
-      } else if (moralePercent < 0.5) {
-        moraleMaterial.color.setHex(0xffcc00); // Yellow-orange when shaken
-      } else {
-        moraleMaterial.color.setHex(0x4a9eff); // Blue when normal
-      }
+      moraleMaterial.color.copy(this.getMoraleBarColor(moralePercent, this.unit.isRouting));
     }
 
     // Update status icons visibility
@@ -1028,6 +1120,10 @@ export class UnitUI {
       (ring.material as THREE.Material).dispose();
     }
     for (const ring of this.weaponReloadBgRings) {
+      ring.geometry.dispose();
+      (ring.material as THREE.Material).dispose();
+    }
+    for (const ring of this.weaponRangeRings) {
       ring.geometry.dispose();
       (ring.material as THREE.Material).dispose();
     }

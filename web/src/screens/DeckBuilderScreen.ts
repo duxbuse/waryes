@@ -15,6 +15,14 @@ export interface DeckBuilderCallbacks {
 
 const CATEGORIES: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
 
+// Helper to sanitize HTML to prevent XSS
+function sanitizeHTML(str: string | number): string {
+  const text = String(str);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Helper to calculate total availability from UnitAvailability object
 function getTotalAvailability(avail: UnitAvailability): number {
   return avail.rookie + avail.trained + avail.veteran + avail.elite + avail.legend;
@@ -184,6 +192,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       border-color: #4a9eff;
     }
 
+    .back-btn:focus-visible, .action-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
     .deck-actions {
       display: flex;
       gap: 10px;
@@ -210,7 +223,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .faction-selection label, .division-selection label, .deck-name-input label {
       display: block;
       font-size: 12px;
-      color: #888;
+      color: #bbb;
       margin-bottom: 5px;
     }
 
@@ -221,6 +234,12 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       border: 1px solid #333;
       color: #e0e0e0;
       border-radius: 4px;
+    }
+
+    .faction-selection select:focus-visible, .division-selection select:focus-visible, .deck-name-input input:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+      border-color: #4a9eff;
     }
 
     .deck-stats {
@@ -255,7 +274,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       padding: 12px 20px;
       background: transparent;
       border: none;
-      color: #888;
+      color: #bbb;
       cursor: pointer;
       transition: all 0.2s;
       font-size: 13px;
@@ -265,6 +284,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .category-tab:hover {
       color: #e0e0e0;
       background: rgba(255, 255, 255, 0.05);
+    }
+
+    .category-tab:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: -2px;
     }
 
     .category-tab.active {
@@ -295,6 +319,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .unit-card:hover {
       background: rgba(74, 158, 255, 0.1);
       border-color: #4a9eff;
+    }
+
+    .unit-card:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .unit-card.unavailable {
@@ -331,13 +360,13 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       padding: 2px 6px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 3px;
-      color: #888;
+      color: #bbb;
     }
 
     .unit-card-availability {
       margin-top: 8px;
       font-size: 11px;
-      color: #666;
+      color: #bbb;
     }
 
     .deck-right {
@@ -375,7 +404,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       font-size: 11px;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid #444;
-      color: #888;
+      color: #bbb;
       cursor: pointer;
       border-radius: 3px;
     }
@@ -383,6 +412,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .pin-btn:hover {
       background: rgba(255, 255, 255, 0.2);
       color: #e0e0e0;
+    }
+
+    .pin-btn:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .pin-btn.pinned {
@@ -397,7 +431,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     }
 
     .stats-content .placeholder {
-      color: #555;
+      color: #aaa;
       text-align: center;
       padding: 20px;
     }
@@ -409,7 +443,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     }
 
     .stat-label {
-      color: #888;
+      color: #bbb;
     }
 
     .stat-value {
@@ -463,7 +497,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     .deck-strip-header span {
       font-size: 13px;
-      color: #888;
+      color: #bbb;
     }
 
     .clear-btn {
@@ -478,6 +512,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     .clear-btn:hover {
       background: rgba(255, 74, 74, 0.4);
+    }
+
+    .clear-btn:focus-visible {
+      outline: 2px solid #ff4a4a;
+      outline-offset: 2px;
     }
 
     .deck-strip-units {
@@ -513,6 +552,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       justify-content: center;
     }
 
+    .deck-unit-card .remove-btn:focus-visible {
+      outline: 2px solid #ff4a4a;
+      outline-offset: 2px;
+    }
+
     .deck-unit-card .unit-name {
       font-size: 11px;
       color: #e0e0e0;
@@ -521,7 +565,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     .deck-unit-card .unit-meta {
       font-size: 10px;
-      color: #888;
+      color: #bbb;
     }
 
     .deck-unit-card .slot-cost {
@@ -575,6 +619,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .popup-close:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
+    }
+
     .transport-option {
       padding: 10px;
       margin: 5px 0;
@@ -587,6 +636,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .transport-option:hover {
       background: rgba(74, 158, 255, 0.2);
       border-color: #4a9eff;
+    }
+
+    .transport-option:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .saved-deck-item {
@@ -603,6 +657,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .saved-deck-item:hover {
       background: rgba(74, 158, 255, 0.2);
       border-color: #4a9eff;
+    }
+
+    .saved-deck-item:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 2px;
     }
 
     .saved-deck-item .delete-deck {
@@ -660,7 +719,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
   function renderFactionSelect(): void {
     const select = element.querySelector('#faction-select') as HTMLSelectElement;
     select.innerHTML = FACTIONS.map(f =>
-      `<option value="${f.id}">${f.name}</option>`
+      `<option value="${sanitizeHTML(f.id)}">${sanitizeHTML(f.name)}</option>`
     ).join('');
     select.value = currentFactionId;
   }
@@ -669,7 +728,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const select = element.querySelector('#division-select') as HTMLSelectElement;
     const divisions = getDivisionsByFaction(currentFactionId);
     select.innerHTML = divisions.map(d =>
-      `<option value="${d.id}">${d.name}</option>`
+      `<option value="${sanitizeHTML(d.id)}">${sanitizeHTML(d.name)}</option>`
     ).join('');
 
     if (divisions.length > 0 && !divisions.find(d => d.id === currentDivisionId)) {
@@ -681,7 +740,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
   function renderCategoryTabs(): void {
     const tabs = element.querySelector('#category-tabs')!;
     tabs.innerHTML = CATEGORIES.map(cat =>
-      `<button class="category-tab ${cat === currentCategory ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+      `<button class="category-tab ${cat === currentCategory ? 'active' : ''}" data-category="${sanitizeHTML(cat)}">${sanitizeHTML(cat)}</button>`
     ).join('');
   }
 
@@ -700,18 +759,18 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
       return `
         <div class="unit-card ${!isAvailable || remaining <= 0 ? 'unavailable' : ''}"
-             data-unit-id="${unit.id}"
-             ${isAvailable && remaining > 0 ? '' : 'data-unavailable="true"'}>
+             data-unit-id="${sanitizeHTML(unit.id)}"
+             ${isAvailable && remaining > 0 ? 'tabindex="0"' : 'data-unavailable="true"'}>
           <div class="unit-card-header">
-            <span class="unit-card-name">${unit.name}</span>
-            <span class="unit-card-cost">${unit.cost}</span>
+            <span class="unit-card-name">${sanitizeHTML(unit.name)}</span>
+            <span class="unit-card-cost">${sanitizeHTML(unit.cost)}</span>
           </div>
           <div class="unit-card-tags">
-            ${unit.tags.slice(0, 3).map(t => `<span class="unit-tag">${t}</span>`).join('')}
+            ${unit.tags.slice(0, 3).map(t => `<span class="unit-tag">${sanitizeHTML(t)}</span>`).join('')}
           </div>
           ${isAvailable ? `
             <div class="unit-card-availability">
-              Available: ${remaining}/${totalAvail}
+              Available: ${sanitizeHTML(remaining)}/${sanitizeHTML(totalAvail)}
             </div>
           ` : '<div class="unit-card-availability">Not in division</div>'}
         </div>
@@ -730,30 +789,30 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     content.innerHTML = `
       <div class="stat-row">
         <span class="stat-label">Name:</span>
-        <span class="stat-value">${unit.name}</span>
+        <span class="stat-value">${sanitizeHTML(unit.name)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Cost:</span>
-        <span class="stat-value" style="color: #ffd700">${unit.cost}</span>
+        <span class="stat-value" style="color: #ffd700">${sanitizeHTML(unit.cost)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Category:</span>
-        <span class="stat-value">${unit.category}</span>
+        <span class="stat-value">${sanitizeHTML(unit.category)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Health:</span>
-        <span class="stat-value">${unit.health}</span>
+        <span class="stat-value">${sanitizeHTML(unit.health)}</span>
       </div>
 
       <div class="stat-section">
         <div class="stat-section-title">Speed</div>
         <div class="stat-row">
           <span class="stat-label">Road:</span>
-          <span class="stat-value">${unit.speed.road} km/h</span>
+          <span class="stat-value">${sanitizeHTML(unit.speed.road)} km/h</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Off-road:</span>
-          <span class="stat-value">${unit.speed.offRoad} km/h</span>
+          <span class="stat-value">${sanitizeHTML(unit.speed.offRoad)} km/h</span>
         </div>
       </div>
 
@@ -761,19 +820,19 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         <div class="stat-section-title">Armor</div>
         <div class="stat-row">
           <span class="stat-label">Front:</span>
-          <span class="stat-value">${unit.armor.front}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.front)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Side:</span>
-          <span class="stat-value">${unit.armor.side}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.side)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Rear:</span>
-          <span class="stat-value">${unit.armor.rear}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.rear)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Top:</span>
-          <span class="stat-value">${unit.armor.top}</span>
+          <span class="stat-value">${sanitizeHTML(unit.armor.top)}</span>
         </div>
       </div>
 
@@ -781,16 +840,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         <div class="stat-section-title">Other</div>
         <div class="stat-row">
           <span class="stat-label">Optics:</span>
-          <span class="stat-value">${unit.optics}</span>
+          <span class="stat-value">${sanitizeHTML(unit.optics)}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Stealth:</span>
-          <span class="stat-value">${unit.stealth}</span>
+          <span class="stat-value">${sanitizeHTML(unit.stealth)}</span>
         </div>
         ${unit.transportCapacity > 0 ? `
         <div class="stat-row">
           <span class="stat-label">Transport:</span>
-          <span class="stat-value">${unit.transportCapacity} slots</span>
+          <span class="stat-value">${sanitizeHTML(unit.transportCapacity)} slots</span>
         </div>
         ` : ''}
         ${unit.isCommander ? `
@@ -802,10 +861,10 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       </div>
 
       <div class="stat-section">
-        <div class="stat-section-title">Weapons (${unit.weapons.length})</div>
+        <div class="stat-section-title">Weapons (${sanitizeHTML(unit.weapons.length)})</div>
         ${unit.weapons.map(w => `
           <div class="stat-row">
-            <span class="stat-value">${w.count}x ${w.weaponId}</span>
+            <span class="stat-value">${sanitizeHTML(w.count)}x ${sanitizeHTML(w.weaponId)}</span>
           </div>
         `).join('')}
       </div>
@@ -828,18 +887,18 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     pinBtn.textContent = 'Unpin';
 
     pinnedEl.innerHTML = `
-      <div class="pinned-header">Pinned: ${pinnedUnit.name}</div>
+      <div class="pinned-header">Pinned: ${sanitizeHTML(pinnedUnit.name)}</div>
       <div class="stat-row">
         <span class="stat-label">Cost:</span>
-        <span class="stat-value">${pinnedUnit.cost}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.cost)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Health:</span>
-        <span class="stat-value">${pinnedUnit.health}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.health)}</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Armor (F/S/R):</span>
-        <span class="stat-value">${pinnedUnit.armor.front}/${pinnedUnit.armor.side}/${pinnedUnit.armor.rear}</span>
+        <span class="stat-value">${sanitizeHTML(pinnedUnit.armor.front)}/${sanitizeHTML(pinnedUnit.armor.side)}/${sanitizeHTML(pinnedUnit.armor.rear)}</span>
       </div>
     `;
   }
@@ -848,7 +907,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const strip = element.querySelector('#deck-strip-units')!;
 
     if (deckUnits.length === 0) {
-      strip.innerHTML = '<p style="color: #555; padding: 10px;">Add units from the library above</p>';
+      strip.innerHTML = '<p style="color: #aaa; padding: 10px;">Add units from the library above</p>';
       return;
     }
 
@@ -875,11 +934,11 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }, 0);
 
       return `
-        <div class="deck-unit-card" data-unit-id="${unitId}">
-          <button class="remove-btn" data-remove-unit="${unitId}">&times;</button>
-          <div class="unit-name">${unit.name}</div>
-          <div class="unit-meta">x${data.count}</div>
-          <div class="slot-cost">${totalCost}c | ${apCost}AP</div>
+        <div class="deck-unit-card" data-unit-id="${sanitizeHTML(unitId)}">
+          <button class="remove-btn" data-remove-unit="${sanitizeHTML(unitId)}">&times;</button>
+          <div class="unit-name">${sanitizeHTML(unit.name)}</div>
+          <div class="unit-meta">x${sanitizeHTML(data.count)}</div>
+          <div class="slot-cost">${sanitizeHTML(totalCost)}c | ${sanitizeHTML(apCost)}AP</div>
         </div>
       `;
     }).join('');
@@ -938,8 +997,8 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     });
 
     options.innerHTML = transports.map(t => `
-      <div class="transport-option" data-transport-id="${t.id}">
-        ${t.name} (${t.transportCapacity} slots, ${t.cost}c)
+      <div class="transport-option" data-transport-id="${sanitizeHTML(t.id)}" tabindex="0">
+        ${sanitizeHTML(t.name)} (${sanitizeHTML(t.transportCapacity)} slots, ${sanitizeHTML(t.cost)}c)
       </div>
     `).join('');
 
@@ -949,7 +1008,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     // Bind transport selection
     options.querySelectorAll('.transport-option').forEach(opt => {
-      opt.addEventListener('click', () => {
+      const selectTransport = () => {
         const transportId = (opt as HTMLElement).dataset['transportId']!;
 
         // Get quantity for the unit being added
@@ -970,6 +1029,14 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         renderDeckStrip();
         renderUnitLibrary();
         updateStats();
+      };
+
+      opt.addEventListener('click', selectTransport);
+      opt.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectTransport();
+        }
       });
     });
   }
@@ -1017,12 +1084,12 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const savedDecks = JSON.parse(localStorage.getItem('stellarSiege_decks') || '[]') as DeckData[];
 
     if (savedDecks.length === 0) {
-      list.innerHTML = '<p style="color: #666; text-align: center;">No saved decks</p>';
+      list.innerHTML = '<p style="color: #bbb; text-align: center;">No saved decks</p>';
     } else {
       list.innerHTML = savedDecks.map(d => `
-        <div class="saved-deck-item" data-deck-id="${d.id}">
-          <span>${d.name} (${d.units.length} units)</span>
-          <span class="delete-deck" data-delete-deck="${d.id}">&times;</span>
+        <div class="saved-deck-item" data-deck-id="${sanitizeHTML(d.id)}" tabindex="0">
+          <span>${sanitizeHTML(d.name)} (${sanitizeHTML(d.units.length)} units)</span>
+          <span class="delete-deck" data-delete-deck="${sanitizeHTML(d.id)}">&times;</span>
         </div>
       `).join('');
     }
@@ -1117,6 +1184,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       }
     });
 
+    element.querySelector('#unit-library')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const card = (e.target as HTMLElement).closest('.unit-card') as HTMLElement;
+        if (card && !card.dataset['unavailable']) {
+          e.preventDefault();
+          addUnit(card.dataset['unitId']!);
+        }
+      }
+    });
+
     element.querySelector('#unit-library')?.addEventListener('mouseover', (e) => {
       const card = (e.target as HTMLElement).closest('.unit-card') as HTMLElement;
       if (card) {
@@ -1181,6 +1258,16 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
         deleteDeck(deleteBtn.dataset['deleteDeck']!);
       } else if (item) {
         loadDeck(item.dataset['deckId']!);
+      }
+    });
+
+    element.querySelector('#saved-decks-list')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const item = (e.target as HTMLElement).closest('.saved-deck-item') as HTMLElement;
+        if (item) {
+          e.preventDefault();
+          loadDeck(item.dataset['deckId']!);
+        }
       }
     });
   };

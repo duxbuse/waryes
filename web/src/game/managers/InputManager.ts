@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import { GamePhase } from '../../core/Game';
+import { showKeyboardShortcuts, hideKeyboardShortcuts } from '../../core/KeyboardShortcutsOverlay';
 
 export interface InputState {
   mouseX: number;
@@ -57,6 +58,9 @@ export class InputManager {
   private lastControlGroupKey: number = 0;
   private lastControlGroupTime: number = 0;
   private readonly DOUBLE_PRESS_THRESHOLD = 300; // ms
+
+  // Keyboard shortcuts overlay visibility tracking
+  private isShortcutsOverlayVisible: boolean = false;
 
   constructor(game: Game) {
     this.game = game;
@@ -281,6 +285,12 @@ export class InputManager {
     // Handle specific keys
     switch (event.code) {
       case 'Escape':
+        // Close keyboard shortcuts overlay if visible
+        if (this.isShortcutsOverlayVisible) {
+          hideKeyboardShortcuts();
+          this.isShortcutsOverlayVisible = false;
+          break;
+        }
         // Cancel reinforcement destination wait first (new workflow)
         if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
           this.game.deploymentManager.cancelReinforcementWait();
@@ -296,6 +306,20 @@ export class InputManager {
           this.game.togglePause();
         } else {
           this.game.selectionManager.clearSelection();
+        }
+        break;
+
+      case 'Slash':
+        // Toggle keyboard shortcuts overlay with '?' (Shift+Slash)
+        if (event.shiftKey && (this.game.phase === GamePhase.Setup || this.game.phase === GamePhase.Battle)) {
+          event.preventDefault();
+          if (this.isShortcutsOverlayVisible) {
+            hideKeyboardShortcuts();
+            this.isShortcutsOverlayVisible = false;
+          } else {
+            showKeyboardShortcuts();
+            this.isShortcutsOverlayVisible = true;
+          }
         }
         break;
 

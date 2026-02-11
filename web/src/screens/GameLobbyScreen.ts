@@ -13,6 +13,15 @@
 import type { Game } from '../core/Game';
 import { ScreenType } from '../core/ScreenManager';
 import type { MultiplayerPlayer } from '../game/managers/MultiplayerManager';
+import { showNotification, showConfirmDialog } from '../core/UINotifications';
+
+// Helper to sanitize HTML to prevent XSS (defense-in-depth)
+function sanitizeHTML(str: string | number): string {
+  const text = String(str);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 export class GameLobbyScreen {
   private readonly game: Game;
@@ -46,6 +55,17 @@ export class GameLobbyScreen {
       overflow-y: auto;
       z-index: 1000;
     `;
+
+    // Add focus-visible styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #game-lobby-screen button:focus-visible {
+        outline: 3px solid #4a90e2;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+      }
+    `;
+    container.appendChild(style);
 
     // Main panel
     const panel = document.createElement('div');
@@ -160,7 +180,7 @@ export class GameLobbyScreen {
     const spectatorsTitle = document.createElement('h3');
     spectatorsTitle.textContent = 'Spectators';
     spectatorsTitle.style.cssText = `
-      color: #aaa;
+      color: #ccc;
       font-size: 20px;
       margin: 0 0 15px 0;
     `;
@@ -298,13 +318,13 @@ export class GameLobbyScreen {
 
     // Game starting
     this.game.multiplayerManager.on('game_starting', (mapSeed: number, mapSize: string) => {
-      alert(`Game starting! Map: ${mapSize}, Seed: ${mapSeed}`);
+      showNotification(`Game starting! Map: ${mapSize}, Seed: ${mapSeed}`, 5000);
       // TODO: Transition to battle screen with multiplayer mode
     });
 
     // Kicked
     this.game.multiplayerManager.on('kicked', () => {
-      alert('You were kicked from the lobby');
+      showNotification('You were kicked from the lobby', 5000);
       this.game.screenManager.switchTo(ScreenType.MainMenu);
     });
   }
@@ -360,7 +380,7 @@ export class GameLobbyScreen {
     const info = document.createElement('div');
 
     const name = document.createElement('div');
-    name.textContent = player.name + (player.isHost ? ' (Host)' : '');
+    name.textContent = sanitizeHTML(player.name) + (player.isHost ? ' (Host)' : '');
     name.style.cssText = `
       color: #e0e0e0;
       font-size: 16px;
@@ -371,7 +391,7 @@ export class GameLobbyScreen {
     const status = document.createElement('div');
     status.textContent = player.isReady ? '✓ Ready' : 'Not Ready';
     status.style.cssText = `
-      color: ${player.isReady ? '#4caf50' : '#888'};
+      color: ${player.isReady ? '#4caf50' : '#bbb'};
       font-size: 14px;
     `;
 
@@ -397,8 +417,9 @@ export class GameLobbyScreen {
         font-size: 12px;
       `;
 
-      kickBtn.addEventListener('click', () => {
-        if (confirm(`Kick ${player.name}?`)) {
+      kickBtn.addEventListener('click', async () => {
+        const confirmed = await showConfirmDialog(`Kick ${sanitizeHTML(player.name)}?`);
+        if (confirmed) {
           this.game.multiplayerManager.kickPlayer(player.id);
         }
       });
@@ -426,8 +447,9 @@ export class GameLobbyScreen {
     this.game.multiplayerManager.startGame();
   }
 
-  private leaveLobby(): void {
-    if (confirm('Leave lobby?')) {
+  private async leaveLobby(): Promise<void> {
+    const confirmed = await showConfirmDialog('Leave lobby?');
+    if (confirmed) {
       this.game.multiplayerManager.leaveLobby();
       this.game.screenManager.switchTo(ScreenType.MainMenu);
     }
