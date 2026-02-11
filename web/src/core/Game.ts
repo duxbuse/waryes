@@ -389,6 +389,7 @@ export class Game {
     this.selectionManager.initialize();
     this.unitManager.initialize();
     this.combatManager.initialize();
+    this.visualEffectsManager.initialize();
 
     // Setup victory callback
     this.economyManager.setVictoryCallback(this.onVictory.bind(this));

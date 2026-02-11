@@ -5,6 +5,8 @@
 
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
+import { ObjectPool } from '../utils/ObjectPool';
+import { PooledSprite } from './PooledSprite';
 
 interface Effect {
   id: string;
@@ -18,8 +20,71 @@ export class VisualEffectsManager {
   private effects: Map<string, Effect> = new Map();
   private nextId = 0;
 
+  // Shared textures
+  private muzzleFlashTexture: THREE.CanvasTexture;
+  private explosionTexture: THREE.CanvasTexture;
+  private smokePuffTexture: THREE.CanvasTexture;
+
+  // Sprite pools
+  private muzzleFlashPool!: ObjectPool<PooledSprite>;
+  private explosionPool!: ObjectPool<PooledSprite>;
+  private smokePuffPool!: ObjectPool<PooledSprite>;
+
   constructor(game: Game) {
     this.game = game;
+
+    // Initialize shared textures
+    this.muzzleFlashTexture = this.createMuzzleFlashTexture();
+    this.explosionTexture = this.createExplosionTexture();
+    this.smokePuffTexture = this.createSmokePuffTexture();
+  }
+
+  initialize(): void {
+    // Initialize muzzle flash pool (50 initial, 200 max)
+    this.muzzleFlashPool = new ObjectPool<PooledSprite>(
+      () => new PooledSprite(this.muzzleFlashTexture, 'muzzle'),
+      50,
+      200
+    );
+
+    // Initialize explosion pool (30 initial, 100 max)
+    this.explosionPool = new ObjectPool<PooledSprite>(
+      () => new PooledSprite(this.explosionTexture, 'explosion'),
+      30,
+      100
+    );
+
+    // Initialize smoke puff pool (30 initial, 100 max)
+    this.smokePuffPool = new ObjectPool<PooledSprite>(
+      () => new PooledSprite(this.smokePuffTexture, 'smoke'),
+      30,
+      100
+    );
+
+    // Pre-warm pools and add all sprites to scene
+    for (let i = 0; i < 50; i++) {
+      const sprite = this.muzzleFlashPool.acquire();
+      if (sprite) {
+        this.game.scene.add(sprite.sprite);
+        this.muzzleFlashPool.release(sprite);
+      }
+    }
+
+    for (let i = 0; i < 30; i++) {
+      const sprite = this.explosionPool.acquire();
+      if (sprite) {
+        this.game.scene.add(sprite.sprite);
+        this.explosionPool.release(sprite);
+      }
+    }
+
+    for (let i = 0; i < 30; i++) {
+      const sprite = this.smokePuffPool.acquire();
+      if (sprite) {
+        this.game.scene.add(sprite.sprite);
+        this.smokePuffPool.release(sprite);
+      }
+    }
   }
 
   /**
