@@ -30,8 +30,10 @@ export class PooledSprite implements IPoolable {
     this.sprite.visible = false;
     this.sprite.position.set(0, 0, 0);
     this.sprite.scale.set(1, 1, 1);
+    this.sprite.renderOrder = 0;
     if (this.sprite.material instanceof THREE.SpriteMaterial) {
       this.sprite.material.opacity = 1;
+      this.sprite.material.blending = THREE.NormalBlending;
     }
     this.timeAlive = 0;
     this.duration = 0;

@@ -47,4 +47,10 @@ export class ObjectPool<T extends IPoolable> {
     const active = this.pool.filter(o => o.active).length;
     return { active, total: this.pool.length };
   }
+
+  forEach(callback: (obj: T) => void): void {
+    for (const obj of this.pool) {
+      callback(obj);
+    }
+  }
 }

@@ -1511,6 +1511,9 @@ export class Game {
       this.fogOfWarRenderer = null;
     }
 
+    // Clean up visual effects
+    this.visualEffectsManager.dispose();
+
     this.currentMap = null;
     this.groundPlane.visible = true;
 

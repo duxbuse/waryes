@@ -41,56 +41,43 @@ export class VisualEffectsManager {
   }
 
   initialize(): void {
-    // Initialize muzzle flash pool (50 initial, 200 max)
+    const scene = this.game.scene;
+
+    // Factory closures add sprites to scene so both pre-warmed
+    // and dynamically-grown sprites are always renderable
     this.muzzleFlashPool = new ObjectPool<PooledSprite>(
-      () => new PooledSprite(this.muzzleFlashTexture, 'muzzle'),
+      () => {
+        const ps = new PooledSprite(this.muzzleFlashTexture, 'muzzle');
+        scene.add(ps.sprite);
+        return ps;
+      },
       50,
       200
     );
 
-    // Initialize explosion pool (30 initial, 100 max)
     this.explosionPool = new ObjectPool<PooledSprite>(
-      () => new PooledSprite(this.explosionTexture, 'explosion'),
+      () => {
+        const ps = new PooledSprite(this.explosionTexture, 'explosion');
+        scene.add(ps.sprite);
+        return ps;
+      },
       30,
       100
     );
 
-    // Initialize smoke puff pool (30 initial, 100 max)
     this.smokePuffPool = new ObjectPool<PooledSprite>(
-      () => new PooledSprite(this.smokePuffTexture, 'smoke'),
+      () => {
+        const ps = new PooledSprite(this.smokePuffTexture, 'smoke');
+        scene.add(ps.sprite);
+        return ps;
+      },
       30,
       100
     );
-
-    // Pre-warm pools and add all sprites to scene
-    for (let i = 0; i < 50; i++) {
-      const sprite = this.muzzleFlashPool.acquire();
-      if (sprite) {
-        this.game.scene.add(sprite.sprite);
-        this.muzzleFlashPool.release(sprite);
-      }
-    }
-
-    for (let i = 0; i < 30; i++) {
-      const sprite = this.explosionPool.acquire();
-      if (sprite) {
-        this.game.scene.add(sprite.sprite);
-        this.explosionPool.release(sprite);
-      }
-    }
-
-    for (let i = 0; i < 30; i++) {
-      const sprite = this.smokePuffPool.acquire();
-      if (sprite) {
-        this.game.scene.add(sprite.sprite);
-        this.smokePuffPool.release(sprite);
-      }
-    }
   }
 
   /**
    * Create reusable muzzle flash texture
-   * @note Will be used during pool initialization in subtask 1-3
    */
   private createMuzzleFlashTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
@@ -116,7 +103,6 @@ export class VisualEffectsManager {
 
   /**
    * Create reusable explosion texture
-   * @note Will be used during pool initialization in subtask 1-3
    */
   private createExplosionTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
@@ -144,7 +130,6 @@ export class VisualEffectsManager {
 
   /**
    * Create reusable smoke puff texture
-   * @note Will be used during pool initialization in subtask 1-3
    */
   private createSmokePuffTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
@@ -292,15 +277,21 @@ export class VisualEffectsManager {
     // Create a larger explosion
     this.createExplosion(position, 2);
 
-    // Create multiple smoke puffs
+    // Pre-compute smoke positions before setTimeout (VectorPool uses
+    // frame-based reset so cannot be used across async boundaries)
+    const smokePositions: THREE.Vector3[] = [];
     for (let i = 0; i < 3; i++) {
+      smokePositions.push(new THREE.Vector3(
+        position.x + (Math.random() - 0.5) * 2,
+        position.y,
+        position.z + (Math.random() - 0.5) * 2
+      ));
+    }
+
+    for (let i = 0; i < 3; i++) {
+      const smokePos = smokePositions[i]!;
       setTimeout(() => {
-        const offset = new THREE.Vector3(
-          (Math.random() - 0.5) * 2,
-          0,
-          (Math.random() - 0.5) * 2
-        );
-        this.createSmokePuff(position.clone().add(offset));
+        this.createSmokePuff(smokePos);
       }, i * 100);
     }
   }
@@ -378,5 +369,29 @@ export class VisualEffectsManager {
     for (const id of Array.from(this.effects.keys())) {
       this.removeEffect(id);
     }
+  }
+
+  /**
+   * Dispose all GPU resources (textures, materials, sprites)
+   */
+  dispose(): void {
+    this.clear();
+
+    const disposePool = (pool: ObjectPool<PooledSprite>) => {
+      pool.forEach((ps) => {
+        this.game.scene.remove(ps.sprite);
+        if (ps.sprite.material instanceof THREE.SpriteMaterial) {
+          ps.sprite.material.dispose();
+        }
+      });
+    };
+
+    if (this.muzzleFlashPool) disposePool(this.muzzleFlashPool);
+    if (this.explosionPool) disposePool(this.explosionPool);
+    if (this.smokePuffPool) disposePool(this.smokePuffPool);
+
+    this.muzzleFlashTexture.dispose();
+    this.explosionTexture.dispose();
+    this.smokePuffTexture.dispose();
   }
 }
