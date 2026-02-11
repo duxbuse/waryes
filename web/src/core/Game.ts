@@ -62,6 +62,7 @@ export enum GamePhase {
 export class Game {
   // Debug flags
   public static verbose = false; // Enable verbose logging (AI profiling, detailed logs)
+  public static showPoolStats = false; // Show object pool statistics in FPS overlay
   // Three.js core
   public readonly renderer: THREE.WebGLRenderer;
   public readonly scene: THREE.Scene;
@@ -305,11 +306,27 @@ export class Game {
       if (this._fpsOverlay) {
         const triangles = this.renderer.info.render.triangles;
         const calls = this.renderer.info.render.calls;
-        this._fpsOverlay.innerHTML = `
+
+        let html = `
           FPS: ${this._currentFps}<br>
           Draw calls: ${calls}<br>
           Triangles: ${triangles.toLocaleString()}
         `;
+
+        // Add pool statistics if debug flag is enabled
+        if (Game.showPoolStats) {
+          const vectorPoolStats = VectorPool.getStats();
+          const projectilePoolStats = this.combatManager.getProjectilePoolStats();
+
+          html += `<br>
+          <br>
+          <strong>Pool Stats:</strong><br>
+          VectorPool: ${vectorPoolStats.active}/${vectorPoolStats.total}<br>
+          ProjectilePool: ${projectilePoolStats.active}/${projectilePoolStats.total}
+          `;
+        }
+
+        this._fpsOverlay.innerHTML = html;
       }
     }
   }
