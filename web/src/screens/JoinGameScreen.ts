@@ -250,7 +250,7 @@ export class JoinGameScreen {
         this.lobbyList.innerHTML = `
           <div style="
             text-align: center;
-            color: #888;
+            color: #bbb;
             padding: 40px 20px;
             font-size: 18px;
           ">
@@ -326,7 +326,7 @@ export class JoinGameScreen {
     details.textContent = `Host: ${lobby.host} • ${lobby.mapSize} • ${lobby.playerCount}/${lobby.maxPlayers} players`;
     details.style.cssText = `
       font-size: 14px;
-      color: #aaa;
+      color: #ccc;
     `;
 
     info.appendChild(code);

@@ -65,7 +65,7 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
 
     #main-menu-screen .subtitle {
       font-size: 18px;
-      color: #888;
+      color: #bbb;
       margin-top: 10px;
       letter-spacing: 4px;
     }
@@ -104,7 +104,7 @@ export function createMainMenuScreen(callbacks: MainMenuCallbacks): Screen {
 
     #main-menu-screen .menu-footer {
       margin-top: 60px;
-      color: #444;
+      color: #999;
       font-size: 12px;
     }
 

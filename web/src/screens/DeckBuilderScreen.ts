@@ -210,7 +210,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     .faction-selection label, .division-selection label, .deck-name-input label {
       display: block;
       font-size: 12px;
-      color: #888;
+      color: #bbb;
       margin-bottom: 5px;
     }
 
@@ -255,7 +255,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       padding: 12px 20px;
       background: transparent;
       border: none;
-      color: #888;
+      color: #bbb;
       cursor: pointer;
       transition: all 0.2s;
       font-size: 13px;
@@ -331,13 +331,13 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       padding: 2px 6px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 3px;
-      color: #888;
+      color: #bbb;
     }
 
     .unit-card-availability {
       margin-top: 8px;
       font-size: 11px;
-      color: #666;
+      color: #bbb;
     }
 
     .deck-right {
@@ -375,7 +375,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
       font-size: 11px;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid #444;
-      color: #888;
+      color: #bbb;
       cursor: pointer;
       border-radius: 3px;
     }
@@ -397,7 +397,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     }
 
     .stats-content .placeholder {
-      color: #555;
+      color: #aaa;
       text-align: center;
       padding: 20px;
     }
@@ -409,7 +409,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     }
 
     .stat-label {
-      color: #888;
+      color: #bbb;
     }
 
     .stat-value {
@@ -463,7 +463,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     .deck-strip-header span {
       font-size: 13px;
-      color: #888;
+      color: #bbb;
     }
 
     .clear-btn {
@@ -521,7 +521,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
 
     .deck-unit-card .unit-meta {
       font-size: 10px;
-      color: #888;
+      color: #bbb;
     }
 
     .deck-unit-card .slot-cost {
@@ -848,7 +848,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const strip = element.querySelector('#deck-strip-units')!;
 
     if (deckUnits.length === 0) {
-      strip.innerHTML = '<p style="color: #555; padding: 10px;">Add units from the library above</p>';
+      strip.innerHTML = '<p style="color: #aaa; padding: 10px;">Add units from the library above</p>';
       return;
     }
 
@@ -1017,7 +1017,7 @@ export function createDeckBuilderScreen(callbacks: DeckBuilderCallbacks): Screen
     const savedDecks = JSON.parse(localStorage.getItem('stellarSiege_decks') || '[]') as DeckData[];
 
     if (savedDecks.length === 0) {
-      list.innerHTML = '<p style="color: #666; text-align: center;">No saved decks</p>';
+      list.innerHTML = '<p style="color: #bbb; text-align: center;">No saved decks</p>';
     } else {
       list.innerHTML = savedDecks.map(d => `
         <div class="saved-deck-item" data-deck-id="${d.id}">
