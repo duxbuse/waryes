@@ -1,0 +1,48 @@
+{
+  "id": "vanguard_heavy_ifv_mk2",
+  "name": "Heavy IFV Mk.II",
+  "cost": 55,
+  "icon": "assets/icons/units/vanguard/vanguard_apc.png",
+  "health": 10,
+  "speed": {
+    "road": 55,
+    "offRoad": 40,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 18,
+    "side": 14,
+    "rear": 10,
+    "top": 7
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 450,
+    "offRoad": 300
+  },
+  "optics": "Normal",
+  "stealth": "None",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_twin_heavy_auto_cannon",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "vanguard_heavy_bolter_pintle",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 8,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

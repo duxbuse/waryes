@@ -52,8 +52,8 @@ export class ZoneFillRenderer {
   private nextSlotIndex = 0;
 
   // Colors
-  private readonly PLAYER_COLOR = { r: 74, g: 158, b: 255 }; // #4a9eff
-  private readonly ENEMY_COLOR = { r: 255, g: 74, b: 74 }; // #ff4a4a
+  private readonly PLAYER_COLOR = { r: 0, g: 170, b: 255 }; // #00aaff
+  private readonly ENEMY_COLOR = { r: 255, g: 68, b: 68 }; // #ff4444
   private readonly EMPTY_COLOR = { r: 60, g: 60, b: 60, a: 80 }; // Dark gray, subtle
 
   // Fill speed (world units per second)

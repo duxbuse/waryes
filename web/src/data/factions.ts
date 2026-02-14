@@ -1,9 +1,10 @@
 /**
  * Faction and Division data for Stellar Siege
  * Units, weapons, and divisions are loaded from JSON files via dataLoader
+ * FACTIONS constant and getFactionById come from shared package
  */
 
-import type { FactionData, DivisionData, UnitData, WeaponData } from './types';
+import type { UnitData, WeaponData, DivisionData } from './types';
 import {
   UNITS as UNITS_FROM_JSON,
   WEAPONS as WEAPONS_FROM_JSON,
@@ -15,27 +16,11 @@ import {
   getDivisionsByFaction as getDivisionsByFactionFromLoader,
 } from './dataLoader';
 
+// Re-export faction data from shared package
+export { FACTIONS, getFactionById } from '@shared/data/factions';
+
 // Re-export starter decks for convenience
 export { STARTER_DECKS, getStarterDecksByFaction, getStarterDeckById } from './starterDecks';
-
-export const FACTIONS: FactionData[] = [
-  {
-    id: 'sdf',
-    name: 'System Defense Force',
-    description: 'Local garrison forces defending their homeworld. Rely on numbers, entrenchment, and knowledge of terrain.',
-    color: '#4a9eff',
-    icon: '/assets/icons/factions/sdf_faction_icon_main.png',
-    flag: '/assets/icons/factions/sdf_flag.png',
-  },
-  {
-    id: 'vanguard',
-    name: 'Vanguard Legions',
-    description: 'Elite assault forces specialized in planetary siege warfare. Superior firepower and armor.',
-    color: '#ff4a4a',
-    icon: '/assets/icons/factions/vanguard_faction_icon_main.png',
-    flag: '/assets/icons/factions/vanguard_flag.png',
-  },
-];
 
 // Export units, weapons, and divisions loaded from JSON
 export const UNITS: UnitData[] = UNITS_FROM_JSON;
@@ -49,10 +34,6 @@ export function getUnitById(id: string): UnitData | undefined {
 
 export function getWeaponById(id: string): WeaponData | undefined {
   return getWeaponByIdFromLoader(id);
-}
-
-export function getFactionById(id: string): FactionData | undefined {
-  return FACTIONS.find((f) => f.id === id);
 }
 
 export function getDivisionById(id: string): DivisionData | undefined {

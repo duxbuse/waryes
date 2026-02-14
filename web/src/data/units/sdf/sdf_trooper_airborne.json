@@ -1,0 +1,45 @@
+{
+  "id": "sdf_trooper_airborne",
+  "name": "Airborne Trooper",
+  "cost": 20,
+  "icon": "assets/icons/units/sdf/sdf_trooper.png",
+  "health": 8,
+  "speed": {
+    "road": 15,
+    "offRoad": 12,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_laser_rifle",
+      "count": 7,
+      "maxAmmo": 20,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_at_launcher",
+      "count": 1,
+      "maxAmmo": 5,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

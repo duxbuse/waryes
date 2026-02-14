@@ -1,0 +1,39 @@
+{
+  "id": "sdf_hwt_heavy_bolter_mech",
+  "name": "Mech HWT Heavy Bolter",
+  "cost": 25,
+  "icon": "assets/icons/units/sdf/sdf_hwt_heavy_bolter.png",
+  "health": 6,
+  "speed": {
+    "road": 8,
+    "offRoad": 6,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Medium",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_heavy_auto_cannon_tripod",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

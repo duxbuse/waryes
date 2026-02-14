@@ -1,0 +1,42 @@
+{
+  "id": "sdf_grav_lander",
+  "name": "Grav-Lander",
+  "cost": 45,
+  "icon": "assets/icons/categories/helicopter.png",
+  "health": 5,
+  "speed": {
+    "road": 100,
+    "offRoad": 100,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 3,
+    "side": 3,
+    "rear": 2,
+    "top": 2
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 500,
+    "offRoad": 500
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_rapid_laser_cannon",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "HEL",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 10,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

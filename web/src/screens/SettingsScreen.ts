@@ -1,5 +1,6 @@
 /**
  * SettingsScreen - Game settings configuration
+ * Gothic themed with custom toggle switches, sliders, and dropdown controls
  */
 
 import { ScreenType, type Screen } from '../core/ScreenManager';
@@ -62,90 +63,158 @@ function saveSettings(settings: GameSettings): void {
   localStorage.setItem('stellarSiegeSettings', JSON.stringify(settings));
 }
 
+const QUALITY_SIGNAL_MAP: Record<string, number> = { low: 1, medium: 2, high: 3, ultra: 4 };
+
 export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
   let settings = loadSettings();
 
   const element = document.createElement('div');
   element.id = 'settings-screen';
   element.innerHTML = `
-    <div class="settings-container">
-      <div class="settings-header">
-        <button class="back-btn" id="settings-back-btn">&larr; Back</button>
-        <h2>SETTINGS</h2>
-        <div></div>
+    <div class="panel settings-panel warp-flicker-border">
+      <div class="corner-flourish tl"><div class="diamond"></div></div>
+      <div class="corner-flourish tr"><div class="diamond"></div></div>
+      <div class="corner-flourish bl"><div class="diamond"></div></div>
+      <div class="corner-flourish br"><div class="diamond"></div></div>
+      <div class="buttress-left"></div>
+      <div class="buttress-right"></div>
+      <div class="panel-watermark">\u2720</div>
+
+      <div class="panel-header">
+        <div class="warning-light"></div>
+        <span class="title">COGITATOR SETTINGS</span>
+        <span class="fleet-tag">SYS-CONFIG</span>
       </div>
 
-      <div class="settings-content">
-        <div class="settings-section">
-          <h3>GRAPHICS</h3>
-          <div class="setting-row">
-            <label>Quality:</label>
-            <select id="setting-quality" class="setting-select">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="ultra">Ultra</option>
-            </select>
+      <div class="panel-body settings-body">
+        <!-- GRAPHICS -->
+        <div class="section-header">GRAPHICS</div>
+        <div class="settings-grid">
+          <div class="slider-row">
+            <span class="setting-label">Quality:</span>
+            <div class="dropdown-wrap">
+              <select id="setting-quality" class="dropdown-select">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="ultra">Ultra</option>
+              </select>
+              <span class="dropdown-arrow">\u25BC</span>
+            </div>
+            <div class="signal-bars" id="quality-signal">
+              <div class="signal-bar"></div>
+              <div class="signal-bar"></div>
+              <div class="signal-bar"></div>
+              <div class="signal-bar"></div>
+            </div>
           </div>
-          <div class="setting-row">
-            <label>Shadows:</label>
-            <input type="checkbox" id="setting-shadows" class="setting-checkbox" />
+          <div class="toggle-row">
+            <span class="setting-label">Shadows:</span>
+            <div class="toggle-switch" id="setting-shadows" tabindex="0" role="switch" aria-checked="true">
+              <div class="toggle-knob"></div>
+            </div>
+            <span class="toggle-status" id="shadows-status">ON</span>
           </div>
-          <div class="setting-row">
-            <label>VSync:</label>
-            <input type="checkbox" id="setting-vsync" class="setting-checkbox" />
-          </div>
-        </div>
-
-        <div class="settings-section">
-          <h3>AUDIO</h3>
-          <div class="setting-row">
-            <label>Master Volume:</label>
-            <input type="range" id="setting-master" min="0" max="100" class="setting-slider" />
-            <span id="setting-master-value" class="slider-value">80</span>
-          </div>
-          <div class="setting-row">
-            <label>Music:</label>
-            <input type="range" id="setting-music" min="0" max="100" class="setting-slider" />
-            <span id="setting-music-value" class="slider-value">70</span>
-          </div>
-          <div class="setting-row">
-            <label>SFX:</label>
-            <input type="range" id="setting-sfx" min="0" max="100" class="setting-slider" />
-            <span id="setting-sfx-value" class="slider-value">80</span>
+          <div class="toggle-row">
+            <span class="setting-label">VSync:</span>
+            <div class="toggle-switch" id="setting-vsync" tabindex="0" role="switch" aria-checked="true">
+              <div class="toggle-knob"></div>
+            </div>
+            <span class="toggle-status" id="vsync-status">ON</span>
           </div>
         </div>
 
-        <div class="settings-section">
-          <h3>GAMEPLAY</h3>
-          <div class="setting-row">
-            <label>Edge Pan Speed:</label>
-            <input type="range" id="setting-edgepan" min="0" max="100" class="setting-slider" />
-            <span id="setting-edgepan-value" class="slider-value">50</span>
+        <div class="panel-filigree">
+          <span class="fili-line"></span>
+          <span class="fili-sym">\u2726</span>
+          <span class="fili-line"></span>
+        </div>
+
+        <!-- AUDIO -->
+        <div class="section-header">AUDIO</div>
+        <div class="settings-grid">
+          <div class="slider-row">
+            <span class="setting-label">Master Volume:</span>
+            <div class="slider-track" id="slider-master" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80">
+              <div class="slider-fill" style="width:80%">
+                <div class="slider-thumb"></div>
+              </div>
+            </div>
+            <span class="slider-value" id="setting-master-value">80</span>
           </div>
-          <div class="setting-row">
-            <label>Scroll Speed:</label>
-            <input type="range" id="setting-scroll" min="0" max="100" class="setting-slider" />
-            <span id="setting-scroll-value" class="slider-value">50</span>
+          <div class="slider-row">
+            <span class="setting-label">Music:</span>
+            <div class="slider-track" id="slider-music" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70">
+              <div class="slider-fill" style="width:70%">
+                <div class="slider-thumb"></div>
+              </div>
+            </div>
+            <span class="slider-value" id="setting-music-value">70</span>
           </div>
-          <div class="setting-row">
-            <label>Show Grid:</label>
-            <input type="checkbox" id="setting-grid" class="setting-checkbox" />
+          <div class="slider-row">
+            <span class="setting-label">SFX:</span>
+            <div class="slider-track" id="slider-sfx" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80">
+              <div class="slider-fill" style="width:80%">
+                <div class="slider-thumb"></div>
+              </div>
+            </div>
+            <span class="slider-value" id="setting-sfx-value">80</span>
           </div>
-          <div class="setting-row">
-            <label>Health Bars:</label>
-            <select id="setting-healthbars" class="setting-select">
-              <option value="always">Always</option>
-              <option value="selected">Selected Only</option>
-              <option value="never">Never</option>
-            </select>
+        </div>
+
+        <div class="panel-filigree">
+          <span class="fili-line"></span>
+          <span class="fili-sym">\u2020</span>
+          <span class="fili-line"></span>
+        </div>
+
+        <!-- GAMEPLAY -->
+        <div class="section-header">GAMEPLAY</div>
+        <div class="settings-grid">
+          <div class="slider-row">
+            <span class="setting-label">Edge Pan Speed:</span>
+            <div class="slider-track" id="slider-edgepan" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+              <div class="slider-fill" style="width:50%">
+                <div class="slider-thumb"></div>
+              </div>
+            </div>
+            <span class="slider-value" id="setting-edgepan-value">50</span>
+          </div>
+          <div class="slider-row">
+            <span class="setting-label">Scroll Speed:</span>
+            <div class="slider-track" id="slider-scroll" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+              <div class="slider-fill" style="width:50%">
+                <div class="slider-thumb"></div>
+              </div>
+            </div>
+            <span class="slider-value" id="setting-scroll-value">50</span>
+          </div>
+          <div class="toggle-row">
+            <span class="setting-label">Show Grid:</span>
+            <div class="toggle-switch" id="setting-grid" tabindex="0" role="switch" aria-checked="false">
+              <div class="toggle-knob"></div>
+            </div>
+            <span class="toggle-status" id="grid-status">OFF</span>
+          </div>
+          <div class="slider-row">
+            <span class="setting-label">Health Bars:</span>
+            <div class="dropdown-wrap">
+              <select id="setting-healthbars" class="dropdown-select">
+                <option value="always">Always</option>
+                <option value="selected">Selected Only</option>
+                <option value="never">Never</option>
+              </select>
+              <span class="dropdown-arrow">\u25BC</span>
+            </div>
           </div>
         </div>
       </div>
 
+      <!-- Footer Buttons -->
       <div class="settings-footer">
-        <button id="settings-apply-btn" class="settings-btn primary">Apply</button>
-        <button id="settings-reset-btn" class="settings-btn">Reset Defaults</button>
+        <button class="menu-btn" id="settings-back-btn"><span class="btn-flourish">\u2726</span> BACK <span class="btn-flourish">\u2726</span></button>
+        <button class="menu-btn primary" id="settings-apply-btn"><span class="btn-flourish">\u269C</span> APPLY <span class="btn-flourish">\u269C</span></button>
+        <button class="menu-btn" id="settings-reset-btn"><span class="btn-flourish">\u2726</span> RESET <span class="btn-flourish">\u2726</span></button>
       </div>
     </div>
   `;
@@ -158,7 +227,7 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, #0a0a1a 0%, #15152a 100%);
+      background: transparent;
       z-index: 100;
       display: flex;
       justify-content: center;
@@ -169,179 +238,146 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
       display: none;
     }
 
-    .settings-container {
+    .settings-panel {
       width: 90%;
-      max-width: 700px;
+      max-width: 620px;
       max-height: 90vh;
       display: flex;
       flex-direction: column;
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 12px;
-      padding: 20px;
-      box-sizing: border-box;
+      overflow: hidden;
+      min-height: 0;
     }
 
-    .settings-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .settings-header h2 {
-      color: #4a9eff;
-      letter-spacing: 3px;
-      margin: 0;
-    }
-
-    .settings-content {
+    .settings-body {
       flex: 1;
       overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .settings-section {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
-      padding: 15px;
-    }
-
-    .settings-section h3 {
-      margin: 0 0 15px 0;
-      font-size: 14px;
-      color: #bbb;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-
-    .setting-row {
-      display: flex;
-      align-items: center;
-      margin-bottom: 12px;
-      gap: 15px;
-    }
-
-    .setting-row label {
-      flex: 0 0 140px;
-      font-size: 13px;
-      color: #ccc;
-    }
-
-    .setting-select {
-      flex: 1;
-      padding: 8px;
-      background: #1a1a2a;
-      border: 1px solid #333;
-      color: #e0e0e0;
-      border-radius: 4px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    .setting-checkbox {
-      width: 20px;
-      height: 20px;
-      cursor: pointer;
-    }
-
-    .setting-slider {
-      flex: 1;
-      cursor: pointer;
-    }
-
-    .slider-value {
-      width: 35px;
-      text-align: right;
-      color: #4a9eff;
-      font-size: 13px;
+      padding: 18px 24px !important;
     }
 
     .settings-footer {
-      margin-top: 20px;
       display: flex;
       justify-content: center;
-      gap: 15px;
+      gap: 12px;
+      padding: 14px 18px;
+      border-top: 1px solid var(--steel-highlight);
+      background: linear-gradient(90deg, var(--steel-dark), var(--steel-mid), var(--steel-dark));
     }
 
-    .settings-btn {
-      padding: 12px 30px;
-      font-size: 14px;
-      font-weight: bold;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #444;
-      color: #e0e0e0;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
+    .settings-footer .menu-btn {
+      font-size: 11px;
+      padding: 10px 20px;
+      letter-spacing: 3px;
     }
 
-    .settings-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    .settings-btn.primary {
-      background: linear-gradient(135deg, #4a9eff 0%, #2070cc 100%);
-      border: none;
-      color: white;
-    }
-
-    .settings-btn.primary:hover {
-      transform: scale(1.02);
-      box-shadow: 0 0 15px rgba(74, 158, 255, 0.3);
-    }
-
-    /* Focus styles */
-    .back-btn:focus-visible {
-      outline: 2px solid #4a9eff;
+    /* Focus styles for toggles */
+    .toggle-switch:focus-visible {
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
     }
 
-    .setting-select:focus-visible {
-      outline: 2px solid #4a9eff;
+    .slider-track:focus-visible {
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 8px rgba(74, 158, 255, 0.4);
-    }
-
-    .setting-checkbox:focus-visible {
-      outline: 2px solid #4a9eff;
-      outline-offset: 2px;
-    }
-
-    .setting-slider:focus-visible {
-      outline: 2px solid #4a9eff;
-      outline-offset: 2px;
-    }
-
-    .settings-btn:focus-visible {
-      outline: 2px solid #4a9eff;
-      outline-offset: 2px;
-      box-shadow: 0 0 12px rgba(74, 158, 255, 0.5);
     }
   `;
   document.head.appendChild(style);
 
+  function updateSignalBars(): void {
+    const quality = (element.querySelector('#setting-quality') as HTMLSelectElement).value;
+    const activeBars = QUALITY_SIGNAL_MAP[quality] ?? 3;
+    const bars = element.querySelectorAll('#quality-signal .signal-bar');
+    for (let i = 0; i < bars.length; i++) {
+      bars[i]!.classList.toggle('off', i >= activeBars);
+    }
+  }
+
+  function setToggle(id: string, active: boolean): void {
+    const toggle = element.querySelector(`#${id}`) as HTMLElement;
+    if (toggle) {
+      toggle.classList.toggle('active', active);
+      toggle.setAttribute('aria-checked', active.toString());
+    }
+    // Update status text
+    const statusId = id.replace('setting-', '') + '-status';
+    const status = element.querySelector(`#${statusId}`) as HTMLElement;
+    if (status) {
+      status.textContent = active ? 'ON' : 'OFF';
+    }
+  }
+
+  function getToggle(id: string): boolean {
+    const toggle = element.querySelector(`#${id}`) as HTMLElement;
+    return toggle?.classList.contains('active') ?? false;
+  }
+
+  function setSlider(trackId: string, valueId: string, value: number): void {
+    const track = element.querySelector(`#${trackId}`) as HTMLElement;
+    const fill = track?.querySelector('.slider-fill') as HTMLElement;
+    const display = element.querySelector(`#${valueId}`) as HTMLElement;
+    if (fill) fill.style.width = `${value}%`;
+    if (display) display.textContent = value.toString();
+    if (track) track.setAttribute('aria-valuenow', value.toString());
+  }
+
+  function getSliderValue(valueId: string): number {
+    const display = element.querySelector(`#${valueId}`) as HTMLElement;
+    return parseInt(display?.textContent ?? '0');
+  }
+
+  function bindSlider(trackId: string, valueId: string): void {
+    const track = element.querySelector(`#${trackId}`) as HTMLElement;
+    if (!track) return;
+
+    const updateFromEvent = (clientX: number) => {
+      const rect = track.getBoundingClientRect();
+      const pct = Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
+      const fill = track.querySelector('.slider-fill') as HTMLElement;
+      const display = element.querySelector(`#${valueId}`) as HTMLElement;
+      if (fill) fill.style.width = `${pct}%`;
+      if (display) display.textContent = pct.toString();
+      track.setAttribute('aria-valuenow', pct.toString());
+    };
+
+    track.addEventListener('mousedown', (e: MouseEvent) => {
+      updateFromEvent(e.clientX);
+
+      const onMove = (ev: MouseEvent) => updateFromEvent(ev.clientX);
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // Keyboard support for sliders
+    track.addEventListener('keydown', (e: KeyboardEvent) => {
+      const current = parseInt(track.getAttribute('aria-valuenow') ?? '50');
+      let next = current;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = Math.min(100, current + 5);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = Math.max(0, current - 5);
+      else return;
+      e.preventDefault();
+      setSlider(trackId, valueId, next);
+    });
+  }
+
   function updateUI(): void {
     // Graphics
     (element.querySelector('#setting-quality') as HTMLSelectElement).value = settings.graphics.quality;
-    (element.querySelector('#setting-shadows') as HTMLInputElement).checked = settings.graphics.shadows;
-    (element.querySelector('#setting-vsync') as HTMLInputElement).checked = settings.graphics.vsync;
+    updateSignalBars();
+    setToggle('setting-shadows', settings.graphics.shadows);
+    setToggle('setting-vsync', settings.graphics.vsync);
 
     // Audio
-    (element.querySelector('#setting-master') as HTMLInputElement).value = settings.audio.master.toString();
-    (element.querySelector('#setting-master-value') as HTMLSpanElement).textContent = settings.audio.master.toString();
-    (element.querySelector('#setting-music') as HTMLInputElement).value = settings.audio.music.toString();
-    (element.querySelector('#setting-music-value') as HTMLSpanElement).textContent = settings.audio.music.toString();
-    (element.querySelector('#setting-sfx') as HTMLInputElement).value = settings.audio.sfx.toString();
-    (element.querySelector('#setting-sfx-value') as HTMLSpanElement).textContent = settings.audio.sfx.toString();
+    setSlider('slider-master', 'setting-master-value', settings.audio.master);
+    setSlider('slider-music', 'setting-music-value', settings.audio.music);
+    setSlider('slider-sfx', 'setting-sfx-value', settings.audio.sfx);
 
     // Gameplay
-    (element.querySelector('#setting-edgepan') as HTMLInputElement).value = settings.gameplay.edgePanSpeed.toString();
-    (element.querySelector('#setting-edgepan-value') as HTMLSpanElement).textContent = settings.gameplay.edgePanSpeed.toString();
-    (element.querySelector('#setting-scroll') as HTMLInputElement).value = settings.gameplay.scrollSpeed.toString();
-    (element.querySelector('#setting-scroll-value') as HTMLSpanElement).textContent = settings.gameplay.scrollSpeed.toString();
-    (element.querySelector('#setting-grid') as HTMLInputElement).checked = settings.gameplay.showGrid;
+    setSlider('slider-edgepan', 'setting-edgepan-value', settings.gameplay.edgePanSpeed);
+    setSlider('slider-scroll', 'setting-scroll-value', settings.gameplay.scrollSpeed);
+    setToggle('setting-grid', settings.gameplay.showGrid);
     (element.querySelector('#setting-healthbars') as HTMLSelectElement).value = settings.gameplay.healthBars;
   }
 
@@ -349,26 +385,36 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
     settings = {
       graphics: {
         quality: (element.querySelector('#setting-quality') as HTMLSelectElement).value as GameSettings['graphics']['quality'],
-        shadows: (element.querySelector('#setting-shadows') as HTMLInputElement).checked,
-        vsync: (element.querySelector('#setting-vsync') as HTMLInputElement).checked,
+        shadows: getToggle('setting-shadows'),
+        vsync: getToggle('setting-vsync'),
       },
       audio: {
-        master: parseInt((element.querySelector('#setting-master') as HTMLInputElement).value),
-        music: parseInt((element.querySelector('#setting-music') as HTMLInputElement).value),
-        sfx: parseInt((element.querySelector('#setting-sfx') as HTMLInputElement).value),
+        master: getSliderValue('setting-master-value'),
+        music: getSliderValue('setting-music-value'),
+        sfx: getSliderValue('setting-sfx-value'),
       },
       gameplay: {
-        edgePanSpeed: parseInt((element.querySelector('#setting-edgepan') as HTMLInputElement).value),
-        scrollSpeed: parseInt((element.querySelector('#setting-scroll') as HTMLInputElement).value),
-        showGrid: (element.querySelector('#setting-grid') as HTMLInputElement).checked,
+        edgePanSpeed: getSliderValue('setting-edgepan-value'),
+        scrollSpeed: getSliderValue('setting-scroll-value'),
+        showGrid: getToggle('setting-grid'),
         healthBars: (element.querySelector('#setting-healthbars') as HTMLSelectElement).value as GameSettings['gameplay']['healthBars'],
       },
     };
   }
 
+  let escHandler: ((e: KeyboardEvent) => void) | null = null;
+
   const onEnter = () => {
     settings = loadSettings();
     updateUI();
+
+    // ESC key to go back
+    escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        callbacks.onBack();
+      }
+    };
+    document.addEventListener('keydown', escHandler);
 
     // Bind events
     element.querySelector('#settings-back-btn')?.addEventListener('click', callbacks.onBack);
@@ -384,20 +430,40 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
       updateUI();
     });
 
-    // Slider value updates
-    const sliders = [
-      { slider: '#setting-master', display: '#setting-master-value' },
-      { slider: '#setting-music', display: '#setting-music-value' },
-      { slider: '#setting-sfx', display: '#setting-sfx-value' },
-      { slider: '#setting-edgepan', display: '#setting-edgepan-value' },
-      { slider: '#setting-scroll', display: '#setting-scroll-value' },
-    ];
+    // Quality dropdown -> update signal bars
+    element.querySelector('#setting-quality')?.addEventListener('change', updateSignalBars);
 
-    for (const { slider, display } of sliders) {
-      element.querySelector(slider)?.addEventListener('input', (e) => {
-        const value = (e.target as HTMLInputElement).value;
-        (element.querySelector(display) as HTMLSpanElement).textContent = value;
-      });
+    // Toggle switches
+    const toggles = ['setting-shadows', 'setting-vsync', 'setting-grid'];
+    for (const id of toggles) {
+      const toggle = element.querySelector(`#${id}`) as HTMLElement;
+      if (toggle) {
+        const handler = () => {
+          const isActive = toggle.classList.contains('active');
+          setToggle(id, !isActive);
+        };
+        toggle.addEventListener('click', handler);
+        toggle.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handler();
+          }
+        });
+      }
+    }
+
+    // Bind custom sliders
+    bindSlider('slider-master', 'setting-master-value');
+    bindSlider('slider-music', 'setting-music-value');
+    bindSlider('slider-sfx', 'setting-sfx-value');
+    bindSlider('slider-edgepan', 'setting-edgepan-value');
+    bindSlider('slider-scroll', 'setting-scroll-value');
+  };
+
+  const onExit = () => {
+    if (escHandler) {
+      document.removeEventListener('keydown', escHandler);
+      escHandler = null;
     }
   };
 
@@ -405,5 +471,6 @@ export function createSettingsScreen(callbacks: SettingsCallbacks): Screen {
     type: ScreenType.Settings,
     element,
     onEnter,
+    onExit,
   };
 }

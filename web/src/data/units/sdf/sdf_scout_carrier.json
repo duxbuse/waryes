@@ -1,0 +1,35 @@
+{
+  "id": "sdf_scout_carrier",
+  "name": "Scout Carrier",
+  "cost": 20,
+  "icon": "assets/icons/categories/truck.svg",
+  "health": 4,
+  "speed": {
+    "road": 90,
+    "offRoad": 60,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 3,
+    "side": 2,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": 300,
+  "autonomy": {
+    "road": 700,
+    "offRoad": 450
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [],
+  "category": "LOG",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 8,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

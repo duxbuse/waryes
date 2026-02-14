@@ -916,7 +916,7 @@ export class UnitUI {
     context.fillRect(10, 10, 236, 108);
 
     // Border
-    context.strokeStyle = '#4a9eff';
+    context.strokeStyle = '#00aaff';
     context.lineWidth = 3;
     context.strokeRect(10, 10, 236, 108);
 

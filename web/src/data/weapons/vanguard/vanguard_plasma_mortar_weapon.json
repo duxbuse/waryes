@@ -1,0 +1,21 @@
+{
+  "name": "Plasma Mortar",
+  "range": 2500,
+  "penetration": 40,
+  "damage": 30,
+  "suppression": 300,
+  "rateOfFire": 3,
+  "accuracy": 0.35,
+  "aimTime": 2.5,
+  "reloadTime": 8,
+  "salvoLength": 1,
+  "supplyCost": 25,
+  "id": "vanguard_plasma_mortar_weapon",
+  "isAntiAir": false,
+  "canTargetGround": true,
+  "smokeEffect": {
+    "radius": 30,
+    "duration": 15,
+    "opacityReduction": 0.7
+  }
+}

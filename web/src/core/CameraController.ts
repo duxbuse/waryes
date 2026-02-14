@@ -177,6 +177,12 @@ export class CameraController {
   }
 
   private onWheel(event: WheelEvent): void {
+    // Only handle zoom when the wheel event is on the canvas, not on scrollable UI
+    const target = event.target as HTMLElement;
+    if (target !== this.canvas && !this.canvas.contains(target)) {
+      return;
+    }
+
     event.preventDefault();
 
     const zoomDelta = event.deltaY > 0 ? 1 : -1;

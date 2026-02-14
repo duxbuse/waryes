@@ -1,0 +1,42 @@
+{
+  "id": "vanguard_command_skimmer",
+  "name": "Command Skimmer",
+  "cost": 100,
+  "icon": "assets/icons/categories/truck.svg",
+  "health": 7,
+  "speed": {
+    "road": 80,
+    "offRoad": 60,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 8,
+    "side": 6,
+    "rear": 3,
+    "top": 3
+  },
+  "fuel": 450,
+  "autonomy": {
+    "road": 600,
+    "offRoad": 450
+  },
+  "optics": "Good",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_kinetic_rifle",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "LOG",
+  "tags": [],
+  "isCommander": true,
+  "commanderAuraRadius": 150,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

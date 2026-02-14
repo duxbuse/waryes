@@ -10,7 +10,9 @@ export default defineConfig({
       '@ui': resolve(__dirname, 'src/ui'),
       '@data': resolve(__dirname, 'src/data'),
       '@utils': resolve(__dirname, 'src/utils'),
+      '@shared': resolve(__dirname, '../shared/src'),
     },
+    dedupe: ['three'],
   },
   server: {
     port: 5173,
@@ -18,7 +20,7 @@ export default defineConfig({
   },
   build: {
     target: 'ES2022',
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV === 'production' ? false : true,
   },
   test: {
     globals: true,

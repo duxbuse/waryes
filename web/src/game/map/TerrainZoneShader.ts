@@ -308,15 +308,15 @@ void main() {`
 
       const base3 = i * 3;
       if (z.team === 'player') {
-        // Blue: #4a9eff
-        colors[base3] = 0.29;
-        colors[base3 + 1] = 0.62;
+        // Blue: #00aaff
+        colors[base3] = 0.0;
+        colors[base3 + 1] = 0.667;
         colors[base3 + 2] = 1.0;
       } else {
-        // Red: #ff4a4a
+        // Red: #ff4444
         colors[base3] = 1.0;
-        colors[base3 + 1] = 0.29;
-        colors[base3 + 2] = 0.29;
+        colors[base3 + 1] = 0.267;
+        colors[base3 + 2] = 0.267;
       }
     }
 

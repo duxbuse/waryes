@@ -5,15 +5,32 @@
  * It initializes the game engine, screens, and starts the main loop.
  */
 
+// Self-hosted fonts (no external Google Fonts dependency)
+import '@fontsource/cinzel/400.css';
+import '@fontsource/cinzel/700.css';
+import '@fontsource/cinzel/900.css';
+import '@fontsource/playfair-display-sc/400.css';
+import '@fontsource/playfair-display-sc/700.css';
+import '@fontsource/playfair-display-sc/900.css';
+import '@fontsource/crimson-pro/300.css';
+import '@fontsource/crimson-pro/400.css';
+import '@fontsource/crimson-pro/600.css';
+import '@fontsource/crimson-pro/700.css';
+import '@fontsource/share-tech-mono/400.css';
+import './styles/theme.css';
 import { Game } from './core/Game';
 import { ScreenType } from './core/ScreenManager';
+import { initBackground, showBackground, hideBackground } from './ui/BackgroundCanvas';
+import { createLoginScreen } from './screens/LoginScreen';
+import { createRegisterScreen } from './screens/RegisterScreen';
 import { createMainMenuScreen } from './screens/MainMenuScreen';
-import { createDeckBuilderScreen } from './screens/DeckBuilderScreen';
+import { createArmouryScreen } from './screens/ArmouryScreen';
 import { createSkirmishSetupScreen, type SkirmishConfig } from './screens/SkirmishSetupScreen';
 import { createSettingsScreen } from './screens/SettingsScreen';
 import { JoinGameScreen } from './screens/JoinGameScreen';
 import { GameLobbyScreen } from './screens/GameLobbyScreen';
 import { showConfirmDialog, showNotification } from './core/UINotifications';
+import { logout } from './api/AuthApi';
 
 // DOM Elements
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -40,6 +57,28 @@ async function main(): Promise<void> {
 
     updateLoading(50, 'Setting up screens...');
 
+    // Create auth screens
+    const loginScreen = createLoginScreen({
+      onLoginSuccess: () => {
+        game.screenManager.switchTo(ScreenType.MainMenu);
+      },
+      onRegister: () => {
+        game.screenManager.switchTo(ScreenType.Register);
+      },
+      onGuest: () => {
+        game.screenManager.switchTo(ScreenType.MainMenu);
+      },
+    });
+
+    const registerScreen = createRegisterScreen({
+      onRegisterSuccess: () => {
+        game.screenManager.switchTo(ScreenType.MainMenu);
+      },
+      onBackToLogin: () => {
+        game.screenManager.switchTo(ScreenType.Login);
+      },
+    });
+
     // Create and register screens
     const mainMenuScreen = createMainMenuScreen({
       onSkirmish: () => {
@@ -48,11 +87,18 @@ async function main(): Promise<void> {
       onJoinGame: () => {
         game.screenManager.switchTo(ScreenType.JoinGame);
       },
-      onDeckBuilder: () => {
-        game.screenManager.switchTo(ScreenType.DeckBuilder);
+      onArmoury: () => {
+        game.screenManager.switchTo(ScreenType.Armoury);
       },
       onSettings: () => {
         game.screenManager.switchTo(ScreenType.Settings);
+      },
+      onLogin: () => {
+        game.screenManager.switchTo(ScreenType.Login);
+      },
+      onLogout: async () => {
+        await logout();
+        game.screenManager.switchTo(ScreenType.MainMenu);
       },
       onQuit: async () => {
         if (await showConfirmDialog('Are you sure you want to quit?')) {
@@ -61,7 +107,7 @@ async function main(): Promise<void> {
       },
     });
 
-    const deckBuilderScreen = createDeckBuilderScreen({
+    const armouryScreen = createArmouryScreen({
       onBack: () => {
         game.screenManager.switchTo(ScreenType.MainMenu);
       },
@@ -96,15 +142,27 @@ async function main(): Promise<void> {
           }, 500);
         }
       },
-      onHostOnline: async (config: SkirmishConfig) => {
+      onHostOnline: async (config: SkirmishConfig): Promise<string | null> => {
         if (config.deck) {
           try {
-            await game.multiplayerManager.createLobby(config.mapSize);
-            // Lobby created callback will switch to GameLobby screen
+            return new Promise<string | null>((resolve) => {
+              game.multiplayerManager.on('lobby_created', (lobby: { code: string }) => {
+                resolve(lobby.code);
+              });
+              game.multiplayerManager.createLobby(config.mapSize).catch((error) => {
+                showNotification(`Failed to create online lobby: ${error}`, 5000);
+                resolve(null);
+              });
+            });
           } catch (error) {
             showNotification(`Failed to create online lobby: ${error}`, 5000);
+            return null;
           }
         }
+        return null;
+      },
+      onCancelHosting: () => {
+        game.multiplayerManager.leaveLobby();
       },
     });
 
@@ -119,20 +177,30 @@ async function main(): Promise<void> {
     const gameLobbyScreen = new GameLobbyScreen(game);
 
     // Setup multiplayer callbacks
-    game.multiplayerManager.on('lobby_created', () => {
-      game.screenManager.switchTo(ScreenType.GameLobby);
-    });
+    // lobby_created is handled by the skirmish screen's onHostOnline callback
+    // (host stays on skirmish setup screen and sees the game code there)
 
     game.multiplayerManager.on('lobby_joined', () => {
       game.screenManager.switchTo(ScreenType.GameLobby);
     });
+
+    // Initialize animated background (starfield + planet + particles)
+    initBackground();
+    showBackground();
 
     // Create battle screen (just a placeholder - battle uses the 3D canvas)
     const battleScreen = {
       type: ScreenType.Battle,
       element: document.createElement('div'),
       onEnter: () => {
-        // Battle screen doesn't need special UI - uses existing HTML
+        // Hide animated background during battle to protect 60 FPS budget
+        hideBackground();
+        document.body.classList.add('battle-active');
+      },
+      onExit: () => {
+        // Restore animated background when leaving battle
+        showBackground();
+        document.body.classList.remove('battle-active');
       },
     };
     battleScreen.element.id = 'battle-screen';
@@ -141,8 +209,10 @@ async function main(): Promise<void> {
     battleScreen.element.style.pointerEvents = 'none';
 
     // Register all screens
+    game.screenManager.registerScreen(loginScreen);
+    game.screenManager.registerScreen(registerScreen);
     game.screenManager.registerScreen(mainMenuScreen);
-    game.screenManager.registerScreen(deckBuilderScreen);
+    game.screenManager.registerScreen(armouryScreen);
     game.screenManager.registerScreen(skirmishSetupScreen);
     game.screenManager.registerScreen(settingsScreen);
     game.screenManager.registerScreen({
@@ -165,7 +235,7 @@ async function main(): Promise<void> {
     updateLoading(90, 'Starting game loop...');
     game.start();
 
-    // Switch to main menu
+    // Always start at main menu - guests can play without logging in
     game.screenManager.switchTo(ScreenType.MainMenu);
 
     updateLoading(100, 'Ready!');
@@ -175,8 +245,10 @@ async function main(): Promise<void> {
       loadingScreen.classList.add('hidden');
     }, 500);
 
-    // Expose game instance for debugging
-    (window as unknown as { game: Game }).game = game;
+    // Expose game instance for debugging (dev only)
+    if (import.meta.env.DEV) {
+      (window as unknown as { game: Game }).game = game;
+    }
 
     console.log('Stellar Siege initialized successfully');
 
@@ -190,7 +262,7 @@ async function main(): Promise<void> {
   } catch (error) {
     console.error('Failed to initialize game:', error);
     loadingText.textContent = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    loadingText.style.color = '#ff4a4a';
+    loadingText.style.color = 'var(--red-glow, #ff4444)';
   }
 }
 

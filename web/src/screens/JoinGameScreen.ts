@@ -27,6 +27,7 @@ export class JoinGameScreen {
   private codeInput: HTMLInputElement | null = null;
   private lobbyList: HTMLElement | null = null;
   private refreshInterval: number | null = null;
+  private escHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(game: Game) {
     this.game = game;
@@ -43,7 +44,7 @@ export class JoinGameScreen {
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      background: transparent;
       display: none;
       justify-content: center;
       align-items: center;
@@ -54,14 +55,14 @@ export class JoinGameScreen {
     const style = document.createElement('style');
     style.textContent = `
       #join-game-screen button:focus-visible {
-        outline: 3px solid #4a90e2;
+        outline: 3px solid var(--blue-primary);
         outline-offset: 2px;
-        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+        box-shadow: 0 0 0 3px rgba(0, 170, 255, 0.3), 0 0 20px rgba(0, 170, 255, 0.4);
       }
       #join-game-screen input:focus-visible {
-        outline: 3px solid #4a90e2;
+        outline: 3px solid var(--blue-primary);
         outline-offset: 2px;
-        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3), 0 0 20px rgba(74, 144, 226, 0.5);
+        box-shadow: 0 0 0 3px rgba(0, 170, 255, 0.3), 0 0 20px rgba(0, 170, 255, 0.4);
       }
     `;
     container.appendChild(style);
@@ -69,8 +70,8 @@ export class JoinGameScreen {
     // Main panel
     const panel = document.createElement('div');
     panel.style.cssText = `
-      background: rgba(26, 26, 46, 0.95);
-      border: 2px solid #4a90e2;
+      background: rgba(26, 26, 32, 0.92);
+      border: 2px solid var(--blue-primary, #00aaff);
       border-radius: 12px;
       padding: 40px;
       max-width: 800px;
@@ -83,11 +84,13 @@ export class JoinGameScreen {
     const title = document.createElement('h1');
     title.textContent = 'Join Multiplayer Game';
     title.style.cssText = `
-      color: #4a90e2;
+      color: var(--blue-primary, #00aaff);
+      font-family: var(--font-heading, 'Cinzel', serif);
       font-size: 36px;
+      letter-spacing: 3px;
       margin: 0 0 30px 0;
       text-align: center;
-      text-shadow: 0 0 20px rgba(74, 144, 226, 0.5);
+      text-shadow: 0 0 20px rgba(0, 170, 255, 0.4);
     `;
 
     // Code input section
@@ -118,9 +121,10 @@ export class JoinGameScreen {
     this.codeInput.style.cssText = `
       flex: 1;
       padding: 12px 20px;
+      font-family: var(--font-mono, 'Share Tech Mono', monospace);
       font-size: 20px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 2px solid #4a90e2;
+      background: rgba(26, 26, 32, 0.8);
+      border: 2px solid var(--blue-primary, #00aaff);
       border-radius: 8px;
       color: #e0e0e0;
       text-align: center;
@@ -145,8 +149,10 @@ export class JoinGameScreen {
     joinButton.className = 'btn-primary';
     joinButton.style.cssText = `
       padding: 12px 30px;
+      font-family: var(--font-heading, 'Cinzel', serif);
       font-size: 18px;
-      background: #4a90e2;
+      letter-spacing: 2px;
+      background: var(--blue-primary, #00aaff);
       border: none;
       border-radius: 8px;
       color: white;
@@ -155,12 +161,12 @@ export class JoinGameScreen {
     `;
 
     joinButton.addEventListener('mouseenter', () => {
-      joinButton.style.background = '#357abd';
+      joinButton.style.background = 'var(--blue-dark, #0088dd)';
       joinButton.style.transform = 'scale(1.05)';
     });
 
     joinButton.addEventListener('mouseleave', () => {
-      joinButton.style.background = '#4a90e2';
+      joinButton.style.background = 'var(--blue-primary, #00aaff)';
       joinButton.style.transform = 'scale(1)';
     });
 
@@ -182,7 +188,7 @@ export class JoinGameScreen {
     const divider = document.createElement('div');
     divider.style.cssText = `
       height: 2px;
-      background: linear-gradient(90deg, transparent, #4a90e2, transparent);
+      background: linear-gradient(90deg, transparent, var(--blue-primary, #00aaff), transparent);
       margin: 30px 0;
     `;
 
@@ -214,11 +220,13 @@ export class JoinGameScreen {
       width: 100%;
       padding: 12px;
       margin-top: 30px;
+      font-family: var(--font-heading, 'Cinzel', serif);
       font-size: 16px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 2px solid #666;
+      letter-spacing: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid var(--steel-highlight, #4a4a55);
       border-radius: 8px;
-      color: #e0e0e0;
+      color: #c0c0cc;
       cursor: pointer;
       transition: all 0.3s;
     `;
@@ -310,8 +318,8 @@ export class JoinGameScreen {
   private createLobbyCard(lobby: LobbyListItem): HTMLElement {
     const card = document.createElement('div');
     card.style.cssText = `
-      background: rgba(255, 255, 255, 0.05);
-      border: 2px solid #4a90e2;
+      background: rgba(26, 26, 32, 0.7);
+      border: 2px solid var(--blue-dim, #005588);
       border-radius: 8px;
       padding: 15px 20px;
       margin-bottom: 10px;
@@ -322,13 +330,15 @@ export class JoinGameScreen {
     `;
 
     card.addEventListener('mouseenter', () => {
-      card.style.background = 'rgba(74, 144, 226, 0.1)';
+      card.style.background = 'rgba(0, 170, 255, 0.1)';
       card.style.transform = 'translateX(5px)';
+      card.style.borderColor = 'var(--blue-primary, #00aaff)';
     });
 
     card.addEventListener('mouseleave', () => {
-      card.style.background = 'rgba(255, 255, 255, 0.05)';
+      card.style.background = 'rgba(26, 26, 32, 0.7)';
       card.style.transform = 'translateX(0)';
+      card.style.borderColor = 'var(--blue-dim, #005588)';
     });
 
     const info = document.createElement('div');
@@ -339,9 +349,10 @@ export class JoinGameScreen {
     const code = document.createElement('div');
     code.textContent = sanitizeHTML(lobby.code);
     code.style.cssText = `
+      font-family: var(--font-mono, 'Share Tech Mono', monospace);
       font-size: 20px;
       font-weight: bold;
-      color: #4a90e2;
+      color: var(--amber, #ff8800);
       letter-spacing: 2px;
       margin-bottom: 5px;
     `;
@@ -360,21 +371,22 @@ export class JoinGameScreen {
     joinBtn.textContent = 'JOIN';
     joinBtn.style.cssText = `
       padding: 8px 20px;
-      background: #4a90e2;
+      background: var(--blue-primary, #00aaff);
       border: none;
       border-radius: 6px;
       color: white;
       cursor: pointer;
+      font-family: var(--font-mono, 'Share Tech Mono', monospace);
       font-size: 14px;
       transition: all 0.3s;
     `;
 
     joinBtn.addEventListener('mouseenter', () => {
-      joinBtn.style.background = '#357abd';
+      joinBtn.style.background = 'var(--blue-dark, #0088dd)';
     });
 
     joinBtn.addEventListener('mouseleave', () => {
-      joinBtn.style.background = '#4a90e2';
+      joinBtn.style.background = 'var(--blue-primary, #00aaff)';
     });
 
     joinBtn.addEventListener('click', async () => {
@@ -398,6 +410,14 @@ export class JoinGameScreen {
       this.codeInput.focus();
     }
 
+    // ESC key to go back
+    this.escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        this.game.screenManager.switchTo(ScreenType.MainMenu);
+      }
+    };
+    document.addEventListener('keydown', this.escHandler);
+
     // Start auto-refresh
     this.refreshLobbyList();
     this.refreshInterval = window.setInterval(() => {
@@ -407,6 +427,12 @@ export class JoinGameScreen {
 
   hide(): void {
     this.container.style.display = 'none';
+
+    // Remove ESC handler
+    if (this.escHandler) {
+      document.removeEventListener('keydown', this.escHandler);
+      this.escHandler = null;
+    }
 
     // Stop auto-refresh
     if (this.refreshInterval) {

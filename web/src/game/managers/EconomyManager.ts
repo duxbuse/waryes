@@ -1,50 +1,22 @@
 /**
- * EconomyManager - Manages credits, income, and capture zone scoring
+ * EconomyManager - Client adapter wrapping SimEconomyManager
+ *
+ * Handles DOM updates, audio, and map renderer integration.
+ * All economy/scoring logic lives in SimEconomyManager (shared package).
  */
 
 import type { Game } from '../../core/Game';
 import type { CaptureZone } from '../../data/types';
-import { GAME_CONSTANTS } from '../../data/types';
+import { SimEconomyManager } from '@shared/simulation/SimEconomyManager';
+import type { TeamScore, ZoneUnitEntry } from '@shared/simulation/SimEconomyManager';
 import type { FillEntry } from '../map/ZoneFillRenderer';
 
-export interface TeamScore {
-  player: number;
-  enemy: number;
-}
-
-/** Tracks a unit's entry into a zone */
-export interface ZoneUnitEntry {
-  unitId: string;
-  team: 'player' | 'enemy';
-  /** Position where unit first entered the zone */
-  entryX: number;
-  entryZ: number;
-}
+// Re-export shared types for backward compatibility
+export type { TeamScore, ZoneUnitEntry } from '@shared/simulation/SimEconomyManager';
 
 export class EconomyManager {
   private readonly game: Game;
-
-  // Credits
-  private playerCredits: number = GAME_CONSTANTS.STARTING_CREDITS;
-  private enemyCredits: number = GAME_CONSTANTS.STARTING_CREDITS;
-
-  // Income
-  private baseIncome: number = GAME_CONSTANTS.INCOME_PER_TICK;
-  private tickTimer: number = 0;
-  private readonly tickDuration: number = GAME_CONSTANTS.TICK_DURATION;
-
-  // Capture zones
-  private captureZones: CaptureZone[] = [];
-
-  // Track unit entries per zone (unit circles anchored at entry positions)
-  private zoneUnitEntries: Map<string, ZoneUnitEntry[]> = new Map();
-
-  // Scoring
-  private score: TeamScore = { player: 0, enemy: 0 };
-  private readonly victoryThreshold: number = GAME_CONSTANTS.VICTORY_THRESHOLD;
-
-  // Track contested state per zone to prevent spam
-  private zoneContestedStates: Map<string, boolean> = new Map();
+  public readonly sim: SimEconomyManager;
 
   // UI elements
   private creditsEl: HTMLElement | null = null;
@@ -57,12 +29,12 @@ export class EconomyManager {
 
   constructor(game: Game) {
     this.game = game;
+    this.sim = new SimEconomyManager();
   }
 
   initialize(captureZones: CaptureZone[]): void {
-    this.captureZones = captureZones;
-    this.score = { player: 0, enemy: 0 };
-    this.tickTimer = 0;
+    // Provide the unit query function to the simulation layer
+    this.sim.initialize(captureZones, (zone, team) => this.getUnitsInZone(zone, team));
 
     // Pass capture zone bounds to fog of war renderer for fog reduction
     this.game.fogOfWarRenderer?.setCaptureZones(captureZones);
@@ -83,104 +55,41 @@ export class EconomyManager {
   }
 
   update(dt: number): void {
-    // Update tick timer
-    this.tickTimer += dt;
+    // Run simulation logic
+    this.sim.update(dt);
 
-    if (this.tickTimer >= this.tickDuration) {
-      this.tickTimer -= this.tickDuration;
-      this.processTick();
+    // Process rendering events from the simulation
+    this.processSimEvents(dt);
+
+    // Check if income tick was processed
+    if (this.sim.wasTickProcessed()) {
+      this.game.audioManager.playSound('income_tick');
+
+      // Debug score logging
+      const score = this.sim.getScore();
+      if (score.player > 0 || score.enemy > 0) {
+        console.log(`[SCORE] Blue: ${score.player}, Red: ${score.enemy}`);
+      }
+
+      this.updateUI();
     }
 
-    // Update capture zone progress
-    this.updateCaptureZones(dt);
+    // Check victory
+    const winner = this.sim.getVictoryWinner();
+    if (winner) {
+      this.game.audioManager.playSound(winner === 'player' ? 'victory' : 'defeat');
+      this.onVictory?.(winner);
+    }
   }
 
-  private processTick(): void {
-    // Add base income
-    this.playerCredits += this.baseIncome;
+  private processSimEvents(dt: number): void {
+    // Update zone fill visualization and capture detection
+    const captureZones = this.sim.getCaptureZones();
 
-    // Calculate bonus income from zones
-    let playerZoneIncome = 0;
-    let enemyZoneIncome = 0;
-
-    for (const zone of this.captureZones) {
-      if (zone.owner === 'player') {
-        playerZoneIncome += zone.pointsPerTick;
-        this.score.player += zone.pointsPerTick;
-      } else if (zone.owner === 'enemy') {
-        enemyZoneIncome += zone.pointsPerTick;
-        this.score.enemy += zone.pointsPerTick;
-      }
-    }
-
-    this.playerCredits += playerZoneIncome;
-    this.enemyCredits += this.baseIncome + enemyZoneIncome;
-
-    // Play income tick sound
-    this.game.audioManager.playSound('income_tick');
-
-    // Debug: Log score every tick
-    if (this.score.player > 0 || this.score.enemy > 0) {
-      console.log(`[SCORE] Blue: ${this.score.player}, Red: ${this.score.enemy} (playerZoneIncome: ${playerZoneIncome}, enemyZoneIncome: ${enemyZoneIncome})`);
-    }
-
-    this.updateUI();
-
-    // Check victory condition
-    this.checkVictory();
-  }
-
-  private updateCaptureZones(dt: number): void {
-    for (const zone of this.captureZones) {
-      // Get units currently in zone with their positions
-      const playerUnitsInZone = this.getUnitsInZone(zone, 'player');
-      const enemyUnitsInZone = this.getUnitsInZone(zone, 'enemy');
-      const playerCount = playerUnitsInZone.length;
-      const enemyCount = enemyUnitsInZone.length;
-
-      // Get or create entry tracking for this zone
-      let entries = this.zoneUnitEntries.get(zone.id);
-      if (!entries) {
-        entries = [];
-        this.zoneUnitEntries.set(zone.id, entries);
-      }
-
-      // Build set of unit IDs currently in zone
-      const currentUnitIds = new Set<string>();
-      for (const u of playerUnitsInZone) currentUnitIds.add(u.id);
-      for (const u of enemyUnitsInZone) currentUnitIds.add(u.id);
-
-      // Remove entries for units that left the zone
-      entries = entries.filter(e => currentUnitIds.has(e.unitId));
-
-      // Add new entries for units entering the zone (record entry position)
-      for (const unit of playerUnitsInZone) {
-        if (!entries.find(e => e.unitId === unit.id)) {
-          console.log(`Unit ${unit.id} entered zone ${zone.id} at (${unit.x.toFixed(1)}, ${unit.z.toFixed(1)})`);
-          entries.push({
-            unitId: unit.id,
-            team: 'player',
-            entryX: unit.x,
-            entryZ: unit.z,
-          });
-        }
-      }
-
-      for (const unit of enemyUnitsInZone) {
-        if (!entries.find(e => e.unitId === unit.id)) {
-          entries.push({
-            unitId: unit.id,
-            team: 'enemy',
-            entryX: unit.x,
-            entryZ: unit.z,
-          });
-        }
-      }
-
-      this.zoneUnitEntries.set(zone.id, entries);
-
-      // Convert to FillEntry format for the renderer
-      const fillEntries: FillEntry[] = entries.map(e => ({
+    for (const zone of captureZones) {
+      // Get entry data from sim for fill rendering
+      const entries = this.sim.getZoneUnitEntries(zone.id);
+      const fillEntries: FillEntry[] = entries.map((e: ZoneUnitEntry) => ({
         unitId: e.unitId,
         team: e.team,
         entryX: e.entryX,
@@ -190,61 +99,67 @@ export class EconomyManager {
       // Update zone fill visualization
       this.game.mapRenderer?.updateZoneFill(zone.id, fillEntries, dt);
 
-      // Get fill state to determine ownership
+      // Get fill state to determine ownership (driven by renderer)
       const fillState = this.game.mapRenderer?.getZoneFillState(zone.id);
-      const isContested = playerCount > 0 && enemyCount > 0;
 
-      // Play contested sound only on transition to contested state
-      const wasContested = this.zoneContestedStates.get(zone.id) || false;
-      if (isContested && !wasContested) {
+      if (fillState?.isCaptured && fillState.capturedBy) {
+        // Tell sim about the capture (renderer-driven capture detection)
+        this.sim.applyZoneCapture(zone.id, fillState.capturedBy);
+
+        // Update capture progress from fill state
+        if (zone.owner === 'player') {
+          this.sim.setZoneCaptureProgress(zone.id, fillState.playerPercent * 100);
+        } else if (zone.owner === 'enemy') {
+          this.sim.setZoneCaptureProgress(zone.id, fillState.enemyPercent * 100);
+        }
+      }
+    }
+
+    // Process capture events (audio, fog, visuals)
+    for (const evt of this.sim.getCaptureEvents()) {
+      const zone = captureZones.find(z => z.id === evt.zoneId);
+      if (!zone) continue;
+
+      console.log(`${zone.name} captured by ${evt.capturedBy}!`);
+      this.game.audioManager.playSound('zone_capture');
+
+      // Update fog of war over capture zones
+      const zoneIdx = captureZones.indexOf(zone);
+      if (zoneIdx >= 0) {
+        this.game.fogOfWarRenderer?.updateCaptureZoneOwner(zoneIdx, evt.capturedBy === 'player');
+      }
+    }
+
+    // Process zone presences (audio, border visuals)
+    for (const presence of this.sim.getZonePresences()) {
+      if (presence.becameContested) {
         this.game.audioManager.playSound('zone_contested');
       }
-      this.zoneContestedStates.set(zone.id, isContested);
 
-      // Determine zone ownership based on fill state
-      if (fillState) {
-        // Check if zone was captured
-        if (fillState.isCaptured && fillState.capturedBy) {
-          if (fillState.capturedBy === 'player' && zone.owner !== 'player') {
-            console.log(`[CAPTURE] ${zone.name} owner changing from '${zone.owner}' to 'player'`);
-            zone.owner = 'player';
-            zone.captureProgress = 100;
-            this.onZoneCaptured(zone, 'player');
-            // Reduce fog over player-captured zones so fill color is visible
-            const zoneIdx = this.captureZones.indexOf(zone);
-            if (zoneIdx >= 0) this.game.fogOfWarRenderer?.updateCaptureZoneOwner(zoneIdx, true);
-          } else if (fillState.capturedBy === 'enemy' && zone.owner !== 'enemy') {
-            console.log(`[CAPTURE] ${zone.name} (id=${zone.id}) owner changing from '${zone.owner}' to 'enemy'. captureZones length: ${this.captureZones.length}, zone ref: ${this.captureZones.indexOf(zone)}`);
-            zone.owner = 'enemy';
-            zone.captureProgress = 100;
-            this.onZoneCaptured(zone, 'enemy');
-            // Enemy captured - restore full fog over this zone
-            const zoneIdx = this.captureZones.indexOf(zone);
-            if (zoneIdx >= 0) this.game.fogOfWarRenderer?.updateCaptureZoneOwner(zoneIdx, false);
-          }
-        }
-
-        // Update capture progress based on fill percentage
-        if (zone.owner === 'player') {
-          zone.captureProgress = fillState.playerPercent * 100;
-        } else if (zone.owner === 'enemy') {
-          zone.captureProgress = fillState.enemyPercent * 100;
-        }
+      const zone = captureZones.find(z => z.id === presence.zoneId);
+      if (zone) {
+        this.game.mapRenderer?.updateCaptureZone(
+          zone.id,
+          zone.owner,
+          zone.captureProgress / 100,
+          presence.isContested,
+        );
       }
-
-      // Update zone border/flag visuals
-      this.game.mapRenderer?.updateCaptureZone(zone.id, zone.owner, zone.captureProgress / 100, isContested);
     }
+
+    this.updateUI();
   }
 
-  private getUnitsInZone(zone: CaptureZone, team: 'player' | 'enemy'): Array<{ id: string; x: number; z: number }> {
+  private getUnitsInZone(
+    zone: CaptureZone,
+    team: 'player' | 'enemy',
+  ): Array<{ id: string; x: number; z: number }> {
     const units = this.game.unitManager.getAllUnits(team);
     const result: Array<{ id: string; x: number; z: number }> = [];
 
     for (const unit of units) {
       const dx = unit.position.x - zone.x;
       const dz = unit.position.z - zone.z;
-
       if (Math.abs(dx) <= zone.width / 2 && Math.abs(dz) <= zone.height / 2) {
         result.push({ id: unit.id, x: unit.position.x, z: unit.position.z });
       }
@@ -253,81 +168,53 @@ export class EconomyManager {
     return result;
   }
 
-  private onZoneCaptured(zone: CaptureZone, team: 'player' | 'enemy'): void {
-    console.log(`${zone.name} captured by ${team}!`);
-    this.game.audioManager.playSound('zone_capture');
-  }
-
-  private checkVictory(): void {
-    if (this.score.player >= this.victoryThreshold) {
-      this.game.audioManager.playSound('victory');
-      this.onVictory?.('player');
-    } else if (this.score.enemy >= this.victoryThreshold) {
-      this.game.audioManager.playSound('defeat');
-      this.onVictory?.('enemy');
-    }
-  }
-
   private updateUI(): void {
+    const credits = this.sim.getPlayerCredits();
+    const score = this.sim.getScore();
+    const captureZones = this.sim.getCaptureZones();
+
     if (this.creditsEl) {
-      this.creditsEl.textContent = this.playerCredits.toString();
+      this.creditsEl.textContent = credits.toString();
     }
 
     if (this.incomeEl) {
-      // Calculate total income
       let zoneIncome = 0;
-      for (const zone of this.captureZones) {
+      for (const zone of captureZones) {
         if (zone.owner === 'player') {
           zoneIncome += zone.pointsPerTick;
         }
       }
-      this.incomeEl.textContent = `+${this.baseIncome + zoneIncome}/tick`;
+      this.incomeEl.textContent = `+${10 + zoneIncome}/tick`;
     }
 
     if (this.playerScoreEl) {
-      this.playerScoreEl.textContent = this.score.player.toString();
+      this.playerScoreEl.textContent = score.player.toString();
     }
-
     if (this.enemyScoreEl) {
-      this.enemyScoreEl.textContent = this.score.enemy.toString();
+      this.enemyScoreEl.textContent = score.enemy.toString();
     }
   }
 
-  getPlayerCredits(): number {
-    return this.playerCredits;
-  }
+  // ─── Proxy methods for backward compatibility ──────────────────
+
+  getPlayerCredits(): number { return this.sim.getPlayerCredits(); }
+  getEnemyCredits(): number { return this.sim.getEnemyCredits(); }
 
   spendCredits(amount: number): boolean {
-    if (this.playerCredits >= amount) {
-      this.playerCredits -= amount;
-      this.updateUI();
-      return true;
-    }
-    return false;
+    const result = this.sim.spendCredits(amount);
+    if (result) this.updateUI();
+    return result;
   }
 
   addPlayerCredits(amount: number): void {
-    this.playerCredits += amount;
+    this.sim.addPlayerCredits(amount);
     this.updateUI();
   }
 
-  getEnemyCredits(): number {
-    return this.enemyCredits;
-  }
-
   spendEnemyCredits(amount: number): boolean {
-    if (this.enemyCredits >= amount) {
-      this.enemyCredits -= amount;
-      return true;
-    }
-    return false;
+    return this.sim.spendEnemyCredits(amount);
   }
 
-  getScore(): TeamScore {
-    return { ...this.score };
-  }
-
-  getCaptureZones(): CaptureZone[] {
-    return this.captureZones;
-  }
+  getScore(): TeamScore { return this.sim.getScore(); }
+  getCaptureZones(): CaptureZone[] { return this.sim.getCaptureZones(); }
 }

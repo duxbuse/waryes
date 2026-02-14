@@ -73,8 +73,8 @@ export class ReinforcementManager {
         left: 10px;
         width: 280px;
         max-height: 400px;
-        background: rgba(0, 0, 0, 0.8);
-        border-radius: 8px;
+        background: rgba(26, 26, 32, 0.92);
+        border: 1px solid var(--steel-light, #3a3a42);
         padding: 10px;
         display: none;
         overflow-y: auto;
@@ -86,7 +86,7 @@ export class ReinforcementManager {
 
     // Create entry point selector
     const header = document.createElement('div');
-    header.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #4a9eff;';
+    header.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: var(--blue-primary, #00aaff); font-family: var(--font-heading, "Cinzel", serif); letter-spacing: 1px;';
     header.textContent = 'CALL REINFORCEMENTS';
     panel.appendChild(header);
 
@@ -103,10 +103,9 @@ export class ReinforcementManager {
         width: 100%;
         padding: 8px;
         margin: 4px 0;
-        background: rgba(74, 158, 255, 0.2);
-        border: 1px solid rgba(74, 158, 255, 0.5);
+        background: rgba(0, 170, 255, 0.15);
+        border: 1px solid rgba(0, 170, 255, 0.4);
         color: #e0e0e0;
-        border-radius: 4px;
         cursor: pointer;
         font-size: 12px;
         text-align: left;
@@ -117,13 +116,13 @@ export class ReinforcementManager {
       btn.innerHTML = `
         <div style="display: flex; justify-content: space-between;">
           <span>${typeName} Entry</span>
-          <span class="queue-count" style="color: ${queueCount > 0 ? '#ffd700' : '#666'};">Queue: ${queueCount}</span>
+          <span class="queue-count" style="color: ${queueCount > 0 ? '#ff8800' : '#4a4a55'}; font-family: var(--font-mono, monospace);">Queue: ${queueCount}</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
           <div style="font-size: 10px; color: #888;">
             Spawn rate: ${ep.spawnRate}s
           </div>
-          <div class="spawn-timer" style="font-size: 10px; font-weight: bold; color: #4a9eff;">
+          <div class="spawn-timer" style="font-size: 10px; font-weight: bold; color: #00aaff; font-family: var(--font-mono, monospace);">
             Ready
           </div>
         </div>
@@ -144,10 +143,9 @@ export class ReinforcementManager {
       width: 100%;
       padding: 8px;
       margin-top: 10px;
-      background: rgba(255, 74, 74, 0.2);
-      border: 1px solid rgba(255, 74, 74, 0.5);
+      background: rgba(255, 34, 0, 0.15);
+      border: 1px solid rgba(255, 68, 68, 0.4);
       color: #e0e0e0;
-      border-radius: 4px;
       cursor: pointer;
     `;
     closeBtn.addEventListener('click', () => {
@@ -185,11 +183,11 @@ export class ReinforcementManager {
     // Highlight selected button
     this.entryPointButtons.forEach((btn, id) => {
       if (id === ep.id) {
-        btn.style.background = 'rgba(74, 158, 255, 0.5)';
-        btn.style.borderColor = '#4a9eff';
+        btn.style.background = 'rgba(0, 170, 255, 0.35)';
+        btn.style.borderColor = '#00aaff';
       } else {
-        btn.style.background = 'rgba(74, 158, 255, 0.2)';
-        btn.style.borderColor = 'rgba(74, 158, 255, 0.5)';
+        btn.style.background = 'rgba(0, 170, 255, 0.15)';
+        btn.style.borderColor = 'rgba(0, 170, 255, 0.4)';
       }
     });
 
@@ -447,7 +445,7 @@ export class ReinforcementManager {
         const queueSpan = btn.querySelector('.queue-count');
         if (queueSpan) {
           queueSpan.textContent = `Queue: ${queueCount}`;
-          (queueSpan as HTMLElement).style.color = queueCount > 0 ? '#ffd700' : '#666';
+          (queueSpan as HTMLElement).style.color = queueCount > 0 ? '#ff8800' : '#4a4a55';
         }
 
         // Update spawn timer display
@@ -458,7 +456,7 @@ export class ReinforcementManager {
           if (queueCount === 0) {
             // No queue, show "Ready"
             timerSpan.textContent = 'Ready';
-            (timerSpan as HTMLElement).style.color = '#4a9eff';
+            (timerSpan as HTMLElement).style.color = '#00aaff';
           } else if (currentTimer <= 0) {
             // Timer expired, ready to spawn
             timerSpan.textContent = 'Spawning...';
@@ -471,7 +469,7 @@ export class ReinforcementManager {
             if (currentTimer < 2) {
               (timerSpan as HTMLElement).style.color = '#00ff88'; // Cyan - almost ready
             } else if (currentTimer < 5) {
-              (timerSpan as HTMLElement).style.color = '#ffd700'; // Gold - soon
+              (timerSpan as HTMLElement).style.color = '#ff8800'; // Amber - soon
             } else {
               (timerSpan as HTMLElement).style.color = '#ff8800'; // Orange - waiting
             }
@@ -545,8 +543,14 @@ export class ReinforcementManager {
     const reinforcement = ep.queue.shift();
     if (!reinforcement) return;
 
-    // Spawn unit at entry point (use terrain elevation)
-    const spawnPos = new THREE.Vector3(ep.x, this.game.getElevationAt(ep.x, ep.z), ep.z);
+    // Spawn unit at entry point with lateral spread and forward bias to avoid clumping
+    const SPAWN_SPREAD_RADIUS = 8;
+    const offsetX = (Math.random() - 0.5) * SPAWN_SPREAD_RADIUS * 2;
+    const forwardBias = ep.team === 'player' ? 1 : -1;
+    const offsetZ = Math.random() * SPAWN_SPREAD_RADIUS * forwardBias;
+    const spawnX = ep.x + offsetX;
+    const spawnZ = ep.z + offsetZ;
+    const spawnPos = new THREE.Vector3(spawnX, this.game.getElevationAt(spawnX, spawnZ), spawnZ);
 
     const unit = this.game.unitManager.spawnUnit({
       position: spawnPos,
@@ -620,7 +624,7 @@ export class ReinforcementManager {
     const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');      // Bright white center
     gradient.addColorStop(0.2, 'rgba(100, 200, 255, 1)');    // Bright cyan
-    gradient.addColorStop(0.5, 'rgba(74, 158, 255, 0.8)');   // Blue
+    gradient.addColorStop(0.5, 'rgba(0, 170, 255, 0.8)');     // Blue
     gradient.addColorStop(0.8, 'rgba(50, 100, 200, 0.4)');   // Dark blue
     gradient.addColorStop(1, 'rgba(30, 80, 150, 0)');        // Fade to transparent
 
@@ -678,7 +682,14 @@ export class ReinforcementManager {
     const reinforcement = ep.queue.shift();
     if (!reinforcement) return;
 
-    const spawnPos = new THREE.Vector3(ep.x, this.game.getElevationAt(ep.x, ep.z), ep.z);
+    // Spread spawn position to avoid clumping at entry point
+    const SPAWN_SPREAD_RADIUS = 8;
+    const offsetX = (Math.random() - 0.5) * SPAWN_SPREAD_RADIUS * 2;
+    // Enemy spawns at positive Z edge, bias forward (toward negative Z)
+    const offsetZ = Math.random() * SPAWN_SPREAD_RADIUS * -1;
+    const spawnX = ep.x + offsetX;
+    const spawnZ = ep.z + offsetZ;
+    const spawnPos = new THREE.Vector3(spawnX, this.game.getElevationAt(spawnX, spawnZ), spawnZ);
 
     const unit = this.game.unitManager.spawnUnit({
       position: spawnPos,

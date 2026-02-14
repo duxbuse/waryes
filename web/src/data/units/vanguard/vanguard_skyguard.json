@@ -1,0 +1,42 @@
+{
+  "id": "vanguard_skyguard",
+  "name": "Skyguard Platform",
+  "cost": 75,
+  "icon": "assets/icons/units/vanguard/vanguard_skyguard.png",
+  "health": 6,
+  "speed": {
+    "road": 60,
+    "offRoad": 45,
+    "rotation": 6
+  },
+  "armor": {
+    "front": 10,
+    "side": 8,
+    "rear": 5,
+    "top": 5
+  },
+  "fuel": 350,
+  "autonomy": {
+    "road": 500,
+    "offRoad": 350
+  },
+  "optics": "Good",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_skyguard_missile",
+      "count": 2,
+      "maxAmmo": 12,
+      "turretMounted": true
+    }
+  ],
+  "category": "AA",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Heavy Ion Cannon",
+  "range": 3500,
+  "penetration": 120,
+  "damage": 80,
+  "suppression": 400,
+  "rateOfFire": 2,
+  "accuracy": 0.3,
+  "aimTime": 3,
+  "reloadTime": 12,
+  "salvoLength": 1,
+  "supplyCost": 40,
+  "id": "vanguard_ion_cannon_heavy",
+  "isAntiAir": false,
+  "canTargetGround": true
+}

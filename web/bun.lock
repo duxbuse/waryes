@@ -5,6 +5,10 @@
     "": {
       "name": "stellar-siege",
       "dependencies": {
+        "@fontsource/cinzel": "^5.2.8",
+        "@fontsource/crimson-pro": "^5.2.8",
+        "@fontsource/playfair-display-sc": "^5.2.8",
+        "@fontsource/share-tech-mono": "^5.2.7",
         "three": "^0.170.0",
       },
       "devDependencies": {
@@ -113,6 +117,14 @@
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.4.1", "", { "dependencies": { "@eslint/core": "^0.17.0", "levn": "^0.4.1" } }, "sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA=="],
 
     "@exodus/bytes": ["@exodus/bytes@1.8.0", "", { "peerDependencies": { "@exodus/crypto": "^1.0.0-rc.4" }, "optionalPeers": ["@exodus/crypto"] }, "sha512-8JPn18Bcp8Uo1T82gR8lh2guEOa5KKU/IEKvvdp0sgmi7coPBWf1Doi1EXsGZb2ehc8ym/StJCjffYV+ne7sXQ=="],
+
+    "@fontsource/cinzel": ["@fontsource/cinzel@5.2.8", "", {}, "sha512-B9WeF/jPlOJOrcXfX96cy4KfM+s1QcU2C9W2hE3azBOBzPvzFkNpBovT5JmhAeicE/s4HZWKF9LF5hmEcqlbsw=="],
+
+    "@fontsource/crimson-pro": ["@fontsource/crimson-pro@5.2.8", "", {}, "sha512-t+cAoAswUKEReDPqDNWWSyAp7baZkKrtF6Ry0KrDZQHJCldS9pIbRH0n2hm1u4+SbIUI7c+nUS9yfK6rEhycTw=="],
+
+    "@fontsource/playfair-display-sc": ["@fontsource/playfair-display-sc@5.2.8", "", {}, "sha512-7POWNoGYhmq2524jc9HjBRl12DCb6C3fSKT/ZKIo++QWU8yMBrN/PUsQ/RDrVIdcybYkD3wnyXGKQJreH2hjdA=="],
+
+    "@fontsource/share-tech-mono": ["@fontsource/share-tech-mono@5.2.7", "", {}, "sha512-1JBJ6CU9u5av8aFEUOGOJkq60/IEVVOZDCmiU8X3i0skk0Pp69GngDwlBUHaTZa4G6pbF1UDrC+Fm7XSckW6TQ=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.1", "", {}, "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="],
 

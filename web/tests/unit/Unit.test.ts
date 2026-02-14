@@ -7,26 +7,58 @@ import * as THREE from 'three';
 import { Unit, UnitCommand, type UnitConfig } from '../../src/game/units/Unit';
 import type { Game } from '../../src/core/Game';
 
+// Minimal SimGameContext mock for SimUnit construction and updates
+const createMockSimContext = () => ({
+  currentMap: null,
+  phase: 'battle' as const,
+  rng: { next: () => 0.5 },
+  getElevationAt: () => 0,
+  getTerrainAt: () => null,
+  getWeaponData: () => undefined,
+  getUnitData: () => undefined,
+  getUnitsInRadius: () => [],
+  getAllUnits: () => [],
+  destroyUnit: vi.fn(),
+  findPath: vi.fn((_from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+  findNearestReachablePosition: vi.fn((_from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
+  findNearestBuilding: () => null,
+  hasBuildingCapacity: () => false,
+  tryGarrison: () => false,
+  ungarrison: () => null,
+  spawnDefensiveStructure: () => null,
+  tryMount: () => false,
+  unloadAll: () => [],
+  isFogOfWarEnabled: () => false,
+  isPositionVisible: () => true,
+});
+
+// Expose simContext for assertions in tests
+let currentSimContext: ReturnType<typeof createMockSimContext>;
+
 // Mock the Game class with all required managers
-const createMockGame = () => ({
-  unitManager: {
-    destroyUnit: vi.fn(),
-    getAllUnits: vi.fn().mockReturnValue([]),
-    getUnitsInRadius: vi.fn().mockReturnValue([]),
-  },
-  selectionManager: {
-    removeFromSelection: vi.fn(),
-  },
-  scene: {
-    add: vi.fn(),
-    remove: vi.fn(),
-  },
-  pathfindingManager: {
-    findPath: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
-    findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
-  },
-  getElevationAt: vi.fn().mockReturnValue(0),
-}) as unknown as Game;
+const createMockGame = () => {
+  currentSimContext = createMockSimContext();
+  return {
+    unitManager: {
+      destroyUnit: vi.fn(),
+      getAllUnits: vi.fn().mockReturnValue([]),
+      getUnitsInRadius: vi.fn().mockReturnValue([]),
+    },
+    selectionManager: {
+      removeFromSelection: vi.fn(),
+    },
+    scene: {
+      add: vi.fn(),
+      remove: vi.fn(),
+    },
+    pathfindingManager: {
+      findPath: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+      findNearestReachablePosition: vi.fn((from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
+    },
+    getElevationAt: vi.fn().mockReturnValue(0),
+    getSimContext: () => currentSimContext,
+  } as unknown as Game;
+};
 
 let mockGame: Game;
 
@@ -119,7 +151,8 @@ describe('Unit', () => {
     it('should trigger death when health reaches 0', () => {
       const unit = createTestUnit({ maxHealth: 50 });
       unit.takeDamage(50);
-      expect(mockGame.unitManager.destroyUnit).toHaveBeenCalledWith(unit);
+      // Death now goes through SimGameContext.destroyUnit (SimUnit → context)
+      expect(currentSimContext.destroyUnit).toHaveBeenCalled();
     });
   });
 

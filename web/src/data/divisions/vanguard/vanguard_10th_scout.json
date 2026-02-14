@@ -57,6 +57,43 @@
   },
   "roster": [
     {
+      "unitId": "vanguard_command_skimmer",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 0,
+        "trained": 4,
+        "veteran": 2,
+        "elite": 1,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_supply_transport",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 12,
+        "trained": 8,
+        "veteran": 4,
+        "elite": 0,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_plasma_mortar",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_scout_skimmer",
+        "vanguard_supply_transport"
+      ],
+      "availability": {
+        "rookie": 6,
+        "trained": 4,
+        "veteran": 2,
+        "elite": 1,
+        "legend": 0
+      }
+    },
+    {
       "unitId": "vanguard_recon",
       "maxCards": 4,
       "transportOptions": [
@@ -86,10 +123,119 @@
     },
     {
       "unitId": "vanguard_infantry",
-      "maxCards": 2,
+      "maxCards": 1,
       "transportOptions": [
-        "vanguard_apc"
+        "vanguard_apc_mk1"
       ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_recon",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_scout_skimmer"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc_mk1"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_scout_skimmer"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc_mk1"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_scout_skimmer"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_jetpack_squad",
+      "maxCards": 4,
+      "transportOptions": [
+        "vanguard_scout_skimmer",
+        "vanguard_apc_mk1"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 2,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_scout_skimmer",
+      "maxCards": 3,
+      "notes": "Light scout transport",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_apc_mk1",
+      "maxCards": 3,
+      "notes": "Light armed transport",
       "availability": {
         "trained": 12,
         "legend": 0,
@@ -173,48 +319,6 @@
         "rookie": 8,
         "elite": 3,
         "veteran": 4
-      }
-    },
-    {
-      "unitId": "vanguard_jetpack_squad",
-      "maxCards": 4,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 8,
-        "elite": 2,
-        "veteran": 4
-      }
-    },
-    {
-      "unitId": "vanguard_infantry_fusion",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 4,
-        "legend": 0,
-        "rookie": 6,
-        "elite": 2,
-        "veteran": 3
-      }
-    },
-    {
-      "unitId": "vanguard_infantry_ion",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 4,
-        "legend": 0,
-        "rookie": 6,
-        "elite": 2,
-        "veteran": 3
       }
     },
     {

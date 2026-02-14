@@ -60,6 +60,28 @@
   },
   "roster": [
     {
+      "unitId": "sdf_transport_truck",
+      "maxCards": 2,
+      "availability": {
+        "rookie": 16,
+        "trained": 12,
+        "veteran": 8,
+        "elite": 0,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "sdf_command_squad",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 0,
+        "trained": 4,
+        "veteran": 2,
+        "elite": 1,
+        "legend": 0
+      }
+    },
+    {
       "unitId": "sdf_tremor_cannon",
       "maxCards": 6,
       "availability": {
@@ -118,6 +140,7 @@
       "unitId": "sdf_mortar_team",
       "maxCards": 4,
       "transportOptions": [
+        "sdf_armored_transport",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -144,8 +167,9 @@
     },
     {
       "unitId": "sdf_trooper",
-      "maxCards": 4,
+      "maxCards": 2,
       "transportOptions": [
+        "sdf_centurion_mk1",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -157,9 +181,69 @@
       }
     },
     {
+      "unitId": "sdf_trooper_mech",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_armored_transport"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_stormtrooper",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_engineer",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_centurion_mk1",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_engineer_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "sdf_centurion_apc"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
       "unitId": "sdf_hwt_lascannon",
       "maxCards": 3,
       "transportOptions": [
+        "sdf_armored_transport",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -174,8 +258,67 @@
       "unitId": "sdf_hwt_heavy_bolter",
       "maxCards": 3,
       "transportOptions": [
+        "sdf_centurion_mk1",
+        "sdf_armored_transport",
         "sdf_transport_truck"
       ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_hwt_missile",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_centurion_mk1",
+        "sdf_armored_transport",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_rocket_team",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_armored_transport",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 8,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_sniper_team",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_centurion_mk1",
+      "maxCards": 2,
+      "notes": "Light armed transport",
       "availability": {
         "trained": 12,
         "legend": 0,
@@ -204,20 +347,6 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
-      }
-    },
-    {
-      "unitId": "sdf_sniper_team",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 4,
-        "legend": 0,
-        "rookie": 6,
-        "elite": 2,
-        "veteran": 3
       }
     },
     {
@@ -251,64 +380,6 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
-      }
-    },
-    {
-      "unitId": "sdf_engineer",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck",
-        "sdf_centurion_apc"
-      ],
-      "availability": {
-        "trained": 8,
-        "legend": 0,
-        "rookie": 12,
-        "elite": 4,
-        "veteran": 6
-      }
-    },
-    {
-      "unitId": "sdf_hwt_missile",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 8,
-        "elite": 3,
-        "veteran": 4
-      }
-    },
-    {
-      "unitId": "sdf_rocket_team",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 8,
-        "elite": 3,
-        "veteran": 4
-      }
-    },
-    {
-      "unitId": "sdf_stormtrooper",
-      "maxCards": 2,
-      "transportOptions": [
-        "sdf_transport_truck",
-        "sdf_centurion_apc"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 3,
-        "veteran": 4
       }
     },
     {

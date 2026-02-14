@@ -1,123 +1,88 @@
 /**
- * TransportManager - Manages unit transport/mounting system
+ * TransportManager - Client adapter wrapping SimTransportManager
  *
- * Features:
- * - Infantry can mount into transport vehicles (APC, IFV, trucks, helicopters)
- * - Transports hide their passengers
- * - Transports can unload passengers
- * - Passengers are protected while mounted
+ * Handles mesh visibility, position syncing, and console logging.
+ * All transport logic (passenger tracking, mount/dismount) lives in SimTransportManager.
  */
 
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import * as THREE from 'three';
+import { SimTransportManager } from '@shared/simulation/SimTransportManager';
 
 export class TransportManager {
-  // private readonly _game: Game; // Reserved for future use
-  private readonly transports: Map<Unit, Unit[]> = new Map(); // transport -> passengers
+  private readonly game: Game;
+  public readonly sim: SimTransportManager;
 
-  constructor(_game: Game) {
-    // this._game = game; // Reserved for future use
+  constructor(game: Game) {
+    this.game = game;
+    this.sim = new SimTransportManager();
   }
 
-  /**
-   * Check if a unit can transport other units
-   */
+  /** Check if a unit can transport other units */
   isTransport(unit: Unit): boolean {
-    return unit.transportCapacity > 0;
+    return this.sim.isTransport(unit.sim);
   }
 
-  /**
-   * Get available capacity for a transport
-   */
+  /** Get available capacity for a transport */
   getAvailableCapacity(transport: Unit): number {
-    const passengers = this.transports.get(transport) || [];
-    return transport.transportCapacity - passengers.length;
+    return this.sim.getAvailableCapacity(transport.sim);
   }
 
-  /**
-   * Get passengers of a transport
-   */
+  /** Get passengers of a transport */
   getPassengers(transport: Unit): Unit[] {
-    return this.transports.get(transport) || [];
+    // Map SimUnits back to Units via the game's unit manager
+    const simPassengers = this.sim.getPassengers(transport.sim);
+    const result: Unit[] = [];
+    for (const simUnit of simPassengers) {
+      const unit = this.game.unitManager.findUnitBySim(simUnit);
+      if (unit) result.push(unit);
+    }
+    return result;
   }
 
-  /**
-   * Try to mount a unit into a transport
-   */
+  /** Try to mount a unit into a transport */
   tryMount(passenger: Unit, transport: Unit): boolean {
-    // Validate
-    if (passenger === transport) return false;
-    if (!this.isTransport(transport)) return false;
-    if (this.getAvailableCapacity(transport) <= 0) {
-      console.log(`${transport.name} is full`);
+    const success = this.sim.tryMount(passenger.sim, transport.sim);
+    if (!success) {
+      if (this.sim.getAvailableCapacity(transport.sim) <= 0) {
+        console.log(`${transport.name} is full`);
+      } else if (passenger.mountedIn) {
+        console.log(`${passenger.name} is already mounted`);
+      }
       return false;
     }
 
-    // Check if already mounted somewhere
-    if (passenger.mountedIn) {
-      console.log(`${passenger.name} is already mounted`);
-      return false;
-    }
-
-    // Add to passengers
-    let passengers = this.transports.get(transport);
-    if (!passengers) {
-      passengers = [];
-      this.transports.set(transport, passengers);
-    }
-    passengers.push(passenger);
-
-    // Set mounted state
-    passenger.setMountedIn(transport);
-
-    // Hide passenger
+    // Hide passenger mesh
     passenger.mesh.visible = false;
 
-    // Move passenger to transport position (hidden but tracked)
-    passenger.position.copy(transport.position);
+    // Sync mesh position to transport
     passenger.mesh.position.copy(transport.position);
 
-    console.log(`${passenger.name} mounted into ${transport.name}. Passengers: ${passengers.length}/${transport.transportCapacity}`);
+    const passengers = this.sim.getPassengers(transport.sim);
+    console.log(`${passenger.name} mounted into ${transport.name}. Passengers: ${passengers.length}/${transport.sim.transportCapacity}`);
     return true;
   }
 
-  /**
-   * Dismount a specific passenger from a transport
-   */
+  /** Dismount a specific passenger from a transport */
   dismount(passenger: Unit, transport: Unit): THREE.Vector3 | null {
-    const passengers = this.transports.get(transport);
-    if (!passengers) return null;
+    const exitPos = this.sim.dismount(passenger.sim, transport.sim);
+    if (!exitPos) return null;
 
-    const index = passengers.indexOf(passenger);
-    if (index === -1) return null;
-
-    // Remove from passengers
-    passengers.splice(index, 1);
-
-    // Clear mounted state
-    passenger.setMountedIn(null);
-
-    // Show passenger
+    // Show passenger mesh
     passenger.mesh.visible = true;
-
-    // Calculate exit position (offset from transport)
-    const exitPos = this.getExitPosition(transport.position);
 
     console.log(`${passenger.name} dismounted from ${transport.name}`);
     return exitPos;
   }
 
-  /**
-   * Unload all passengers from a transport
-   */
+  /** Unload all passengers from a transport */
   unloadAll(transport: Unit): Unit[] {
-    const passengers = this.transports.get(transport);
-    if (!passengers || passengers.length === 0) return [];
+    const passengers = this.getPassengers(transport);
+    if (passengers.length === 0) return [];
 
     const unloaded: Unit[] = [];
 
-    // Iterate backwards to avoid index issues
     for (let i = passengers.length - 1; i >= 0; i--) {
       const passenger = passengers[i];
       if (passenger) {
@@ -134,73 +99,56 @@ export class TransportManager {
     return unloaded;
   }
 
-  /**
-   * Get exit position for dismounting (offset from transport)
-   */
-  private getExitPosition(transportPos: THREE.Vector3): THREE.Vector3 {
-    // Random offset around transport
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 3 + Math.random() * 2; // 3-5m from transport
-
-    return new THREE.Vector3(
-      transportPos.x + Math.cos(angle) * distance,
-      transportPos.y,
-      transportPos.z + Math.sin(angle) * distance
-    );
-  }
-
-  /**
-   * Check if a unit is mounted in a transport
-   */
+  /** Check if a unit is mounted in a transport */
   isMounted(unit: Unit): boolean {
-    return unit.mountedIn !== null;
+    return this.sim.isMounted(unit.sim);
   }
 
-  /**
-   * Get the transport a unit is mounted in
-   */
+  /** Get the transport a unit is mounted in */
   getTransport(passenger: Unit): Unit | null {
-    return passenger.mountedIn;
+    const simTransport = this.sim.getTransport(passenger.sim);
+    if (!simTransport) return null;
+    return this.game.unitManager.findUnitBySim(simTransport) ?? null;
   }
 
-  /**
-   * Handle transport destruction - unload passengers
-   */
+  /** Handle transport destruction - unload passengers */
   onTransportDestroyed(transport: Unit): void {
-    const passengers = this.transports.get(transport);
-    if (!passengers) return;
+    const passengers = this.getPassengers(transport);
+    if (passengers.length === 0) return;
 
     console.log(`${transport.name} destroyed with ${passengers.length} passengers!`);
 
-    // Unload all passengers (they survive but need to exit)
-    this.unloadAll(transport);
+    // Unload all (sim does the logic, we sync meshes)
+    for (const passenger of passengers) {
+      const exitPos = this.dismount(passenger, transport);
+      if (exitPos) {
+        passenger.position.copy(exitPos);
+        passenger.mesh.position.copy(exitPos);
+      }
+    }
 
-    // Clean up
-    this.transports.delete(transport);
+    // Clean up sim state
+    this.sim.onTransportDestroyed(transport.sim);
   }
 
-  /**
-   * Update - synchronize passenger positions with transports
-   */
-  update(_dt: number): void {
-    // Keep passengers synchronized with transport positions (while hidden)
-    for (const [transport, passengers] of this.transports) {
-      for (const passenger of passengers) {
-        passenger.position.copy(transport.position);
-        passenger.mesh.position.copy(transport.position);
+  /** Update - synchronize passenger positions with transports */
+  update(dt: number): void {
+    this.sim.update(dt);
+
+    // Sync mesh positions for mounted passengers
+    for (const evt of this.sim.getPendingEvents()) {
+      if (evt.type === 'mounted' && evt.passenger) {
+        const unit = this.game.unitManager.findUnitBySim(evt.passenger);
+        const transport = this.game.unitManager.findUnitBySim(evt.transport);
+        if (unit && transport) {
+          unit.mesh.position.copy(transport.position);
+        }
       }
     }
   }
 
-  /**
-   * Clear all transports (for map change, game end)
-   */
+  /** Clear all transports */
   clear(): void {
-    // Unload everyone
-    for (const [transport, _passengers] of this.transports) {
-      this.unloadAll(transport);
-    }
-
-    this.transports.clear();
+    this.sim.clear();
   }
 }

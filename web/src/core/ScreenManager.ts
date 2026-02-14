@@ -3,15 +3,17 @@
  *
  * Handles transitions between:
  * - Main Menu
- * - Deck Builder
+ * - Armoury
  * - Skirmish Setup
  * - Battle
  * - Victory
  */
 
 export enum ScreenType {
+  Login = 'login',
+  Register = 'register',
   MainMenu = 'main-menu',
-  DeckBuilder = 'deck-builder',
+  Armoury = 'armoury',
   SkirmishSetup = 'skirmish-setup',
   Settings = 'settings',
   JoinGame = 'join-game',

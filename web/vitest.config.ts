@@ -29,6 +29,8 @@ export default defineConfig({
       '@ui': resolve(__dirname, './src/ui'),
       '@data': resolve(__dirname, './src/data'),
       '@utils': resolve(__dirname, './src/utils'),
+      '@shared': resolve(__dirname, '../shared/src'),
     },
+    dedupe: ['three'],
   },
 });

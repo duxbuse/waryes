@@ -23,13 +23,13 @@ function ensureStylesLoaded(): void {
       }
 
       .keyboard-shortcuts-panel {
-        background: rgba(20, 20, 30, 0.98);
-        border: 2px solid #4a9eff;
+        background: rgba(26, 26, 32, 0.98);
+        border: 2px solid var(--blue-primary, #00aaff);
         border-radius: 12px;
         padding: 32px;
         color: #fff;
-        font-family: 'Orbitron', sans-serif;
-        box-shadow: 0 8px 40px rgba(74, 158, 255, 0.4);
+        font-family: var(--font-body, 'Crimson Pro', serif);
+        box-shadow: 0 8px 40px rgba(0, 170, 255, 0.3);
         max-width: 600px;
         max-height: 80vh;
         overflow-y: auto;
@@ -37,8 +37,9 @@ function ensureStylesLoaded(): void {
 
       .keyboard-shortcuts-panel h2 {
         margin: 0 0 24px 0;
+        font-family: var(--font-heading, 'Cinzel', serif);
         font-size: 24px;
-        color: #4a9eff;
+        color: var(--blue-primary, #00aaff);
         text-align: center;
         letter-spacing: 2px;
       }
@@ -65,18 +66,18 @@ function ensureStylesLoaded(): void {
         justify-content: space-between;
         align-items: center;
         padding: 8px 12px;
-        background: rgba(74, 158, 255, 0.1);
+        background: rgba(0, 170, 255, 0.08);
         border-radius: 4px;
       }
 
       .keyboard-shortcut-key {
-        font-family: 'Courier New', monospace;
-        background: rgba(74, 158, 255, 0.2);
+        font-family: var(--font-mono, 'Share Tech Mono', monospace);
+        background: rgba(0, 170, 255, 0.15);
         padding: 4px 8px;
         border-radius: 3px;
         font-size: 12px;
-        color: #4a9eff;
-        border: 1px solid rgba(74, 158, 255, 0.3);
+        color: var(--blue-primary, #00aaff);
+        border: 1px solid rgba(0, 170, 255, 0.3);
       }
 
       .keyboard-shortcut-desc {
@@ -88,12 +89,13 @@ function ensureStylesLoaded(): void {
         margin-top: 24px;
         width: 100%;
         padding: 12px 24px;
-        background: linear-gradient(180deg, #4a9eff 0%, #2d7dd2 100%);
-        border: none;
+        background: linear-gradient(180deg, var(--blue-primary, #00aaff), var(--blue-dark, #0088dd));
+        border: 1px solid var(--blue-glow, #00ccff);
         border-radius: 6px;
         color: #fff;
-        font-family: 'Orbitron', sans-serif;
+        font-family: var(--font-heading, 'Cinzel', serif);
         font-size: 14px;
+        letter-spacing: 1px;
         cursor: pointer;
         transition: transform 0.1s;
       }

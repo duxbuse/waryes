@@ -51,6 +51,65 @@
   },
   "roster": [
     {
+      "unitId": "vanguard_command_skimmer",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 0,
+        "trained": 4,
+        "veteran": 2,
+        "elite": 1,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_supply_transport",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 12,
+        "trained": 8,
+        "veteran": 4,
+        "elite": 0,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_swift_skimmer_missile",
+      "maxCards": 2,
+      "availability": {
+        "rookie": 16,
+        "trained": 12,
+        "veteran": 8,
+        "elite": 0,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_skyguard",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 8,
+        "trained": 6,
+        "veteran": 4,
+        "elite": 2,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_plasma_mortar",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc",
+        "vanguard_supply_transport"
+      ],
+      "availability": {
+        "rookie": 8,
+        "trained": 6,
+        "veteran": 4,
+        "elite": 2,
+        "legend": 0
+      }
+    },
+    {
       "unitId": "vanguard_exo_armor_kinetic",
       "maxCards": 2,
       "availability": {
@@ -74,9 +133,10 @@
     },
     {
       "unitId": "vanguard_infantry",
-      "maxCards": 2,
+      "maxCards": 1,
       "transportOptions": [
-        "vanguard_apc"
+        "vanguard_apc",
+        "vanguard_heavy_ifv_mk1"
       ],
       "availability": {
         "trained": 12,
@@ -84,6 +144,145 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_heavy_ifv_mk2",
+        "vanguard_heavy_ifv_mk3"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc",
+        "vanguard_heavy_ifv_mk1"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_fusion_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_heavy_ifv_mk2",
+        "vanguard_heavy_ifv_mk3"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_heavy_ifv_mk2",
+        "vanguard_heavy_ifv_mk3"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_auto",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc",
+        "vanguard_heavy_ifv_mk1"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_support_laser",
+      "maxCards": 1,
+      "transportOptions": [
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_ifv_mk1",
+      "maxCards": 2,
+      "notes": "Light heavy IFV",
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_ifv_mk2",
+      "maxCards": 2,
+      "notes": "Medium heavy IFV",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "vanguard_heavy_ifv_mk3",
+      "maxCards": 1,
+      "notes": "Elite heavy IFV",
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
       }
     },
     {
@@ -164,59 +363,6 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
-      }
-    },
-    {
-      "unitId": "vanguard_heavy_support_auto",
-      "maxCards": 1,
-      "availability": {
-        "trained": 12,
-        "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
-      }
-    },
-    {
-      "unitId": "vanguard_infantry_fusion",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 8,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 4,
-        "veteran": 6
-      }
-    },
-    {
-      "unitId": "vanguard_infantry_ion",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 8,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 4,
-        "veteran": 6
-      }
-    },
-    {
-      "unitId": "vanguard_heavy_support_laser",
-      "maxCards": 1,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 3,
-        "veteran": 4
       }
     },
     {

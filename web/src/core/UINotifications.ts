@@ -30,14 +30,14 @@ export function showNotification(message: string, duration: number = 3000): void
   const notification = document.createElement('div');
   notification.className = 'ui-notification';
   notification.style.cssText = `
-    background: rgba(30, 30, 40, 0.95);
-    border: 1px solid #4a9eff;
+    background: rgba(26, 26, 32, 0.95);
+    border: 1px solid var(--blue-primary, #00aaff);
     border-radius: 8px;
     padding: 12px 20px;
     color: #fff;
-    font-family: 'Orbitron', sans-serif;
+    font-family: var(--font-body, 'Crimson Pro', serif);
     font-size: 14px;
-    box-shadow: 0 4px 20px rgba(74, 158, 255, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 170, 255, 0.3);
     pointer-events: auto;
     animation: slideIn 0.3s ease-out;
     max-width: 300px;
@@ -89,14 +89,14 @@ export function showConfirmDialog(message: string): Promise<boolean> {
     const dialog = document.createElement('div');
     dialog.className = 'ui-confirm-dialog';
     dialog.style.cssText = `
-      background: rgba(20, 20, 30, 0.98);
-      border: 2px solid #4a9eff;
+      background: rgba(26, 26, 32, 0.98);
+      border: 2px solid var(--blue-primary, #00aaff);
       border-radius: 12px;
       padding: 24px 32px;
       color: #fff;
-      font-family: 'Orbitron', sans-serif;
+      font-family: var(--font-body, 'Crimson Pro', serif);
       text-align: center;
-      box-shadow: 0 8px 40px rgba(74, 158, 255, 0.4);
+      box-shadow: 0 8px 40px rgba(0, 170, 255, 0.3);
       max-width: 400px;
     `;
 
@@ -119,30 +119,32 @@ export function showConfirmDialog(message: string): Promise<boolean> {
     confirmBtn.textContent = 'Confirm';
     confirmBtn.className = 'ui-confirm-btn';
     confirmBtn.style.cssText = `
-      background: linear-gradient(180deg, #4a9eff 0%, #2d7dd2 100%);
-      border: none;
+      background: linear-gradient(180deg, var(--blue-primary, #00aaff), var(--blue-dark, #0088dd));
+      border: 1px solid var(--blue-glow, #00ccff);
       border-radius: 6px;
       padding: 10px 24px;
       color: #fff;
-      font-family: 'Orbitron', sans-serif;
+      font-family: var(--font-heading, 'Cinzel', serif);
       font-size: 14px;
       cursor: pointer;
       transition: transform 0.1s;
+      letter-spacing: 1px;
     `;
 
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
     cancelBtn.className = 'ui-cancel-btn';
     cancelBtn.style.cssText = `
-      background: rgba(60, 60, 70, 0.8);
-      border: 1px solid #666;
+      background: rgba(42, 42, 48, 0.8);
+      border: 1px solid var(--steel-highlight, #4a4a55);
       border-radius: 6px;
       padding: 10px 24px;
       color: #ccc;
-      font-family: 'Orbitron', sans-serif;
+      font-family: var(--font-heading, 'Cinzel', serif);
       font-size: 14px;
       cursor: pointer;
       transition: transform 0.1s;
+      letter-spacing: 1px;
     `;
 
     const cleanup = () => overlay.remove();

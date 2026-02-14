@@ -1,0 +1,45 @@
+{
+  "id": "vanguard_infantry_fusion_mech",
+  "name": "Mech Infantry (Fusion)",
+  "cost": 45,
+  "icon": "assets/icons/units/vanguard/vanguard_infantry_fusion.png",
+  "health": 10,
+  "speed": {
+    "road": 70,
+    "offRoad": 50,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 20,
+    "side": 20,
+    "rear": 20,
+    "top": 20
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_kinetic_rifle",
+      "count": 8,
+      "maxAmmo": 20,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "vanguard_fusion_gun",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

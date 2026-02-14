@@ -52,16 +52,14 @@ import { SoundLibrary } from '../game/audio/SoundLibrary';
 import { SpatialAudioManager } from '../game/audio/SpatialAudioManager';
 import { AUDIO_MANIFEST } from '../data/audioManifest';
 import { showConfirmDialog } from './UINotifications';
+import { GamePhase } from '@shared/core/GamePhase';
+import type { SimGameContext } from '@shared/core/SimGameContext';
+import type { SimUnit } from '@shared/simulation/SimUnit';
+import { getWeaponById as getWeaponByIdLookup } from '../data/factions';
+import { gameRNG } from '../game/utils/DeterministicRNG';
 
-export enum GamePhase {
-  Loading = 'loading',
-  MainMenu = 'mainMenu',
-  DeckBuilder = 'deckBuilder',
-  SkirmishSetup = 'skirmishSetup',
-  Setup = 'setup',
-  Battle = 'battle',
-  Victory = 'victory',
-}
+// Re-export GamePhase so existing imports from '../../core/Game' continue working
+export { GamePhase } from '@shared/core/GamePhase';
 
 export class Game {
   // Debug flags
@@ -137,6 +135,7 @@ export class Game {
   private _fpsLastTime = 0;
   private _currentFps = 0;
   private _fpsOverlay: HTMLElement | null = null;
+  private _showFpsOverlay = true;
   private _lastFrameTime = 0; // For measuring true frame-to-frame time
 
   // Current map
@@ -159,6 +158,8 @@ export class Game {
   private unitsDeployed = 0;
   private unitsLost = 0;
   private unitsDestroyed = 0;
+  private _shadowUpdateCounter = 0;
+  private _minimapRenderCounter = 0;
   private creditsEarned = 0;
   private creditsSpent = 0;
 
@@ -172,9 +173,12 @@ export class Game {
       powerPreference: 'high-performance', // Request discrete GPU
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Reduced from 2 for better performance
+    this.renderer.setPixelRatio(1); // Fixed 1x — saves 2.25x fill rate vs 1.5x on HiDPI displays
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // PCF cheaper than PCFSoft, smooth enough at RTS camera distance
+    // Shadow maps are static (sun doesn't move) - only update periodically, not every frame
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
 
     // Create scene
     this.scene = new THREE.Scene();
@@ -269,10 +273,9 @@ export class Game {
     this.sunLight.position.set(60, 120, 40); // Higher angle for more dramatic shadows
     this.sunLight.castShadow = true;
 
-    // ENHANCED SHADOW QUALITY
-    // Increased resolution for smoother shadow edges (2048 -> 4096 for small/medium maps)
-    this.sunLight.shadow.mapSize.width = 4096;
-    this.sunLight.shadow.mapSize.height = 4096;
+    // Shadow quality - 2048 provides good quality while maintaining 60 FPS
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
 
     // Optimized shadow camera bounds - wider coverage area for better shadow rendering
     this.sunLight.shadow.camera.near = 5;  // Closer near plane for better precision
@@ -340,7 +343,7 @@ export class Game {
       this._fpsFrameCount = 0;
       this._fpsLastTime = currentTime;
 
-      if (this._fpsOverlay) {
+      if (this._fpsOverlay && this._showFpsOverlay) {
         const triangles = this.renderer.info.render.triangles;
         const calls = this.renderer.info.render.calls;
 
@@ -395,7 +398,7 @@ export class Game {
         // Large maps - reduced shadow quality but still smooth with PCFSoft
         this.sunLight.shadow.mapSize.width = 2048;  // Maintain reasonable quality
         this.sunLight.shadow.mapSize.height = 2048;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Keep soft shadows
+        this.renderer.shadowMap.type = THREE.PCFShadowMap; // PCF cheaper than PCFSoft
         this.sunLight.shadow.radius = 1.5; // Slightly reduced radius for performance
 
         const shadowRange = Math.min(180, mapSize * 0.12);
@@ -412,9 +415,9 @@ export class Game {
 
         this.sunLight.shadow.camera.updateProjectionMatrix();
       } else if (mapSize > 500) {
-        // Medium maps - high quality with optimized coverage
-        this.sunLight.shadow.mapSize.width = 3072;  // Good balance of quality and performance
-        this.sunLight.shadow.mapSize.height = 3072;
+        // Medium maps - optimized for 60 FPS with good quality
+        this.sunLight.shadow.mapSize.width = 2048;
+        this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.radius = 2.0; // Full soft shadow quality
 
         const shadowRange = Math.min(160, mapSize * 0.25);
@@ -708,11 +711,23 @@ export class Game {
   }
 
   private render(): void {
+    // Shadow maps only need updating every ~15 frames (4 Hz at 60 FPS)
+    // Sun is static, only unit shadows change - imperceptible at this refresh rate
+    this._shadowUpdateCounter++;
+    if (this._shadowUpdateCounter >= 15) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this._shadowUpdateCounter = 0;
+    }
+
     this.renderer.render(this.scene, this.camera);
 
-    // Render minimap
-    if (this.minimapRenderer && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
-      this.minimapRenderer.render();
+    // Render minimap at 20 Hz (every 3 frames) — saves ~1ms per frame on off-frames
+    this._minimapRenderCounter++;
+    if (this._minimapRenderCounter >= 3) {
+      this._minimapRenderCounter = 0;
+      if (this.minimapRenderer && (this._phase === GamePhase.Setup || this._phase === GamePhase.Battle)) {
+        this.minimapRenderer.render();
+      }
     }
   }
 
@@ -784,7 +799,7 @@ export class Game {
     `;
 
     const title = document.createElement('div');
-    title.style.cssText = 'font-weight: bold; margin-bottom: 8px; color: #4a9eff; font-size: 13px;';
+    title.style.cssText = 'font-weight: bold; margin-bottom: 8px; color: var(--blue-primary, #00aaff); font-family: var(--font-mono, monospace); font-size: 13px;';
     title.textContent = 'DEBUG (F3)';
     this.debugPanel.appendChild(title);
 
@@ -863,6 +878,22 @@ export class Game {
     travLabel.appendChild(document.createTextNode('Traversability'));
     this.debugPanel.appendChild(travLabel);
 
+    // FPS / draw calls overlay toggle
+    const fpsLabel = document.createElement('label');
+    fpsLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-top: 6px; cursor: pointer;';
+    const fpsCheckbox = document.createElement('input');
+    fpsCheckbox.type = 'checkbox';
+    fpsCheckbox.checked = this._showFpsOverlay;
+    fpsCheckbox.addEventListener('change', () => {
+      this._showFpsOverlay = fpsCheckbox.checked;
+      if (this._fpsOverlay) {
+        this._fpsOverlay.style.display = this._showFpsOverlay ? 'block' : 'none';
+      }
+    });
+    fpsLabel.appendChild(fpsCheckbox);
+    fpsLabel.appendChild(document.createTextNode('FPS / Draw Calls'));
+    this.debugPanel.appendChild(fpsLabel);
+
     document.body.appendChild(this.debugPanel);
   }
 
@@ -886,9 +917,11 @@ export class Game {
         const starterDeck = STARTER_DECKS.find(d => d.id === slot.deckId);
         if (starterDeck) return starterDeck.name;
         // Check saved decks
-        const savedDecks = JSON.parse(localStorage.getItem('waryes_decks') || '[]');
-        const savedDeck = savedDecks.find((d: DeckData) => d.id === slot.deckId);
-        if (savedDeck) return savedDeck.name;
+        try {
+          const savedDecks = JSON.parse(localStorage.getItem('waryes_decks') || '[]');
+          const savedDeck = savedDecks.find((d: DeckData) => d.id === slot.deckId);
+          if (savedDeck) return savedDeck.name;
+        } catch { /* corrupted localStorage data */ }
       }
       return 'Random Deck';
     };
@@ -969,7 +1002,9 @@ export class Game {
     // Hide/show UI based on phase
     const inBattle = phase === GamePhase.Setup || phase === GamePhase.Battle;
 
-    if (topBar) topBar.style.display = inBattle ? 'flex' : 'none';
+    // Hide standalone top-bar during setup/battle - credits are in the battle-unit-bar
+    if (topBar) topBar.style.display = 'none';
+    // Score display during both setup and battle
     if (scoreDisplay) scoreDisplay.style.display = inBattle ? 'block' : 'none';
     // Phase indicator only shown during Setup, hidden during Battle
     if (phaseIndicator) phaseIndicator.style.display = phase === GamePhase.Setup ? 'block' : 'none';
@@ -1112,6 +1147,139 @@ export class Game {
     // Enter setup phase
     this.setPhase(GamePhase.Setup);
     this.screenManager.switchTo(ScreenType.Battle);
+  }
+
+  /**
+   * Start a multiplayer battle with server-authoritative sync.
+   * Similar to startSkirmish but doesn't spawn AI units (server handles all simulation).
+   */
+  startMultiplayerBattle(
+    mapSeed: number,
+    mapSize: MapSize,
+    deckId: string | null,
+    playerTeam: 'team1' | 'team2',
+  ): void {
+    this.resetStats();
+
+    // Generate map deterministically from seed (must match server)
+    const generator = new MapGenerator(mapSeed, mapSize);
+    this.currentMap = generator.generate();
+
+    // Setup map rendering
+    if (this.mapRenderer) {
+      this.mapRenderer.dispose();
+    }
+    this.mapRenderer = new MapRenderer(this.scene, this.currentMap.biome);
+    this.mapRenderer.render(this.currentMap);
+
+    if (this.losPreviewRenderer) {
+      this.losPreviewRenderer.setTerrainZoneShader(this.mapRenderer.getTerrainZoneShader());
+    }
+
+    if (this.minimapRenderer) {
+      this.minimapRenderer.setMap(this.currentMap);
+    }
+
+    // Camera setup
+    this.cameraController.setBounds(this.currentMap.width, this.currentMap.height);
+    this.configureRenderingForMapSize(this.currentMap.width, this.currentMap.height);
+    this.groundPlane.visible = false;
+
+    // Initialize economy with capture zones
+    this.economyManager.initialize(this.currentMap.captureZones);
+
+    // Initialize reinforcement manager
+    const entryPointsFromResupply: EntryPoint[] = this.currentMap.resupplyPoints.map((rp) => ({
+      id: rp.id,
+      team: rp.team,
+      x: rp.x,
+      z: rp.z,
+      type: 'secondary' as const,
+      spawnRate: 3,
+      queue: [],
+      rallyPoint: null,
+    }));
+    this.reinforcementManager.initialize(entryPointsFromResupply);
+
+    // Initialize building manager
+    this.buildingManager.initialize(this.currentMap.buildings);
+
+    // Map lobby team to game team for deployment zones
+    const gameTeam = playerTeam === 'team1' ? 'player' : 'enemy';
+    const deployZones = this.currentMap.deploymentZones.filter(z => z.team === gameTeam);
+
+    // Initialize deployment with player's deck
+    const deck = this.getMultiplayerDeck(deckId);
+    if (deployZones.length > 0 && deck) {
+      this.deploymentManager.initialize(deck, deployZones);
+    }
+
+    // Position camera at first deployment zone
+    const firstZone = deployZones[0];
+    if (firstZone) {
+      const centerX = (firstZone.minX + firstZone.maxX) / 2;
+      const centerZ = (firstZone.minZ + firstZone.maxZ) / 2;
+      this.cameraController.setPosition(centerX, centerZ);
+    }
+
+    // Initialize fog of war
+    this.fogOfWarManager.initialize();
+    if (!this.fogOfWarRenderer) {
+      this.fogOfWarRenderer = new FogOfWarRenderer(this, this.scene);
+    }
+    this.fogOfWarRenderer.initialize();
+
+    // Reveal player deployment zones
+    for (const zone of deployZones) {
+      this.fogOfWarManager.revealArea(zone.minX, zone.minZ, zone.maxX, zone.maxZ, gameTeam);
+    }
+
+    // Enable server-authoritative sync
+    const playerId = this.multiplayerManager.getPlayerId();
+    this.multiplayerBattleSync.enableAuthoritativeSync(playerId);
+
+    // Listen for server phase changes
+    this.multiplayerManager.on('phase_change', (phase: string) => {
+      if (phase === 'battle' && this._phase === GamePhase.Setup) {
+        this.startBattle();
+      }
+    });
+
+    // Listen for game events (victory, etc.)
+    this.multiplayerManager.on('game_event', (eventType: string, data: any) => {
+      if (eventType === 'victory') {
+        const winner = data.winner === playerTeam ? 'player' : 'enemy';
+        this.onVictory(winner);
+      }
+    });
+
+    // Enter setup phase
+    this.setPhase(GamePhase.Setup);
+    this.screenManager.switchTo(ScreenType.Battle);
+
+    console.log(`[Game] Multiplayer battle started (seed: ${mapSeed}, size: ${mapSize}, team: ${playerTeam})`);
+  }
+
+  /**
+   * Get deck for multiplayer from localStorage or starter decks
+   */
+  private getMultiplayerDeck(deckId: string | null): DeckData | null {
+    if (!deckId) return null;
+
+    // Check starter decks
+    const starterDeck = STARTER_DECKS.find(d => d.id === deckId);
+    if (starterDeck) return starterDeck;
+
+    // Check saved decks in localStorage
+    try {
+      const savedDecks: DeckData[] = JSON.parse(localStorage.getItem('waryes_decks') || '[]');
+      const savedDeck = savedDecks.find(d => d.id === deckId);
+      if (savedDeck) return savedDeck;
+    } catch {
+      // Ignore parse errors
+    }
+
+    return null;
   }
 
   private spawnEnemyUnits(): void {
@@ -1612,13 +1780,22 @@ export class Game {
       const topKillersList = document.getElementById('top-killers-list');
       if (topKillersList) {
         if (killStats.topKillers.length > 0) {
-          topKillersList.innerHTML = killStats.topKillers.map((unit, index) => `
-            <div class="killer-row">
-              <span class="killer-rank">${index + 1}.</span>
-              <span class="killer-name">${unit.name}</span>
-              <span class="killer-kills">${unit.kills} kills</span>
-            </div>
-          `).join('');
+          topKillersList.innerHTML = '';
+          for (const [index, unit] of killStats.topKillers.entries()) {
+            const row = document.createElement('div');
+            row.className = 'killer-row';
+            const rank = document.createElement('span');
+            rank.className = 'killer-rank';
+            rank.textContent = `${index + 1}.`;
+            const name = document.createElement('span');
+            name.className = 'killer-name';
+            name.textContent = unit.name;
+            const kills = document.createElement('span');
+            kills.className = 'killer-kills';
+            kills.textContent = `${unit.kills} kills`;
+            row.append(rank, name, kills);
+            topKillersList.appendChild(row);
+          }
         } else {
           topKillersList.innerHTML = '<div class="killer-row"><span class="killer-name" style="color: #666;">No kills recorded</span></div>';
         }
@@ -1942,6 +2119,84 @@ export class Game {
     } else {
       console.warn('[Game] Start battle button NOT found');
     }
+  }
+
+  /**
+   * Returns a SimGameContext adapter that bridges the client Game to the shared
+   * simulation interfaces. Used by SimUnit to access game services without
+   * depending on client-specific types.
+   */
+  private _simContext: SimGameContext | null = null;
+
+  getSimContext(): SimGameContext {
+    if (this._simContext) return this._simContext;
+
+    const game = this;
+    this._simContext = {
+      get currentMap() { return game.currentMap; },
+      get phase() { return game._phase; },
+      set phase(p) { game._phase = p; },
+      rng: gameRNG,
+
+      getElevationAt: (x, z) => game.getElevationAt(x, z),
+      getTerrainAt: (x, z) => game.getTerrainAt(x, z),
+
+      getWeaponData: (id) => getWeaponByIdLookup(id),
+      getUnitData: (id) => getUnitById(id),
+
+      getUnitsInRadius: (position, radius, team?) => {
+        const units = game.unitManager.getUnitsInRadius(position, radius, team);
+        return units.map(u => u.sim);
+      },
+      getAllUnits: (team) => {
+        return game.unitManager.getAllUnits(team).map(u => u.sim);
+      },
+      destroyUnit: (simUnit: SimUnit) => {
+        const unit = game.unitManager.findUnitBySim(simUnit);
+        if (unit) game.unitManager.destroyUnit(unit);
+      },
+
+      findPath: (from, to) => game.pathfindingManager.findPath(from, to),
+      findNearestReachablePosition: (from, to, maxRadius) =>
+        game.pathfindingManager.findNearestReachablePosition(from, to, maxRadius),
+
+      findNearestBuilding: (position, radius) =>
+        game.buildingManager.findNearestBuilding(position, radius),
+      hasBuildingCapacity: (building) =>
+        game.buildingManager.hasCapacity(building),
+      tryGarrison: (simUnit: SimUnit, building) => {
+        const unit = game.unitManager.findUnitBySim(simUnit);
+        if (!unit) return false;
+        return game.buildingManager.tryGarrison(unit, building);
+      },
+      ungarrison: (simUnit: SimUnit, building) => {
+        const unit = game.unitManager.findUnitBySim(simUnit);
+        if (!unit) return null;
+        return game.buildingManager.ungarrison(unit, building);
+      },
+      spawnDefensiveStructure: (simUnit: SimUnit) => {
+        const unit = game.unitManager.findUnitBySim(simUnit);
+        if (!unit) return null;
+        return game.buildingManager.spawnDefensiveStructure(unit);
+      },
+
+      tryMount: (passenger: SimUnit, transport: SimUnit) => {
+        const passengerUnit = game.unitManager.findUnitBySim(passenger);
+        const transportUnit = game.unitManager.findUnitBySim(transport);
+        if (!passengerUnit || !transportUnit) return false;
+        return game.transportManager.tryMount(passengerUnit, transportUnit);
+      },
+      unloadAll: (transport: SimUnit) => {
+        const transportUnit = game.unitManager.findUnitBySim(transport);
+        if (!transportUnit) return [];
+        return game.transportManager.unloadAll(transportUnit).map(u => u.sim);
+      },
+
+      isFogOfWarEnabled: () => game.fogOfWarManager.isEnabled(),
+      isPositionVisible: (x, z) => game.fogOfWarManager.isVisible(x, z),
+    };
+
+    return this._simContext;
   }
 
 }

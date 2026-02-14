@@ -64,8 +64,9 @@
   "roster": [
     {
       "unitId": "sdf_stormtrooper",
-      "maxCards": 6,
+      "maxCards": 4,
       "transportOptions": [
+        "sdf_grav_lander",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -77,9 +78,69 @@
       }
     },
     {
-      "unitId": "sdf_trooper",
+      "unitId": "sdf_stormtrooper_airborne",
       "maxCards": 2,
       "transportOptions": [
+        "sdf_grav_lander"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_trooper_airborne",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_grav_lander",
+        "sdf_scout_carrier"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_engineer",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_scout_carrier",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_hwt_lascannon",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_scout_carrier",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 4,
+        "elite": 0,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_rocket_team",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_scout_carrier",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -91,9 +152,69 @@
       }
     },
     {
+      "unitId": "sdf_hwt_heavy_bolter",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_scout_carrier",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 6,
+        "elite": 0,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_hwt_missile",
+      "maxCards": 3,
+      "transportOptions": [
+        "sdf_scout_carrier",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 4,
+        "elite": 0,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_mortar_team",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 3,
+        "legend": 0,
+        "rookie": 4,
+        "elite": 0,
+        "veteran": 2
+      }
+    },
+    {
+      "unitId": "sdf_sniper_team",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_scout_carrier",
+        "sdf_transport_truck"
+      ],
+      "availability": {
+        "trained": 2,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 1,
+        "veteran": 1
+      }
+    },
+    {
       "unitId": "sdf_command_squad",
       "maxCards": 2,
       "transportOptions": [
+        "sdf_scout_carrier",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -105,17 +226,25 @@
       }
     },
     {
-      "unitId": "sdf_hwt_lascannon",
-      "maxCards": 2,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
+      "unitId": "sdf_grav_lander",
+      "maxCards": 3,
       "availability": {
-        "trained": 3,
+        "trained": 4,
         "legend": 0,
-        "rookie": 4,
+        "rookie": 6,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_scout_carrier",
+      "maxCards": 4,
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
         "elite": 0,
-        "veteran": 2
+        "veteran": 8
       }
     },
     {
@@ -196,20 +325,6 @@
       }
     },
     {
-      "unitId": "sdf_rocket_team",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 12,
-        "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
-      }
-    },
-    {
       "unitId": "sdf_skysweeper",
       "maxCards": 1,
       "availability": {
@@ -221,20 +336,6 @@
       }
     },
     {
-      "unitId": "sdf_mortar_team",
-      "maxCards": 2,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 3,
-        "legend": 0,
-        "rookie": 4,
-        "elite": 0,
-        "veteran": 2
-      }
-    },
-    {
       "unitId": "sdf_bastion_mbt",
       "maxCards": 1,
       "availability": {
@@ -243,62 +344,6 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
-      }
-    },
-    {
-      "unitId": "sdf_sniper_team",
-      "maxCards": 4,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 2,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 1,
-        "veteran": 1
-      }
-    },
-    {
-      "unitId": "sdf_engineer",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 3,
-        "veteran": 4
-      }
-    },
-    {
-      "unitId": "sdf_hwt_heavy_bolter",
-      "maxCards": 4,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 4,
-        "legend": 0,
-        "rookie": 6,
-        "elite": 0,
-        "veteran": 3
-      }
-    },
-    {
-      "unitId": "sdf_hwt_missile",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "availability": {
-        "trained": 3,
-        "legend": 0,
-        "rookie": 4,
-        "elite": 0,
-        "veteran": 2
       }
     },
     {

@@ -27,10 +27,38 @@ export class RateLimiter {
    * @param capacity - Maximum number of tokens in the bucket
    * @param windowMs - Time window in milliseconds to refill all tokens
    */
+  private sweepInterval: ReturnType<typeof setInterval>;
+
   constructor(capacity: number, windowMs: number) {
     this.capacity = capacity;
     this.windowMs = windowMs;
     this.refillRate = capacity / windowMs; // Calculate tokens per millisecond
+
+    // Periodic sweep to remove stale buckets (every 5 minutes)
+    // A bucket is stale if it has been fully refilled (i.e. idle for > windowMs)
+    this.sweepInterval = setInterval(() => this.sweep(), 300000);
+  }
+
+  /**
+   * Remove stale buckets that have been idle long enough to fully refill.
+   * This prevents unbounded memory growth from transient identifiers.
+   */
+  private sweep(): void {
+    const now = Date.now();
+    for (const [id, bucket] of this.buckets) {
+      const elapsed = now - bucket.lastRefill;
+      // If enough time has passed that the bucket would be fully refilled, remove it
+      if (elapsed >= this.windowMs) {
+        this.buckets.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Stop the periodic sweep (for cleanup/testing)
+   */
+  dispose(): void {
+    clearInterval(this.sweepInterval);
   }
 
   /**

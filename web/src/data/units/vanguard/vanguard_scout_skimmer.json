@@ -1,0 +1,35 @@
+{
+  "id": "vanguard_scout_skimmer",
+  "name": "Scout Skimmer",
+  "cost": 20,
+  "icon": "assets/icons/categories/truck.svg",
+  "health": 5,
+  "speed": {
+    "road": 85,
+    "offRoad": 65,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 6,
+    "side": 4,
+    "rear": 2,
+    "top": 2
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 700,
+    "offRoad": 500
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [],
+  "category": "LOG",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 8,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

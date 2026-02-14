@@ -9,11 +9,12 @@
  * - Hides enemy units outside vision
  *
  * Performance optimizations:
+ * - Single Uint8Array fogState grid (0/1/2) - zero GC, O(1) indexed access
+ * - Renderer copies fogState directly to texture (no per-cell dirty tracking)
  * - Only processes player units (enemy vision irrelevant for fog overlay)
- * - Differential/crescent updates: only adds/removes changed cells when units move
- * - No LOS raycasting during incremental updates (circle-based, LOS only on forceImmediateUpdate)
- * - Dirty cell tracking: renderer only updates changed texture pixels
- * - Reference counting for shared vision cells
+ * - Differential/crescent updates: only modifies changed cells when units move
+ * - Reference counting for shared vision cells (no per-unit Set tracking)
+ * - Geometric circle recomputation instead of per-unit index Sets
  */
 
 import type { Game } from '../../core/Game';
@@ -37,144 +38,145 @@ export class FogOfWarManager {
   private blockingGrid: Float32Array | null = null;
   private blockingGridWidth = 0;
   private blockingGridHeight = 0;
-  private blockingGridCellSize = 4; // High resolution for accurate LOS
+  private blockingGridCellSize = 4;
 
-  // Vision state
-  private currentVision = new Map<string, Map<string, boolean>>(); // team -> set of visible cell keys
-  private exploredGrid = new Map<string, boolean>(); // set of explored cell keys (player only)
-  private cellSize = 4; // Resolution of vision grid
+  // Vision grid dimensions (computed from map in initializeGrids)
+  private cellSize = 2; // Resolution of vision grid (meters per cell)
+  private _gridWidth = 0;
+  private _gridHeight = 0;
+  private _gridOffsetX = 0;
+  private _gridOffsetZ = 0;
 
-  // Position tracking for incremental updates
+  // Continuous fog state: 0=unexplored, 128=explored, 129-255=visible (smooth edge fade)
+  // Renderer copies this directly to its R8 texture (bilinear filtering smooths further)
+  private _fogState: Uint8Array | null = null;
+  private refCountGrid: Uint8Array | null = null; // How many player units see each cell
+
+  // Smooth edge fade: outermost FADE_CELLS of each vision circle get a gradient
+  private readonly FADE_CELLS = 8; // 8 cells × 2m = 16m fade zone
+  private _fogDirty = true; // Whether renderer needs to re-upload texture
+
+  // Position + radius tracking for incremental updates (geometric recomputation, no per-unit Sets)
   private lastUnitPositions = new Map<string, THREE.Vector3>();
+  private lastUnitRadii = new Map<string, number>(); // cached vision radius per unit
   private readonly MOVE_THRESHOLD_SQ = 9; // 3 meters squared
 
   // CRITICAL PERFORMANCE: Frame budget to prevent frame rate collapse
-  private visionUpdatesThisFrame = 0;
-  private readonly MAX_VISION_UPDATES_PER_FRAME = 8; // Differential updates are cheap, can do more
+  private readonly MAX_VISION_UPDATES_PER_FRAME = 8;
 
-  // Track which units own which vision cells for efficient clearing
-  private unitVisionCells = new Map<string, Set<string>>(); // unitId -> set of cell keys
-  private unitTeams = new Map<string, string>(); // unitId -> team name
-  // Reference count per team per cell: how many units on that team see the cell
-  private cellRefCounts = new Map<string, Map<string, number>>(); // team -> (cellKey -> refCount)
-
-  // Dirty tracking for renderer: cells that changed since last consume
-  private _dirtyCells: number[] = []; // Flat array of [cellX, cellZ, cellX, cellZ, ...]
-  private _fullRescanNeeded = true; // Start with full scan
+  // Reusable set for tracking current unit IDs (avoids per-frame allocation)
+  private readonly _currentUnitIds = new Set<string>();
+  // Pre-allocated array for units needing vision updates (avoids per-frame array allocation)
+  private readonly _unitsToUpdate: (Unit | null)[] = new Array(8).fill(null);
 
   constructor(game: Game) {
     this.game = game;
   }
 
+  // Public accessors for renderer to copy fog state directly
+  get fogState(): Uint8Array | null { return this._fogState; }
+  get fogDirty(): boolean { return this._fogDirty; }
+  get gridWidth(): number { return this._gridWidth; }
+  get gridHeight(): number { return this._gridHeight; }
+  get gridCellSize(): number { return this.cellSize; }
+
+  clearFogDirty(): void { this._fogDirty = false; }
+
   /**
    * Initialize fog of war
    */
   initialize(): void {
-    this.currentVision.clear();
-    this.exploredGrid.clear();
     this.lastUnitPositions.clear();
-    this.unitVisionCells.clear();
-    this.unitTeams.clear();
-    this.cellRefCounts.clear();
+    this.lastUnitRadii.clear();
     this.blockingGrid = null;
-    this.visionUpdatesThisFrame = 0;
-    this._dirtyCells.length = 0;
-    this._fullRescanNeeded = true;
+    this._fogDirty = true;
+    this.initializeGrids();
   }
 
   /**
-   * Dirty tracking API for renderer
+   * Allocate flat array grids based on current map size
    */
-  get fullRescanNeeded(): boolean { return this._fullRescanNeeded; }
+  private initializeGrids(): void {
+    const map = this.game.currentMap;
+    if (!map) return;
 
-  consumeDirtyCells(): number[] {
-    const cells = this._dirtyCells;
-    this._dirtyCells = [];
-    this._fullRescanNeeded = false;
-    return cells;
-  }
+    this._gridWidth = Math.ceil(map.width / this.cellSize);
+    this._gridHeight = Math.ceil(map.height / this.cellSize);
+    this._gridOffsetX = Math.floor(map.width / (2 * this.cellSize));
+    this._gridOffsetZ = Math.floor(map.height / (2 * this.cellSize));
 
-  private markDirty(cellX: number, cellZ: number): void {
-    this._dirtyCells.push(cellX, cellZ);
+    const totalCells = this._gridWidth * this._gridHeight;
+    this._fogState = new Uint8Array(totalCells);
+    this.refCountGrid = new Uint8Array(totalCells);
   }
 
   /**
-   * Force an immediate fog of war update for all units (uses full LOS)
+   * Force an immediate fog of war update for all units
    * Used after initialization to reveal areas around already-deployed units
    */
   forceImmediateUpdate(teamFilter?: 'player' | 'enemy'): void {
     if (!this.enabled) return;
 
-    // Initialize blocking grid if needed
     if (!this.blockingGrid && this.game.currentMap) {
       this.initializeBlockingGrid();
     }
+    if (!this._fogState) {
+      this.initializeGrids();
+    }
 
-    // Get units (optionally filtered by team)
     const allUnits = teamFilter
       ? this.game.unitManager.getAllUnits(teamFilter)
       : this.game.unitManager.getAllUnits();
 
-    // Clear current vision and rebuild completely
-    this.currentVision.clear();
+    // Clear current vision (keep explored state: clamp visible→explored)
+    const fogState = this._fogState!;
+    const refGrid = this.refCountGrid!;
+    for (let i = 0, len = fogState.length; i < len; i++) {
+      if (fogState[i]! > 128) fogState[i] = 128; // visible → explored
+    }
+    refGrid.fill(0);
     this.lastUnitPositions.clear();
-    this.unitVisionCells.clear();
-    this.unitTeams.clear();
-    this.cellRefCounts.clear();
+    this.lastUnitRadii.clear();
 
-    // Reset frame budget for forced update
-    this.visionUpdatesThisFrame = 0;
 
-    // Update vision for units immediately with full LOS (no throttling or budget)
     for (const unit of allUnits) {
       if (unit.health <= 0) continue;
+      if (unit.team !== 'player') continue;
 
-      // Track position
       this.lastUnitPositions.set(unit.id, unit.position.clone());
-
-      // Update vision with full LOS
-      this.updateVisionForUnitLOS(unit);
+      this.addFullCircleVision(unit);
     }
 
-    // Update enemy visibility
     this.updateEnemyVisibility();
 
-    // Clear unit vision tracking so the first regular update() rebuilds with circle-based vision.
-    // forceImmediateUpdate uses LOS which creates irregular holes in unitVisionCells.
-    // The differential update assumes a full circle baseline, so we must re-establish it.
-    // currentVision and exploredGrid are kept (they have the correct initial reveal).
-    this.unitVisionCells.clear();
-    this.unitTeams.clear();
-    this.cellRefCounts.clear();
+    // Keep refGrid and lastUnitRadii intact so regular update() can properly
+    // clear/rebuild vision. Clearing them caused stationary units to lose
+    // vision when other units moved.
 
-    // Signal renderer to do full rescan
-    this._fullRescanNeeded = true;
-
+    this._fogDirty = true;
     console.log('FOW: Forced immediate update for', allUnits.length, 'units', teamFilter ? `(${teamFilter} only)` : '');
   }
 
   /**
    * Update fog of war based on unit positions
-   * Runs every frame during battle phase
    */
   update(_dt: number): void {
     if (!this.enabled) return;
+    if (!this._fogState) return;
 
-    // CRITICAL PERFORMANCE: Reset frame budget
-    this.visionUpdatesThisFrame = 0;
-
-    // Initialize blocking grid if needed
     if (!this.blockingGrid && this.game.currentMap) {
       this.initializeBlockingGrid();
     }
 
-    // OPT 1: Only process player units - enemy vision doesn't affect fog overlay
     const playerUnits = this.game.unitManager.getAllUnits('player');
 
-    // Track which units moved significantly
     let anyUnitMoved = false;
-    const currentUnitIds = new Set<string>();
-    const unitsToUpdate: Unit[] = [];
+    const currentUnitIds = this._currentUnitIds;
+    currentUnitIds.clear();
+
+    const updateQueue = this._unitsToUpdate;
+    let updateCount = 0;
+    const maxUpdates = this.MAX_VISION_UPDATES_PER_FRAME;
 
     for (const unit of playerUnits) {
       if (unit.health <= 0) continue;
@@ -182,26 +184,31 @@ export class FogOfWarManager {
 
       const lastPos = this.lastUnitPositions.get(unit.id);
       if (!lastPos) {
-        // New unit - needs full circle vision
         this.lastUnitPositions.set(unit.id, unit.position.clone());
         anyUnitMoved = true;
-        unitsToUpdate.push(unit);
+        if (updateCount < maxUpdates) {
+          updateQueue[updateCount++] = unit;
+        }
       } else {
-        const distSq = lastPos.distanceToSquared(unit.position);
+        const dx = lastPos.x - unit.position.x;
+        const dy = lastPos.y - unit.position.y;
+        const dz = lastPos.z - unit.position.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
         if (distSq > this.MOVE_THRESHOLD_SQ) {
           anyUnitMoved = true;
-          unitsToUpdate.push(unit);
+          if (updateCount < maxUpdates) {
+            updateQueue[updateCount++] = unit;
+          }
         }
       }
     }
 
-    // Clean up dead/removed player units
+    // Remove dead/despawned units
     for (const trackedId of this.lastUnitPositions.keys()) {
       if (!currentUnitIds.has(trackedId)) {
-        this.lastUnitPositions.delete(trackedId);
         this.clearVisionForUnit(trackedId);
-        this.unitVisionCells.delete(trackedId);
-        this.unitTeams.delete(trackedId);
+        this.lastUnitPositions.delete(trackedId);
+        this.lastUnitRadii.delete(trackedId);
         anyUnitMoved = true;
       }
     }
@@ -211,32 +218,25 @@ export class FogOfWarManager {
       return;
     }
 
-    // OPT 2+4: Differential updates without LOS
-    for (const unit of unitsToUpdate) {
-      if (this.visionUpdatesThisFrame >= this.MAX_VISION_UPDATES_PER_FRAME) {
-        break;
-      }
+    for (let i = 0; i < updateCount; i++) {
+      const unit = updateQueue[i]!;
+      updateQueue[i] = null; // Clear reference for GC
 
       const lastPos = this.lastUnitPositions.get(unit.id);
-      if (lastPos && this.unitVisionCells.has(unit.id)) {
-        // Existing unit that moved - check how far
-        const moveDist = lastPos.distanceTo(unit.position);
+      if (lastPos && this.lastUnitRadii.has(unit.id)) {
+        const dx = lastPos.x - unit.position.x;
+        const dz = lastPos.z - unit.position.z;
+        const moveDist = Math.sqrt(dx * dx + dz * dz);
         if (moveDist < this.cellSize * 3) {
-          // Small move: differential crescent update (fast, ~50 cells changed)
           this.updateVisionDifferential(unit, lastPos);
         } else {
-          // Large move (fast unit like helicopter/aircraft): clear and rebuild full circle
-          // Prevents banding from gaps between old and new positions
           this.clearVisionForUnit(unit.id);
           this.addFullCircleVision(unit);
         }
       } else {
-        // New unit or first update after forceImmediateUpdate - full circle
         this.addFullCircleVision(unit);
       }
-      this.visionUpdatesThisFrame++;
 
-      // Update tracked position AFTER vision recalculated
       const pos = this.lastUnitPositions.get(unit.id);
       if (pos) {
         pos.copy(unit.position);
@@ -247,153 +247,177 @@ export class FogOfWarManager {
   }
 
   /**
-   * OPT 4: Differential crescent update
-   * Only processes cells that changed between old and new position circles.
-   * For a 3m move with 150m radius, ~99% of cells are unchanged and skipped.
+   * Differential crescent update - only modifies cells that changed between old and new circles
+   * Uses geometric circle checks with smooth edge fade values
    */
   private updateVisionDifferential(unit: Unit, oldPos: THREE.Vector3): void {
+    const fogState = this._fogState!;
+    const refGrid = this.refCountGrid!;
+
     const visionRadius = this.getVisionRadius(unit);
-    const team = unit.team;
+    this.lastUnitRadii.set(unit.id, visionRadius);
     const newX = unit.position.x;
     const newZ = unit.position.z;
     const oldX = oldPos.x;
     const oldZ = oldPos.z;
 
-    const teamVision = this.ensureTeamVision(team);
-    const teamRefCounts = this.ensureTeamRefCounts(team);
-    this.unitTeams.set(unit.id, team);
-
-    const unitCells = this.unitVisionCells.get(unit.id)!;
     const radiusSq = visionRadius * visionRadius;
     const cellSize = this.cellSize;
     const cellRadius = Math.ceil(visionRadius / cellSize);
 
-    // Expand search area by move distance to cover both circles
-    const moveDist = Math.sqrt((newX - oldX) ** 2 + (newZ - oldZ) ** 2);
+    // Precompute fade zone boundaries
+    const fadeWidth = this.FADE_CELLS * cellSize;
+    const fadeStart = Math.max(0, visionRadius - fadeWidth);
+    const fadeStartSq = fadeStart * fadeStart;
+    const fadeRangeSq = radiusSq - fadeStartSq;
+
+    const moveDistX = newX - oldX;
+    const moveDistZ = newZ - oldZ;
+    const moveDist = Math.sqrt(moveDistX * moveDistX + moveDistZ * moveDistZ);
     const expandCells = Math.ceil(moveDist / cellSize) + 1;
     const searchRadius = cellRadius + expandCells;
 
-    const isPlayer = team === 'player';
+    const gridWidth = this._gridWidth;
+    const gridHeight = this._gridHeight;
+    const offsetX = this._gridOffsetX;
+    const offsetZ = this._gridOffsetZ;
+    let dirty = false;
 
     for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+      const worldX = newX + dx * cellSize;
       for (let dz = -searchRadius; dz <= searchRadius; dz++) {
-        const worldX = newX + dx * cellSize;
         const worldZ = newZ + dz * cellSize;
 
-        const newDistSq = (worldX - newX) ** 2 + (worldZ - newZ) ** 2;
-        const oldDistSq = (worldX - oldX) ** 2 + (worldZ - oldZ) ** 2;
+        const dxNew = worldX - newX;
+        const dzNew = worldZ - newZ;
+        const newDistSq = dxNew * dxNew + dzNew * dzNew;
+        const dxOld = worldX - oldX;
+        const dzOld = worldZ - oldZ;
+        const oldDistSq = dxOld * dxOld + dzOld * dzOld;
 
         const inNew = newDistSq <= radiusSq;
         const inOld = oldDistSq <= radiusSq;
 
-        if (inNew === inOld) continue; // No change - skip (this is 99% of cells)
+        if (inNew === inOld) continue;
 
-        const cellX = Math.floor(worldX / cellSize);
-        const cellZ = Math.floor(worldZ / cellSize);
-        const key = `${cellX},${cellZ}`;
+        const gx = Math.floor(worldX / cellSize) + offsetX;
+        const gz = Math.floor(worldZ / cellSize) + offsetZ;
+        if (gx < 0 || gx >= gridWidth || gz < 0 || gz >= gridHeight) continue;
+        const idx = gz * gridWidth + gx;
 
         if (inNew) {
-          // Newly visible cell
-          teamVision.set(key, true);
-          if (!unitCells.has(key)) {
-            unitCells.add(key);
-            teamRefCounts.set(key, (teamRefCounts.get(key) ?? 0) + 1);
+          // Cell entered vision: increment ref count + compute smooth edge value
+          refGrid[idx] = refGrid[idx]! + 1;
+
+          let value: number;
+          if (newDistSq <= fadeStartSq) {
+            value = 255;
+          } else {
+            const t = (newDistSq - fadeStartSq) / fadeRangeSq;
+            value = 255 - ((t * 126) | 0);
           }
-          if (isPlayer) {
-            this.exploredGrid.set(key, true);
-            this.markDirty(cellX, cellZ);
+
+          if (value > fogState[idx]!) {
+            fogState[idx] = value;
+            dirty = true;
           }
         } else {
-          // No longer visible cell
-          if (unitCells.has(key)) {
-            unitCells.delete(key);
-            const count = teamRefCounts.get(key) ?? 0;
-            if (count <= 1) {
-              teamRefCounts.delete(key);
-              teamVision.delete(key);
-            } else {
-              teamRefCounts.set(key, count - 1);
+          // Cell left vision: decrement ref count
+          const count = refGrid[idx]!;
+          if (count <= 1) {
+            refGrid[idx] = 0;
+            if (fogState[idx]! > 128) {
+              fogState[idx] = 128; // visible → explored
+              dirty = true;
             }
-            if (isPlayer) {
-              this.markDirty(cellX, cellZ);
-            }
+          } else {
+            refGrid[idx] = count - 1;
           }
         }
       }
     }
+
+    if (dirty) this._fogDirty = true;
   }
 
   /**
-   * OPT 2: Add full circle vision for a new unit (no LOS, simple circle)
+   * Add full circle vision for a new unit (no LOS, simple circle)
+   * Uses scanline rasterization with smooth edge fade (no per-unit Set tracking)
    */
   private addFullCircleVision(unit: Unit): void {
+    const fogState = this._fogState!;
+    const refGrid = this.refCountGrid!;
+
     const visionRadius = this.getVisionRadius(unit);
-    const team = unit.team;
+    this.lastUnitRadii.set(unit.id, visionRadius);
     const unitX = unit.position.x;
     const unitZ = unit.position.z;
-
-    const teamVision = this.ensureTeamVision(team);
-    const teamRefCounts = this.ensureTeamRefCounts(team);
-    this.unitTeams.set(unit.id, team);
-
-    let unitCells = this.unitVisionCells.get(unit.id);
-    if (!unitCells) {
-      unitCells = new Set<string>();
-      this.unitVisionCells.set(unit.id, unitCells);
-    }
 
     const radiusSq = visionRadius * visionRadius;
     const cellSize = this.cellSize;
     const cellRadius = Math.ceil(visionRadius / cellSize);
-    const isPlayer = team === 'player';
+
+    // Precompute fade zone boundaries (squared, avoids sqrt in inner loop)
+    const fadeWidth = this.FADE_CELLS * cellSize;
+    const fadeStart = Math.max(0, visionRadius - fadeWidth);
+    const fadeStartSq = fadeStart * fadeStart;
+    const fadeRangeSq = radiusSq - fadeStartSq; // > 0 since fadeStart < visionRadius
+
+    const gridWidth = this._gridWidth;
+    const gridHeight = this._gridHeight;
+    const offsetX = this._gridOffsetX;
+    const offsetZ = this._gridOffsetZ;
+    let dirty = false;
 
     for (let dx = -cellRadius; dx <= cellRadius; dx++) {
-      for (let dz = -cellRadius; dz <= cellRadius; dz++) {
-        const worldX = unitX + dx * cellSize;
+      const worldX = unitX + dx * cellSize;
+      // Scanline optimization: compute max dz for this row
+      const dxWorld = dx * cellSize;
+      const dxWorldSq = dxWorld * dxWorld;
+      const remainingSq = radiusSq - dxWorldSq;
+      if (remainingSq < 0) continue;
+      const maxDz = Math.floor(Math.sqrt(remainingSq) / cellSize);
+
+      for (let dz = -maxDz; dz <= maxDz; dz++) {
         const worldZ = unitZ + dz * cellSize;
-        const distSq = (worldX - unitX) ** 2 + (worldZ - unitZ) ** 2;
-        if (distSq <= radiusSq) {
-          const cellX = Math.floor(worldX / cellSize);
-          const cellZ = Math.floor(worldZ / cellSize);
-          const key = `${cellX},${cellZ}`;
-          teamVision.set(key, true);
-          if (!unitCells.has(key)) {
-            unitCells.add(key);
-            teamRefCounts.set(key, (teamRefCounts.get(key) ?? 0) + 1);
-          }
-          if (isPlayer) {
-            this.exploredGrid.set(key, true);
-            this.markDirty(cellX, cellZ);
-          }
+        const gx = Math.floor(worldX / cellSize) + offsetX;
+        const gz = Math.floor(worldZ / cellSize) + offsetZ;
+        if (gx < 0 || gx >= gridWidth || gz < 0 || gz >= gridHeight) continue;
+        const idx = gz * gridWidth + gx;
+
+        refGrid[idx] = refGrid[idx]! + 1;
+
+        // Compute continuous visibility value with smooth edge fade
+        const dzWorld = dz * cellSize;
+        const distSq = dxWorldSq + dzWorld * dzWorld;
+        let value: number;
+        if (distSq <= fadeStartSq) {
+          value = 255; // fully visible (inside solid core)
+        } else {
+          // Squared-distance interpolation: 255→129 across fade zone (no sqrt needed)
+          const t = (distSq - fadeStartSq) / fadeRangeSq;
+          value = 255 - ((t * 126) | 0); // 255 at fadeStart, 129 at radius edge
+        }
+
+        // Take max so overlapping vision doesn't lower visibility
+        if (value > fogState[idx]!) {
+          fogState[idx] = value;
+          dirty = true;
         }
       }
     }
-  }
 
-  private ensureTeamVision(team: string): Map<string, boolean> {
-    if (!this.currentVision.has(team)) {
-      this.currentVision.set(team, new Map());
-    }
-    return this.currentVision.get(team)!;
-  }
-
-  private ensureTeamRefCounts(team: string): Map<string, number> {
-    if (!this.cellRefCounts.has(team)) {
-      this.cellRefCounts.set(team, new Map());
-    }
-    return this.cellRefCounts.get(team)!;
+    if (dirty) this._fogDirty = true;
   }
 
   /**
-   * Initialize the blocking grid with terrain, buildings, and forests
-   * This allows O(1) height lookups instead of iterating all buildings per ray
+   * Initialize blocking grid with terrain, buildings, and forests
    */
   private initializeBlockingGrid(): void {
     const map = this.game.currentMap;
     if (!map) return;
 
     this.blockingGridCellSize = 2;
-
     this.blockingGridWidth = Math.ceil(map.width / this.blockingGridCellSize);
     this.blockingGridHeight = Math.ceil(map.height / this.blockingGridCellSize);
 
@@ -451,200 +475,134 @@ export class FogOfWarManager {
   }
 
   /**
-   * Clear vision cells for a specific unit using reference counting
+   * Clear vision cells for a specific unit using geometric circle recomputation
+   * Instead of tracking indices in a Set, re-iterates the old circle from stored position + radius
    */
   private clearVisionForUnit(unitId: string): void {
-    const cellsToRemove = this.unitVisionCells.get(unitId);
-    if (!cellsToRemove) return;
+    const fogState = this._fogState;
+    const refGrid = this.refCountGrid;
+    if (!fogState || !refGrid) return;
 
-    const team = this.unitTeams.get(unitId);
-    if (!team) {
-      cellsToRemove.clear();
-      return;
-    }
+    const lastPos = this.lastUnitPositions.get(unitId);
+    const lastRadius = this.lastUnitRadii.get(unitId);
+    if (!lastPos || lastRadius === undefined) return;
 
-    const teamVision = this.currentVision.get(team);
-    const teamRefCounts = this.cellRefCounts.get(team);
-    const isPlayer = team === 'player';
+    const unitX = lastPos.x;
+    const unitZ = lastPos.z;
+    const radiusSq = lastRadius * lastRadius;
+    const cellSize = this.cellSize;
+    const cellRadius = Math.ceil(lastRadius / cellSize);
 
-    if (teamVision && teamRefCounts) {
-      for (const key of cellsToRemove) {
-        const count = teamRefCounts.get(key) ?? 0;
-        if (count <= 1) {
-          teamRefCounts.delete(key);
-          teamVision.delete(key);
-        } else {
-          teamRefCounts.set(key, count - 1);
-        }
-        if (isPlayer) {
-          // Parse key for dirty marking
-          const commaIdx = key.indexOf(',');
-          this.markDirty(
-            parseInt(key.substring(0, commaIdx)),
-            parseInt(key.substring(commaIdx + 1))
-          );
-        }
-      }
-    }
+    const gridWidth = this._gridWidth;
+    const gridHeight = this._gridHeight;
+    const offsetX = this._gridOffsetX;
+    const offsetZ = this._gridOffsetZ;
+    let dirty = false;
 
-    cellsToRemove.clear();
-  }
-
-  /**
-   * Full LOS vision update for a unit (used only in forceImmediateUpdate)
-   * Includes elevation bonus and line-of-sight checks
-   */
-  private updateVisionForUnitLOS(unit: Unit): void {
-    const baseVisionRadius = this.getVisionRadius(unit);
-    const unitPos = unit.position;
-    const team = unit.team;
-
-    const ELEVATION_MULTIPLIER = 2.0;
-    const MAX_BONUS_PERCENT = 0.5;
-    const maxElevationBonus = baseVisionRadius * MAX_BONUS_PERCENT;
-    const unitElevation = this.getTerrainHeight(unitPos.x, unitPos.z);
-
-    const teamVision = this.ensureTeamVision(team);
-    const teamRefCounts = this.ensureTeamRefCounts(team);
-    this.unitTeams.set(unit.id, team);
-
-    let unitCells = this.unitVisionCells.get(unit.id);
-    if (!unitCells) {
-      unitCells = new Set<string>();
-      this.unitVisionCells.set(unit.id, unitCells);
-    }
-
-    const maxVisionRadius = baseVisionRadius + maxElevationBonus;
-    const cellRadius = Math.ceil(maxVisionRadius / this.cellSize);
-
-    // Full circle reveal (no LOS). LOS-based gaps create visual artifacts
-    // (rings on slopes) and get overwritten by circle-based vision on the
-    // very next frame, so LOS here has no lasting benefit.
+    // Recompute circle via scanline (same as addFullCircleVision)
     for (let dx = -cellRadius; dx <= cellRadius; dx++) {
-      for (let dz = -cellRadius; dz <= cellRadius; dz++) {
-        const worldX = unitPos.x + dx * this.cellSize;
-        const worldZ = unitPos.z + dz * this.cellSize;
+      const worldX = unitX + dx * cellSize;
+      const dxWorld = dx * cellSize;
+      const remainingSq = radiusSq - dxWorld * dxWorld;
+      if (remainingSq < 0) continue;
+      const maxDz = Math.floor(Math.sqrt(remainingSq) / cellSize);
 
-        const targetElevation = this.getTerrainHeight(worldX, worldZ);
-        const elevationDifference = unitElevation - targetElevation;
-        const elevationBonus = Math.max(0, elevationDifference * ELEVATION_MULTIPLIER);
-        const cappedBonus = Math.min(elevationBonus, maxElevationBonus);
-        const effectiveVisionRadius = baseVisionRadius + cappedBonus;
+      for (let dz = -maxDz; dz <= maxDz; dz++) {
+        const worldZ = unitZ + dz * cellSize;
+        const gx = Math.floor(worldX / cellSize) + offsetX;
+        const gz = Math.floor(worldZ / cellSize) + offsetZ;
+        if (gx < 0 || gx >= gridWidth || gz < 0 || gz >= gridHeight) continue;
+        const idx = gz * gridWidth + gx;
 
-        const distSq = (worldX - unitPos.x) ** 2 + (worldZ - unitPos.z) ** 2;
-        if (distSq <= effectiveVisionRadius ** 2) {
-          const key = this.getCellKey(worldX, worldZ);
-
-          if (team === 'player') {
-            this.exploredGrid.set(key, true);
+        const count = refGrid[idx]!;
+        if (count <= 1) {
+          refGrid[idx] = 0;
+          if (fogState[idx]! > 128) {
+            fogState[idx] = 128; // visible → explored
+            dirty = true;
           }
-
-          teamVision.set(key, true);
-          if (!unitCells.has(key)) {
-            unitCells.add(key);
-            teamRefCounts.set(key, (teamRefCounts.get(key) ?? 0) + 1);
-          }
+        } else {
+          refGrid[idx] = count - 1;
         }
       }
     }
+
+    if (dirty) this._fogDirty = true;
   }
 
-  /**
-   * Get vision radius for a unit
-   */
   private getVisionRadius(unit: Unit): number {
     if (!unit.data) return 50;
     return getVisionRadiusForOptics(unit.data.optics);
   }
 
   /**
-   * Get grid cell key for a world position
-   */
-  private getCellKey(x: number, z: number): string {
-    const cellX = Math.floor(x / this.cellSize);
-    const cellZ = Math.floor(z / this.cellSize);
-    return `${cellX},${cellZ}`;
-  }
-
-  /**
-   * Reveal a rectangular area for a team (marks cells as visible + explored)
+   * Reveal a rectangular area (marks cells as visible + explored)
    * Used to reveal deployment zones during setup phase
    */
-  revealArea(minX: number, minZ: number, maxX: number, maxZ: number, team: string = 'player'): void {
-    if (!this.currentVision.has(team)) {
-      this.currentVision.set(team, new Map());
-    }
-    const teamVision = this.currentVision.get(team)!;
+  revealArea(minX: number, minZ: number, maxX: number, maxZ: number, _team: string = 'player'): void {
+    if (!this._fogState) this.initializeGrids();
+    const fogState = this._fogState!;
 
-    for (let x = minX; x <= maxX; x += this.cellSize) {
-      for (let z = minZ; z <= maxZ; z += this.cellSize) {
-        const key = this.getCellKey(x, z);
-        teamVision.set(key, true);
-        this.exploredGrid.set(key, true);
+    const gridWidth = this._gridWidth;
+    const gridHeight = this._gridHeight;
+    const offsetX = this._gridOffsetX;
+    const offsetZ = this._gridOffsetZ;
+    const cellSize = this.cellSize;
+
+    for (let x = minX; x <= maxX; x += cellSize) {
+      for (let z = minZ; z <= maxZ; z += cellSize) {
+        const gx = Math.floor(x / cellSize) + offsetX;
+        const gz = Math.floor(z / cellSize) + offsetZ;
+        if (gx < 0 || gx >= gridWidth || gz < 0 || gz >= gridHeight) continue;
+        fogState[gz * gridWidth + gx] = 255;
       }
     }
-    this._fullRescanNeeded = true;
+    this._fogDirty = true;
   }
 
   /**
    * Get visibility state for a position from player perspective
+   * fogState encoding: 0=unexplored, 1-128=explored, 129-255=visible
    */
   getVisibilityState(x: number, z: number): VisibilityState {
     if (!this.enabled) return VisibilityState.Visible;
+    if (!this._fogState) return VisibilityState.Unexplored;
 
-    const key = this.getCellKey(x, z);
-
-    if (this.currentVision.get('player')?.has(key)) {
-      return VisibilityState.Visible;
+    const gx = Math.floor(x / this.cellSize) + this._gridOffsetX;
+    const gz = Math.floor(z / this.cellSize) + this._gridOffsetZ;
+    if (gx < 0 || gx >= this._gridWidth || gz < 0 || gz >= this._gridHeight) {
+      return VisibilityState.Unexplored;
     }
 
-    if (this.exploredGrid.has(key)) {
-      return VisibilityState.Explored;
-    }
-
+    const val = this._fogState[gz * this._gridWidth + gx]!;
+    if (val > 128) return VisibilityState.Visible;
+    if (val > 0) return VisibilityState.Explored;
     return VisibilityState.Unexplored;
   }
 
-  /**
-   * Check if a position is currently visible to player
-   */
   isVisible(x: number, z: number): boolean {
     return this.getVisibilityState(x, z) === VisibilityState.Visible;
   }
 
-  /**
-   * Check if a position has been explored (seen at some point)
-   */
   isExplored(x: number, z: number): boolean {
     if (!this.enabled) return true;
-    const key = this.getCellKey(x, z);
-    return this.exploredGrid.has(key);
+    return this.getVisibilityState(x, z) >= VisibilityState.Explored;
   }
 
-  /**
-   * Check if a unit is visible to player
-   */
   isUnitVisible(unit: Unit): boolean {
     return this.isUnitVisibleToTeam(unit, 'player');
   }
 
-  /**
-   * Check if a unit is visible to a specific team
-   */
   isUnitVisibleToTeam(unit: Unit, viewerTeam: string): boolean {
     if (!this.enabled) return true;
     if (unit.team === viewerTeam) return true;
+    if (viewerTeam !== 'player') return false;
 
-    const key = this.getCellKey(unit.position.x, unit.position.z);
-    return this.currentVision.get(viewerTeam)?.has(key) ?? false;
+    return this.isVisible(unit.position.x, unit.position.z);
   }
 
-  /**
-   * Update enemy unit visibility
-   */
   private updateEnemyVisibility(): void {
     const allUnits = this.game.unitManager.getAllUnits();
-
     for (const unit of allUnits) {
       if (unit.team === 'player') {
         unit.mesh.visible = true;
@@ -654,22 +612,15 @@ export class FogOfWarManager {
     }
   }
 
-  /**
-   * Enable/disable fog of war
-   */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    this._fullRescanNeeded = true;
-
+    this._fogDirty = true;
     if (!enabled) {
       const allUnits = this.game.unitManager.getAllUnits();
       allUnits.forEach(u => u.mesh.visible = true);
     }
   }
 
-  /**
-   * Get terrain height at a position
-   */
   private getTerrainHeight(x: number, z: number): number {
     if (!this.game.currentMap) return 0;
     const map = this.game.currentMap;
@@ -703,10 +654,14 @@ export class FogOfWarManager {
     return e0 * (1 - fz) + e1 * fz;
   }
 
-  /**
-   * Check if fog of war is enabled
-   */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  // Legacy dirty cell API (kept for interface compatibility, no longer used by renderer)
+  get fullRescanNeeded(): boolean { return this._fogDirty; }
+  consumeDirtyCells(): number[] {
+    this._fogDirty = false;
+    return [];
   }
 }

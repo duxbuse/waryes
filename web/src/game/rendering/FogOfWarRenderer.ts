@@ -35,13 +35,9 @@ export class FogOfWarRenderer {
   private numCaptureZones = 0;
 
   // Grid dimensions (matches FogOfWarManager's 4m cell size)
-  private readonly cellSize = 4;
+  private readonly cellSize = 2;
   private gridWidth = 0;
   private gridHeight = 0;
-
-  // Grid offset for converting cell coordinates to grid indices
-  private gridOffsetX = 0;
-  private gridOffsetZ = 0;
 
   // Cached matrix for inverse VP computation (avoids per-frame allocation)
   private readonly _vpMatrix = new THREE.Matrix4();
@@ -87,10 +83,6 @@ export class FogOfWarRenderer {
     // Calculate grid dimensions based on map size and cell size
     this.gridWidth = Math.ceil(map.width / this.cellSize);
     this.gridHeight = Math.ceil(map.height / this.cellSize);
-
-    // Pre-compute grid offset for cell-key-to-grid conversion
-    this.gridOffsetX = Math.floor(map.width / (2 * this.cellSize));
-    this.gridOffsetZ = Math.floor(map.height / (2 * this.cellSize));
 
     // Create fog texture (R8 format for single-channel data)
     const textureSize = this.gridWidth * this.gridHeight;
@@ -227,19 +219,11 @@ export class FogOfWarRenderer {
           return;
         }
 
-        // Direct sample - no blur for crisp, solid fog boundaries
-        float visibilityState = texture2D(fogTexture, uv).r * 255.0;
-
-        // Hard step transitions between fog states
-        // Unexplored (0) = fully opaque black (alpha 1.0)
-        // Explored (1) = semi-transparent shroud (alpha 0.5)
-        // Visible (2) = fully transparent (alpha 0.0)
-        float alpha = 1.0;
-        if (visibilityState > 1.5) {
-          alpha = 0.0; // Visible
-        } else if (visibilityState > 0.5) {
-          alpha = 0.5; // Explored
-        }
+        // Fog data is continuous 0-255 (stored as R8, read as 0.0-1.0):
+        //   0 = unexplored (alpha 1.0), ~0.5 = explored (alpha 0.5), 1.0 = visible (alpha 0.0)
+        // Bilinear filtering on the continuous data provides smooth edges
+        float visibility = texture2D(fogTexture, uv).r;
+        float alpha = 1.0 - visibility;
 
         // Reduce fog inside player-captured zones so zone fill remains visible
         if (alpha > 0.0 && alpha < 1.0) {
@@ -263,90 +247,23 @@ export class FogOfWarRenderer {
   }
 
   /**
-   * OPT 5: Full grid rescan - only used on initialization or forced updates
-   */
-  private fullRescan(): void {
-    if (!this.game.fogOfWarManager || !this.fogTextureData || !this.fogTexture || !this.game.currentMap) {
-      return;
-    }
-
-    const map = this.game.currentMap;
-    const fogManager = this.game.fogOfWarManager;
-
-    for (let gridZ = 0; gridZ < this.gridHeight; gridZ++) {
-      for (let gridX = 0; gridX < this.gridWidth; gridX++) {
-        const worldX = (gridX * this.cellSize) - (map.width / 2) + (this.cellSize / 2);
-        const worldZ = (gridZ * this.cellSize) - (map.height / 2) + (this.cellSize / 2);
-
-        const visibilityState = fogManager.getVisibilityState(worldX, worldZ);
-        const index = gridZ * this.gridWidth + gridX;
-        this.fogTextureData[index] = visibilityState;
-      }
-    }
-
-    this.fogTexture.needsUpdate = true;
-  }
-
-  /**
-   * OPT 5: Incremental update - only processes cells that changed
-   */
-  private incrementalUpdate(dirtyCells: number[]): void {
-    if (!this.game.fogOfWarManager || !this.fogTextureData || !this.fogTexture || !this.game.currentMap) {
-      return;
-    }
-
-    if (dirtyCells.length === 0) return;
-
-    const fogManager = this.game.fogOfWarManager;
-    const map = this.game.currentMap;
-    let hasChanges = false;
-
-    // Process dirty cells (flat array of [cellX, cellZ, cellX, cellZ, ...])
-    for (let i = 0; i < dirtyCells.length; i += 2) {
-      const cellX = dirtyCells[i]!;
-      const cellZ = dirtyCells[i + 1]!;
-
-      // Convert manager cell coordinates to renderer grid coordinates
-      const gridX = cellX + this.gridOffsetX;
-      const gridZ = cellZ + this.gridOffsetZ;
-
-      // Bounds check
-      if (gridX < 0 || gridX >= this.gridWidth || gridZ < 0 || gridZ >= this.gridHeight) continue;
-
-      // Query current visibility state
-      const worldX = (gridX * this.cellSize) - (map.width / 2) + (this.cellSize / 2);
-      const worldZ = (gridZ * this.cellSize) - (map.height / 2) + (this.cellSize / 2);
-      const visibilityState = fogManager.getVisibilityState(worldX, worldZ);
-
-      const index = gridZ * this.gridWidth + gridX;
-      if (this.fogTextureData[index] !== visibilityState) {
-        this.fogTextureData[index] = visibilityState;
-        hasChanges = true;
-      }
-    }
-
-    if (hasChanges) {
-      this.fogTexture.needsUpdate = true;
-    }
-  }
-
-  /**
    * Update fog rendering (called each frame)
+   * Copies the manager's fogState buffer directly to the texture when dirty
    */
   update(_dt: number = 1 / 60): void {
     if (!this.game.fogOfWarManager) return;
 
     const fogManager = this.game.fogOfWarManager;
 
-    if (fogManager.fullRescanNeeded) {
-      // Full rescan needed (init, forced update, toggle, etc.)
-      const dirtyCells = fogManager.consumeDirtyCells(); // Clears fullRescanNeeded flag
-      void dirtyCells; // Discard - we're doing full scan
-      this.fullRescan();
-    } else {
-      // Incremental update - only process changed cells
-      const dirtyCells = fogManager.consumeDirtyCells();
-      this.incrementalUpdate(dirtyCells);
+    // Direct buffer copy: manager's fogState → texture data (no per-cell queries)
+    if (fogManager.fogDirty) {
+      const fogState = fogManager.fogState;
+      if (fogState && this.fogTextureData && this.fogTexture) {
+        // Single memcpy: ~0.05ms for 250K cells
+        this.fogTextureData.set(fogState);
+        this.fogTexture.needsUpdate = true;
+      }
+      fogManager.clearFogDirty();
     }
 
     // Update inverse view-projection matrix for screen-to-world ray casting

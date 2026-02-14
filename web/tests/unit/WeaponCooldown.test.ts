@@ -8,6 +8,14 @@ import { Unit, type UnitConfig } from '../../src/game/units/Unit';
 import type { Game } from '../../src/core/Game';
 import type { UnitData, WeaponSlot } from '../../src/data/types';
 
+// Weapon lookup for SimGameContext
+const getWeaponDataMock = (id: string) => {
+  if (id === 'test_weapon_1') return mockWeapon1;
+  if (id === 'test_weapon_2') return mockWeapon2;
+  if (id === 'test_weapon_3') return mockWeapon3;
+  return undefined;
+};
+
 // Mock the Game class
 const mockGame = {
   unitManager: {
@@ -22,6 +30,29 @@ const mockGame = {
     add: vi.fn(),
     remove: vi.fn(),
   },
+  getSimContext: () => ({
+    currentMap: null,
+    phase: 'battle' as const,
+    rng: { next: () => 0.5 },
+    getElevationAt: () => 0,
+    getTerrainAt: () => null,
+    getWeaponData: (id: string) => getWeaponDataMock(id),
+    getUnitData: () => undefined,
+    getUnitsInRadius: () => [],
+    getAllUnits: () => [],
+    destroyUnit: vi.fn(),
+    findPath: () => null,
+    findNearestReachablePosition: () => null,
+    findNearestBuilding: () => null,
+    hasBuildingCapacity: () => false,
+    tryGarrison: () => false,
+    ungarrison: () => null,
+    spawnDefensiveStructure: () => null,
+    tryMount: () => false,
+    unloadAll: () => [],
+    isFogOfWarEnabled: () => false,
+    isPositionVisible: () => true,
+  }),
 } as unknown as Game;
 
 // Mock weapon data for testing

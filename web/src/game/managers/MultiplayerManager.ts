@@ -10,6 +10,7 @@
  */
 
 import type { Game } from '../../core/Game';
+import { getAccessToken } from '../../api/ApiClient';
 
 export interface MultiplayerPlayer {
   id: string;
@@ -60,10 +61,14 @@ export class MultiplayerManager {
   private onGameState: ((state: any) => void) | null = null;
   private onKicked: (() => void) | null = null;
   private onError: ((error: string) => void) | null = null;
+  private onTickUpdate: ((tick: number, commands: any[], checksum: number) => void) | null = null;
+  private onStateSnapshot: ((snapshot: any) => void) | null = null;
+  private onPhaseChange: ((phase: string, data: any) => void) | null = null;
+  private onGameEvent: ((eventType: string, data: any) => void) | null = null;
 
   constructor(_game: Game) {
     // this._game = game; // Currently unused
-    this.serverUrl = 'ws://localhost:3001';
+    this.serverUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
     this.playerId = this.generatePlayerId();
     this.playerName = this.loadPlayerName();
   }
@@ -118,7 +123,12 @@ export class MultiplayerManager {
       }
 
       try {
-        this.ws = new WebSocket(this.serverUrl);
+        // Include JWT token in WS connection for server-side authentication
+        const token = getAccessToken();
+        const wsUrl = token
+          ? `${this.serverUrl}?token=${encodeURIComponent(token)}`
+          : this.serverUrl;
+        this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
           console.log('[Multiplayer] Connected to server');
@@ -127,7 +137,13 @@ export class MultiplayerManager {
         };
 
         this.ws.onmessage = (event) => {
-          this.handleMessage(JSON.parse(event.data));
+          try {
+            const message = JSON.parse(event.data);
+            if (typeof message?.type !== 'string') return;
+            this.handleMessage(message);
+          } catch {
+            console.error('[Multiplayer] Invalid message received');
+          }
         };
 
         this.ws.onerror = (error) => {
@@ -277,7 +293,8 @@ export class MultiplayerManager {
    */
   async getOpenLobbies(): Promise<LobbyListItem[]> {
     try {
-      const response = await fetch('http://localhost:3001/lobbies');
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBase}/lobbies`);
       return await response.json();
     } catch (error) {
       console.error('[Multiplayer] Failed to fetch lobbies:', error);
@@ -379,6 +396,30 @@ export class MultiplayerManager {
         }
         break;
 
+      case 'tick_update':
+        if (this.onTickUpdate) {
+          this.onTickUpdate(message.tick, message.commands, message.checksum);
+        }
+        break;
+
+      case 'state_snapshot':
+        if (this.onStateSnapshot) {
+          this.onStateSnapshot(message);
+        }
+        break;
+
+      case 'phase_change':
+        if (this.onPhaseChange) {
+          this.onPhaseChange(message.phase, message);
+        }
+        break;
+
+      case 'game_event':
+        if (this.onGameEvent) {
+          this.onGameEvent(message.eventType, message);
+        }
+        break;
+
       case 'player_disconnected':
         console.log(`[Multiplayer] Player disconnected: ${message.playerId}`);
         // Handle disconnection visually
@@ -434,6 +475,18 @@ export class MultiplayerManager {
         break;
       case 'error':
         this.onError = callback;
+        break;
+      case 'tick_update':
+        this.onTickUpdate = callback;
+        break;
+      case 'state_snapshot':
+        this.onStateSnapshot = callback;
+        break;
+      case 'phase_change':
+        this.onPhaseChange = callback;
+        break;
+      case 'game_event':
+        this.onGameEvent = callback;
         break;
     }
   }

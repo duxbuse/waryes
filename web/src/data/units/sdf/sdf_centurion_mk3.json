@@ -1,0 +1,54 @@
+{
+  "id": "sdf_centurion_mk3",
+  "name": "Centurion Mk.III",
+  "cost": 70,
+  "icon": "assets/icons/units/sdf/sdf_centurion_apc.png",
+  "health": 8,
+  "speed": {
+    "road": 50,
+    "offRoad": 38,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 12,
+    "side": 10,
+    "rear": 8,
+    "top": 4
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 450,
+    "offRoad": 300
+  },
+  "optics": "Normal",
+  "stealth": "None",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_rapid_laser_cannon",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_heavy_auto_cannon_hull",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_at_launcher",
+      "count": 1,
+      "maxAmmo": 3,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 10,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

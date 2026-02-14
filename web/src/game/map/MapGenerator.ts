@@ -4453,11 +4453,12 @@ export class MapGenerator {
       const teamZones = deploymentZones.filter(z => z.team === team);
       if (teamZones.length === 0) continue;
 
-      // Calculate team's edge area (offset inward so spawn circles are fully on the map)
-      const edgeInset = 12; // Must be >= largest entry point radius (air=10) + buffer
+      // Place entry points at the deployment zone's map-edge boundary
+      // so units spawn on valid terrain inside the playable area
+      const deploymentEdgeMargin = Math.max(30, this.width * 0.03);
       const teamEdgeZ = team === 'player'
-        ? -this.height / 2 + edgeInset
-        : this.height / 2 - edgeInset;
+        ? -this.height / 2 + deploymentEdgeMargin
+        : this.height / 2 - deploymentEdgeMargin;
       const edgeThreshold = this.height * 0.15;
 
       // Find roads near the team's map edge

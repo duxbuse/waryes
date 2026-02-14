@@ -62,9 +62,9 @@
   "roster": [
     {
       "unitId": "sdf_trooper",
-      "maxCards": 8,
+      "maxCards": 4,
       "transportOptions": [
-        "sdf_centurion_apc",
+        "sdf_wheeled_apc_mk1",
         "sdf_armored_transport",
         "sdf_transport_truck"
       ],
@@ -77,11 +77,25 @@
       }
     },
     {
-      "unitId": "sdf_militia",
+      "unitId": "sdf_trooper_mech",
       "maxCards": 4,
       "transportOptions": [
         "sdf_centurion_apc",
-        "sdf_armored_transport",
+        "sdf_wheeled_apc_mk2",
+        "sdf_wheeled_apc_mk3"
+      ],
+      "availability": {
+        "trained": 5,
+        "legend": 0,
+        "rookie": 10,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_militia",
+      "maxCards": 2,
+      "transportOptions": [
         "sdf_transport_truck"
       ],
       "availability": {
@@ -93,10 +107,25 @@
       }
     },
     {
-      "unitId": "sdf_hwt_missile",
-      "maxCards": 3,
+      "unitId": "sdf_militia_motorised",
+      "maxCards": 2,
       "transportOptions": [
-        "sdf_centurion_apc",
+        "sdf_wheeled_apc_mk1",
+        "sdf_armored_transport"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 10,
+        "elite": 0,
+        "veteran": 0
+      }
+    },
+    {
+      "unitId": "sdf_hwt_missile",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_wheeled_apc_mk1",
         "sdf_armored_transport",
         "sdf_transport_truck"
       ],
@@ -109,10 +138,25 @@
       }
     },
     {
-      "unitId": "sdf_hwt_heavy_bolter",
-      "maxCards": 3,
+      "unitId": "sdf_hwt_missile_mech",
+      "maxCards": 1,
       "transportOptions": [
         "sdf_centurion_apc",
+        "sdf_wheeled_apc_mk2"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_hwt_heavy_bolter",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_wheeled_apc_mk1",
         "sdf_armored_transport",
         "sdf_transport_truck"
       ],
@@ -120,6 +164,72 @@
         "trained": 4,
         "legend": 0,
         "rookie": 8,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_hwt_heavy_bolter_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_wheeled_apc_mk2"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_engineer_mech",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_wheeled_apc_mk2"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_wheeled_apc_mk1",
+      "maxCards": 4,
+      "notes": "Light wheeled transport",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_wheeled_apc_mk2",
+      "maxCards": 3,
+      "notes": "Medium wheeled IFV",
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_wheeled_apc_mk3",
+      "maxCards": 2,
+      "notes": "Heavy wheeled IFV",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
         "elite": 2,
         "veteran": 3
       }

@@ -118,8 +118,8 @@ export class InputManager {
     this.selectionBox = document.createElement('div');
     this.selectionBox.style.cssText = `
       position: absolute;
-      border: 1px solid #4a9eff;
-      background: rgba(74, 158, 255, 0.1);
+      border: 1px solid var(--blue-primary, #00aaff);
+      background: rgba(0, 170, 255, 0.1);
       pointer-events: none;
       display: none;
       z-index: 100;
@@ -282,6 +282,12 @@ export class InputManager {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    // Don't intercept keys when user is typing in a form field
+    const tag = (event.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return;
+    }
+
     // Update modifiers
     this.state.modifiers.shift = event.shiftKey;
     this.state.modifiers.ctrl = event.ctrlKey;
@@ -335,8 +341,10 @@ export class InputManager {
         break;
 
       case 'Tab':
-        event.preventDefault();
-        this.game.selectionManager.cycleSelectionType();
+        if (this.game.phase === GamePhase.Setup || this.game.phase === GamePhase.Battle) {
+          event.preventDefault();
+          this.game.selectionManager.cycleSelectionType();
+        }
         break;
 
       case 'KeyA':
@@ -390,11 +398,12 @@ export class InputManager {
         }
         break;
 
-      // Control groups 1-9
+      // Control groups 1-9 (only during battle phases)
       case 'Digit1': case 'Digit2': case 'Digit3':
       case 'Digit4': case 'Digit5': case 'Digit6':
       case 'Digit7': case 'Digit8': case 'Digit9':
         {
+          if (this.game.phase !== GamePhase.Setup && this.game.phase !== GamePhase.Battle) break;
           const groupNumber = parseInt(event.code.replace('Digit', ''));
           if (event.ctrlKey) {
             // Ctrl+Number: Assign control group
@@ -445,6 +454,12 @@ export class InputManager {
   }
 
   private onKeyUp(event: KeyboardEvent): void {
+    // Don't intercept keys when user is typing in a form field
+    const tag = (event.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return;
+    }
+
     this.state.modifiers.shift = event.shiftKey;
     this.state.modifiers.ctrl = event.ctrlKey;
     this.state.modifiers.alt = event.altKey;

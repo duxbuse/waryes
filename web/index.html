@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:* https://localhost:*; img-src 'self' data: blob:;" />
     <title>Stellar Siege - Planetary Conflict</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <style>
@@ -16,9 +17,8 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background: #0a0a0a;
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        color: #e0e0e0;
+        background: var(--steel-dark, #1a1a20);
+        color: #c0c0cc;
       }
 
       #game-container {
@@ -31,6 +31,11 @@
         width: 100%;
         height: 100%;
         display: block;
+      }
+
+      /* Hide Three.js canvas on menu screens so starfield is visible */
+      body:not(.battle-active) #game-canvas {
+        display: none;
       }
 
       /* UI Overlay Layer */
@@ -82,9 +87,28 @@
         display: flex;
         gap: 20px;
         padding: 10px 20px;
-        background: rgba(0, 0, 0, 0.7);
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
+        border-top: none;
+        font-family: var(--font-mono);
+      }
+      #top-bar::before {
+        content: '\250C\2500';
+        position: absolute;
+        top: 2px; left: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
+      }
+      #top-bar::after {
+        content: '\2500\2518';
+        position: absolute;
+        bottom: 2px; right: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
       }
 
       .resource {
@@ -95,18 +119,32 @@
       }
 
       .resource-value {
+        font-family: var(--font-mono);
         font-weight: bold;
-        color: #ffd700;
+        color: var(--amber);
       }
 
-      /* Score Display */
+      /* Score Display (legacy - scores now inline in battle bar) */
       #score-display {
+        display: none;
+      }
+      #score-display::before {
+        content: '\250C\2500';
         position: absolute;
-        top: 10px;
-        right: 10px;
-        padding: 10px 15px;
-        background: rgba(0, 0, 0, 0.7);
-        border-radius: 8px;
+        top: 2px; left: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
+      }
+      #score-display::after {
+        content: '\2500\2518';
+        position: absolute;
+        bottom: 2px; right: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
       }
 
       .score-team {
@@ -116,8 +154,8 @@
         margin: 5px 0;
       }
 
-      .team-blue { color: #4a9eff; }
-      .team-red { color: #ff4a4a; }
+      .team-blue { color: var(--blue-primary); }
+      .team-red { color: var(--red-glow); }
 
       /* Selection Panel - Bottom Left */
       #selection-panel {
@@ -126,10 +164,28 @@
         left: 10px;
         min-width: 200px;
         max-width: 350px;
-        background: rgba(0, 0, 0, 0.8);
-        border-radius: 8px;
-        padding: 10px;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
+        padding: 9px 13px;
         display: none;
+      }
+      #selection-panel::before {
+        content: '\250C\2500';
+        position: absolute;
+        top: 2px; left: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
+      }
+      #selection-panel::after {
+        content: '\2500\2518';
+        position: absolute;
+        bottom: 2px; right: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
       }
 
       #selection-panel.visible {
@@ -137,14 +193,17 @@
       }
 
       .selection-header {
+        font-family: var(--font-heading);
         font-size: 14px;
         font-weight: bold;
         margin-bottom: 8px;
         padding-bottom: 5px;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--steel-highlight);
+        color: var(--blue-primary);
       }
 
       .selection-stats {
+        font-family: var(--font-mono);
         font-size: 12px;
         line-height: 1.6;
       }
@@ -156,8 +215,8 @@
         right: 10px;
         width: 250px;
         max-height: calc(100% - 120px);
-        background: rgba(0, 0, 0, 0.8);
-        border-radius: 8px;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
         padding: 10px;
         overflow-y: auto;
         display: none;
@@ -167,38 +226,38 @@
         display: block;
       }
 
-      .unit-card {
+      #battle-unit-bar .unit-card {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 8px;
         margin: 5px 0;
         background: rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
+        border: 1px solid transparent;
         cursor: pointer;
-        transition: background 0.2s;
+        transition: all 0.2s;
       }
 
-      .unit-card:hover {
-        background: rgba(255, 255, 255, 0.1);
+      #battle-unit-bar .unit-card:hover {
+        background: rgba(0, 170, 255, 0.1);
+        border-color: var(--steel-highlight);
       }
 
-      .unit-card:focus-visible {
-        outline: 2px solid #4a9eff;
+      #battle-unit-bar .unit-card:focus-visible {
+        outline: 2px solid var(--blue-primary);
         outline-offset: 2px;
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(0, 170, 255, 0.1);
       }
 
-      .unit-card.selected {
-        background: rgba(74, 158, 255, 0.3);
-        border: 1px solid #4a9eff;
+      #battle-unit-bar .unit-card.selected {
+        background: rgba(0, 170, 255, 0.2);
+        border: 1px solid var(--blue-primary);
       }
 
       .unit-icon {
         width: 40px;
         height: 40px;
-        background: #333;
-        border-radius: 4px;
+        background: var(--steel-highlight);
       }
 
       .unit-info {
@@ -206,18 +265,21 @@
       }
 
       .unit-name {
+        font-family: var(--font-heading);
         font-size: 12px;
         font-weight: bold;
       }
 
       .unit-cost {
+        font-family: var(--font-mono);
         font-size: 11px;
-        color: #ffd700;
+        color: var(--amber);
       }
 
       .unit-count {
+        font-family: var(--font-mono);
         font-size: 11px;
-        color: #888;
+        color: var(--steel-bright);
       }
 
       /* Minimap - Bottom Right */
@@ -227,54 +289,74 @@
         right: 10px;
         width: 200px;
         height: 200px;
-        background: rgba(0, 0, 0, 0.8);
-        border-radius: 8px;
-        border: 2px solid #333;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
+      }
+      #minimap::before {
+        content: '\250C\2500';
+        position: absolute;
+        top: 2px; left: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
+        z-index: 1;
+      }
+      #minimap::after {
+        content: '\2500\2518';
+        position: absolute;
+        bottom: 2px; right: 4px;
+        font-size: 7px;
+        color: var(--gold-dim);
+        opacity: 0.4;
+        line-height: 1;
+        z-index: 1;
       }
 
-      /* Phase Indicator */
+      /* Phase Indicator - sits inside battle-bar-footer */
       #phase-indicator {
-        position: absolute;
-        top: 90px;
-        left: 10px;
-        padding: 8px 15px;
-        background: rgba(0, 0, 0, 0.7);
-        border-radius: 8px;
-        font-size: 14px;
+        padding: 3px 8px;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
+        font-family: var(--font-mono);
+        font-size: 11px;
       }
 
       #phase-indicator.hidden {
         display: none;
       }
 
-      .phase-setup { color: #ffd700; }
-      .phase-battle { color: #4aff4a; }
+      .phase-setup { color: var(--amber); }
+      .phase-battle { color: var(--cyan); }
 
-      /* Start Battle Button */
+      /* Start Battle Button - sits inside battle-bar-footer */
       #start-battle-btn {
-        position: absolute;
-        top: 60px;
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 12px 30px;
-        font-size: 16px;
-        font-weight: bold;
-        background: linear-gradient(135deg, #4a9eff, #2070cc);
-        color: white;
+        padding: 5px 16px;
+        font-family: var(--font-heading);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        background: linear-gradient(135deg, var(--amber-dim), #5e4000);
+        color: var(--amber-light);
+        text-shadow: 0 0 8px rgba(255, 136, 0, 0.3);
         border: none;
-        border-radius: 8px;
         cursor: pointer;
         display: none;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
       }
 
       #start-battle-btn:hover {
-        transform: translateX(-50%) scale(1.05);
-        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+        transform: scale(1.03);
+        background: linear-gradient(135deg, #6e5000, var(--amber-dim));
+        color: var(--amber-glow);
+        text-shadow: 0 0 20px rgba(255, 204, 68, 0.6);
+        box-shadow: 0 0 30px rgba(255, 136, 0, 0.2);
       }
 
       #start-battle-btn:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--amber);
         outline-offset: 2px;
       }
 
@@ -301,15 +383,26 @@
       }
 
       .pause-container {
-        background: rgba(20, 20, 40, 0.95);
-        border: 2px solid #4a9eff;
-        border-radius: 12px;
+        background: linear-gradient(175deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
         padding: 30px 50px;
         text-align: center;
+        box-shadow: 0 0 40px rgba(0, 170, 255, 0.15);
+        position: relative;
+        animation: borderFlicker 7s ease-in-out infinite;
+      }
+      .pause-container::before {
+        content: '';
+        position: absolute;
+        inset: -4px;
+        border: 1px solid var(--gold-dim);
+        pointer-events: none;
+        opacity: 0.3;
       }
 
       .pause-container h2 {
-        color: #4a9eff;
+        font-family: var(--font-heading);
+        color: var(--blue-primary);
         margin: 0 0 25px 0;
         font-size: 28px;
         letter-spacing: 3px;
@@ -319,36 +412,38 @@
         display: block;
         width: 200px;
         margin: 10px auto;
-        padding: 12px 20px;
-        font-size: 16px;
-        font-weight: bold;
-        background: rgba(74, 158, 255, 0.2);
-        border: 1px solid rgba(74, 158, 255, 0.5);
-        color: #e0e0e0;
-        border-radius: 6px;
+        padding: 13px 24px;
+        font-family: var(--font-heading);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-light));
+        border: none;
+        color: var(--blue-primary);
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
       }
 
       .pause-btn:hover {
-        background: rgba(74, 158, 255, 0.4);
-        border-color: #4a9eff;
-        transform: scale(1.02);
+        background: linear-gradient(135deg, var(--steel-light), var(--steel-highlight));
+        color: var(--blue-glow);
+        text-shadow: 0 0 16px rgba(0, 204, 255, 0.5);
+        transform: scale(1.03);
       }
 
       .pause-btn:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--blue-primary);
         outline-offset: 2px;
       }
 
       .pause-btn.danger {
-        background: rgba(255, 74, 74, 0.2);
-        border-color: rgba(255, 74, 74, 0.5);
+        color: var(--red-glow);
       }
 
       .pause-btn.danger:hover {
-        background: rgba(255, 74, 74, 0.4);
-        border-color: #ff4a4a;
+        text-shadow: 0 0 16px rgba(255, 34, 0, 0.5);
       }
 
       .pause-players-section {
@@ -359,7 +454,7 @@
         margin-bottom: 25px;
         padding: 15px;
         background: rgba(0, 0, 0, 0.3);
-        border-radius: 8px;
+        border: 1px solid var(--steel-highlight);
       }
 
       .pause-team {
@@ -369,24 +464,25 @@
       }
 
       .pause-team-header {
-        font-size: 14px;
-        font-weight: bold;
+        font-family: var(--font-heading);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 2px;
         padding: 6px 12px;
-        border-radius: 4px;
         margin-bottom: 10px;
         text-align: center;
       }
 
       .pause-team-header.team-blue {
-        background: rgba(74, 158, 255, 0.3);
-        color: #4a9eff;
-        border: 1px solid rgba(74, 158, 255, 0.5);
+        background: rgba(0, 170, 255, 0.2);
+        color: var(--blue-primary);
+        border: 1px solid rgba(0, 170, 255, 0.4);
       }
 
       .pause-team-header.team-red {
-        background: rgba(255, 74, 74, 0.3);
-        color: #ff4a4a;
-        border: 1px solid rgba(255, 74, 74, 0.5);
+        background: rgba(255, 34, 0, 0.2);
+        color: var(--red-glow);
+        border: 1px solid rgba(255, 34, 0, 0.4);
       }
 
       .pause-vs {
@@ -405,16 +501,16 @@
       .pause-player-card {
         background: rgba(30, 30, 50, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
         padding: 8px 12px;
       }
 
       .pause-player-card.is-you {
-        border-color: rgba(74, 158, 255, 0.5);
-        background: rgba(74, 158, 255, 0.1);
+        border-color: rgba(0, 170, 255, 0.4);
+        background: rgba(0, 170, 255, 0.08);
       }
 
       .pause-player-name {
+        font-family: var(--font-heading);
         font-size: 13px;
         font-weight: bold;
         color: #fff;
@@ -422,18 +518,19 @@
       }
 
       .pause-player-name .you-badge {
+        font-family: var(--font-mono);
         font-size: 10px;
-        background: #4a9eff;
+        background: var(--blue-primary);
         color: #000;
         padding: 1px 5px;
-        border-radius: 3px;
         margin-left: 6px;
         font-weight: normal;
       }
 
       .pause-player-deck {
+        font-family: var(--font-mono);
         font-size: 11px;
-        color: #888;
+        color: var(--steel-bright);
       }
 
       .pause-player-deck .deck-name {
@@ -464,36 +561,49 @@
       }
 
       .victory-text {
+        font-family: var(--font-heading);
         font-size: 48px;
         font-weight: bold;
         margin-bottom: 10px;
+        letter-spacing: 4px;
       }
 
-      .victory-blue { color: #4a9eff; }
-      .victory-red { color: #ff4a4a; }
+      .victory-blue { color: var(--blue-primary); }
+      .victory-red { color: var(--red-glow); }
 
       .victory-subtitle {
+        font-family: var(--font-body);
         font-size: 18px;
-        color: #888;
+        color: var(--gold);
         margin-bottom: 30px;
         font-style: italic;
       }
 
       .victory-stats {
-        background: rgba(30, 30, 50, 0.9);
-        border: 1px solid #333;
-        border-radius: 10px;
+        background: linear-gradient(175deg, var(--steel-mid), var(--steel-dark));
+        border: 1px solid var(--steel-highlight);
         padding: 20px 40px;
         margin-bottom: 30px;
         min-width: 400px;
+        position: relative;
+      }
+      .victory-stats::before {
+        content: '';
+        position: absolute;
+        inset: -4px;
+        border: 1px solid var(--gold-dim);
+        pointer-events: none;
+        opacity: 0.3;
       }
 
       .victory-stats h3 {
-        color: #4a9eff;
+        font-family: var(--font-heading);
+        color: var(--blue-primary);
         margin: 0 0 15px 0;
         font-size: 16px;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--steel-highlight);
         padding-bottom: 10px;
+        letter-spacing: 2px;
       }
 
       .victory-score {
@@ -519,10 +629,12 @@
       }
 
       .stat-row .stat-label {
+        font-family: var(--font-body);
         color: #aaa;
       }
 
       .stat-row .stat-value {
+        font-family: var(--font-mono);
         color: #fff;
         font-weight: bold;
       }
@@ -536,27 +648,29 @@
       .highlight-card {
         flex: 1;
         background: rgba(0, 0, 0, 0.3);
-        border-radius: 8px;
         padding: 12px;
         text-align: center;
       }
 
       .hero-card {
-        border: 1px solid rgba(255, 215, 0, 0.5);
+        border: 1px solid rgba(196, 164, 74, 0.5);
       }
 
       .efficient-card {
-        border: 1px solid rgba(74, 255, 74, 0.5);
+        border: 1px solid rgba(0, 255, 204, 0.5);
       }
 
       .highlight-title {
+        font-family: var(--font-mono);
         font-size: 11px;
-        color: #888;
+        color: var(--steel-bright);
         text-transform: uppercase;
         margin-bottom: 5px;
+        letter-spacing: 1px;
       }
 
       .highlight-unit {
+        font-family: var(--font-heading);
         font-size: 14px;
         font-weight: bold;
         color: #e0e0e0;
@@ -564,8 +678,9 @@
       }
 
       .highlight-stat {
+        font-family: var(--font-mono);
         font-size: 12px;
-        color: #ffd700;
+        color: var(--amber);
       }
 
       .top-killers-list {
@@ -579,22 +694,24 @@
         justify-content: space-between;
         padding: 5px 10px;
         background: rgba(0, 0, 0, 0.2);
-        border-radius: 4px;
         font-size: 13px;
       }
 
       .killer-rank {
-        color: #888;
+        font-family: var(--font-mono);
+        color: var(--steel-bright);
         width: 20px;
       }
 
       .killer-name {
+        font-family: var(--font-heading);
         flex: 1;
         color: #e0e0e0;
       }
 
       .killer-kills {
-        color: #ffd700;
+        font-family: var(--font-mono);
+        color: var(--amber);
       }
 
       .victory-buttons {
@@ -603,43 +720,58 @@
       }
 
       .victory-btn {
-        padding: 12px 30px;
-        font-size: 16px;
+        padding: 13px 24px;
+        font-size: 14px;
         font-weight: bold;
         cursor: pointer;
-        border-radius: 6px;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
       }
 
       .victory-btn-primary {
-        background: linear-gradient(135deg, #4a9eff, #2070cc);
-        color: white;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, var(--amber-dim), #5e4000);
+        color: var(--amber-light);
+        text-shadow: 0 0 8px rgba(255, 136, 0, 0.3);
         border: none;
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
       }
 
       .victory-btn-primary:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
+        transform: scale(1.03);
+        background: linear-gradient(135deg, #6e5000, var(--amber-dim));
+        color: var(--amber-glow);
+        text-shadow: 0 0 20px rgba(255, 204, 68, 0.6);
+        box-shadow: 0 0 30px rgba(255, 136, 0, 0.2);
       }
 
       .victory-btn-primary:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--amber);
         outline-offset: 2px;
       }
 
       .victory-btn-secondary {
-        background: rgba(255, 255, 255, 0.1);
-        color: #e0e0e0;
-        border: 1px solid #555;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, var(--steel-mid), var(--steel-light));
+        color: var(--blue-primary);
+        border: none;
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
       }
 
       .victory-btn-secondary:hover {
-        background: rgba(255, 255, 255, 0.2);
-        border-color: #888;
+        background: linear-gradient(135deg, var(--steel-light), var(--steel-highlight));
+        color: var(--blue-glow);
+        text-shadow: 0 0 16px rgba(0, 204, 255, 0.5);
+        transform: scale(1.03);
       }
 
       .victory-btn-secondary:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--blue-primary);
         outline-offset: 2px;
       }
 
@@ -650,7 +782,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: #0a0a0a;
+        background: var(--steel-dark);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -663,23 +795,25 @@
       }
 
       .loading-title {
+        font-family: var(--font-heading);
         font-size: 32px;
         font-weight: bold;
         margin-bottom: 20px;
-        color: #4a9eff;
+        color: var(--blue-primary);
+        letter-spacing: 4px;
       }
 
       .loading-bar {
         width: 300px;
-        height: 4px;
-        background: #333;
-        border-radius: 2px;
+        height: 6px;
+        background: var(--steel-dark);
+        border: 1px solid var(--steel-highlight);
         overflow: hidden;
       }
 
       .loading-progress {
         height: 100%;
-        background: #4a9eff;
+        background: var(--blue-primary);
         width: 0%;
         transition: width 0.3s;
       }
@@ -688,12 +822,13 @@
       #battle-unit-bar {
         position: absolute;
         top: 0;
-        left: 10px;
-        right: calc(50% + 100px);
+        left: 0;
         display: none;
-        background: rgba(0, 0, 0, 0.85);
-        border-radius: 0 0 8px 8px;
-        padding: 8px 12px;
+        background: linear-gradient(180deg, var(--steel-mid), var(--steel-dark));
+        border-bottom: 1px solid var(--steel-highlight);
+        border-right: 1px solid var(--steel-highlight);
+        border-bottom-right-radius: 4px;
+        padding: 3px 8px;
         z-index: 10;
       }
 
@@ -701,40 +836,93 @@
         display: block;
       }
 
+      #battle-info-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: none;
+        background: linear-gradient(180deg, var(--steel-mid), var(--steel-dark));
+        border-bottom: 1px solid var(--steel-highlight);
+        border-left: 1px solid var(--steel-highlight);
+        border-bottom-left-radius: 4px;
+        padding: 4px 10px;
+        z-index: 10;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: #c0c0cc;
+      }
+
+      #battle-info-panel.visible {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+
+      #battle-info-panel .resource-value {
+        font-weight: bold;
+        color: var(--amber);
+      }
+
+      #battle-info-panel .score-inline {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding-left: 10px;
+        border-left: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      #battle-info-panel .score-divider {
+        color: var(--steel-bright);
+        opacity: 0.4;
+      }
+
+      /* Header row inside battle unit bar: just tabs now */
+      .battle-bar-header {
+        margin-bottom: 2px;
+      }
+
+      /* Footer row inside battle unit bar: phase left, start button right */
+      .battle-bar-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 2px;
+        padding-top: 2px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
       #battle-unit-tabs {
         display: flex;
-        gap: 4px;
-        margin-bottom: 6px;
-        padding-bottom: 6px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        gap: 2px;
+        flex-wrap: wrap;
       }
 
       .battle-tab {
-        padding: 4px 8px;
+        padding: 2px 6px;
+        font-family: var(--font-mono);
         font-size: 10px;
         font-weight: bold;
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-        color: #888;
+        color: var(--steel-bright);
         cursor: pointer;
         transition: all 0.15s;
       }
 
       .battle-tab:hover {
-        background: rgba(74, 158, 255, 0.15);
+        background: rgba(0, 170, 255, 0.12);
         color: #e0e0e0;
       }
 
       .battle-tab:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--blue-primary);
         outline-offset: 2px;
       }
 
       .battle-tab.active {
-        background: rgba(74, 158, 255, 0.3);
-        border-color: #4a9eff;
-        color: #4a9eff;
+        background: rgba(0, 170, 255, 0.2);
+        border-color: var(--blue-primary);
+        color: var(--blue-primary);
       }
 
       .battle-tab .tab-count {
@@ -755,8 +943,9 @@
       #battle-unit-cards {
         display: flex;
         flex-direction: row;
-        gap: 8px;
+        gap: 4px;
         align-items: center;
+        overflow-x: auto;
       }
 
       #battle-unit-bar::-webkit-scrollbar {
@@ -764,12 +953,12 @@
       }
 
       #battle-unit-bar::-webkit-scrollbar-track {
-        background: #1a1a2a;
+        background: var(--steel-dark);
         border-radius: 3px;
       }
 
       #battle-unit-bar::-webkit-scrollbar-thumb {
-        background: #4a9eff;
+        background: var(--blue-dim);
         border-radius: 3px;
       }
 
@@ -777,24 +966,23 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        min-width: 70px;
-        padding: 6px 8px;
+        min-width: 64px;
+        padding: 2px 5px;
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
         cursor: pointer;
         transition: all 0.15s;
         position: relative;
       }
 
       .battle-unit-card:hover {
-        background: rgba(74, 158, 255, 0.2);
-        border-color: rgba(74, 158, 255, 0.5);
+        background: rgba(0, 170, 255, 0.15);
+        border-color: rgba(0, 170, 255, 0.4);
         transform: translateY(-2px);
       }
 
       .battle-unit-card:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--blue-primary);
         outline-offset: 2px;
       }
 
@@ -810,9 +998,9 @@
       }
 
       .battle-unit-card.selected {
-        background: rgba(74, 158, 255, 0.3);
-        border-color: #4a9eff;
-        box-shadow: 0 0 8px rgba(74, 158, 255, 0.5);
+        background: rgba(0, 170, 255, 0.2);
+        border-color: var(--blue-primary);
+        box-shadow: 0 0 8px rgba(0, 170, 255, 0.3);
       }
 
       .battle-unit-card.too-expensive {
@@ -837,46 +1025,74 @@
         transform: none;
       }
 
-      .battle-unit-card .unit-count-badge {
-        position: absolute;
-        top: -4px;
-        right: -4px;
-        background: #4a9eff;
-        color: white;
-        font-size: 10px;
-        font-weight: bold;
-        min-width: 16px;
-        height: 16px;
-        border-radius: 8px;
+      .battle-unit-card .unit-cost-row {
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 0 4px;
+        gap: 3px;
+        line-height: 1.2;
+      }
+
+      .battle-unit-card .unit-count-badge {
+        color: var(--blue-primary);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: bold;
       }
 
       .battle-unit-card .unit-count-badge.empty {
-        background: #666;
+        color: var(--steel-highlight);
       }
 
       .battle-unit-card .unit-name {
-        font-size: 11px;
+        font-family: var(--font-heading);
+        font-size: 10px;
         font-weight: bold;
         color: #e0e0e0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 65px;
+        max-width: 120px;
         text-align: center;
+        line-height: 1.2;
       }
 
       .battle-unit-card .unit-cost {
-        font-size: 10px;
-        color: #ffd700;
-        margin-top: 2px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--amber);
+        line-height: 1.2;
       }
     </style>
   </head>
   <body>
+    <!-- Background Canvases -->
+    <canvas id="starfield-canvas"></canvas>
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- Global Overlays (hidden during battle via body.battle-active) -->
+    <div class="crt-vignette"></div>
+    <div class="scan-lines"></div>
+    <div class="hud-crosshair">
+      <div class="line h1"></div>
+      <div class="line v1"></div>
+      <div class="line h2"></div>
+      <div class="line h3"></div>
+      <div class="line v2"></div>
+      <div class="line v3"></div>
+    </div>
+    <div class="warp-flash"></div>
+    <div class="reality-cracks">
+      <div class="reality-crack"></div>
+      <div class="reality-crack"></div>
+      <div class="reality-crack"></div>
+    </div>
+
+    <!-- Viewport Sector Coordinates -->
+    <div class="viewport-coords coord-tl">SEC-VII &bull; GRID 04.1<br>VOID STATUS: NOMINAL</div>
+    <div class="viewport-coords coord-tr">AUSPEX UPLINK: ACTIVE<br>GRAVITY INTERFERENCE: 0.02%</div>
+    <div class="viewport-coords coord-bl">HULL INTEGRITY: 100%<br>ZEDLLAR FIELD: STABLE</div>
+    <div class="viewport-coords coord-br">ASTROPATH CHOIR: ONLINE<br>PRAY FOR MERCY</div>
+
     <div id="game-container">
       <canvas id="game-canvas"></canvas>
 
@@ -896,30 +1112,33 @@
           </div>
         </div>
 
-        <!-- Battle Unit Bar - Quick unit access during battle phase -->
+        <!-- Battle Unit Bar - Quick unit access during setup/battle phases -->
+        <div id="battle-info-panel">
+          <span>Credits: <span class="resource-value" id="bar-credits-value">1500</span></span>
+          <span>Income: <span class="resource-value" id="bar-income-value">+10/tick</span></span>
+          <span class="score-inline">
+            <span class="team-blue">Blue: <span id="score-blue">0</span></span>
+            <span class="score-divider">|</span>
+            <span class="team-red">Red: <span id="score-red">0</span></span>
+          </span>
+        </div>
         <div id="battle-unit-bar">
-          <div id="battle-unit-tabs"></div>
+          <div class="battle-bar-header">
+            <div id="battle-unit-tabs"></div>
+          </div>
           <div id="battle-unit-cards"></div>
-        </div>
-
-        <!-- Score Display -->
-        <div id="score-display">
-          <div class="score-team">
-            <span class="team-blue">Blue:</span>
-            <span class="team-blue" id="score-blue">0</span>
-          </div>
-          <div class="score-team">
-            <span class="team-red">Red:</span>
-            <span class="team-red" id="score-red">0</span>
-          </div>
-          <div style="font-size: 11px; color: #666; margin-top: 5px;">
-            First to 2000 wins
+          <div class="battle-bar-footer">
+            <!-- Phase Indicator -->
+            <div id="phase-indicator">
+              Phase: <span id="phase-text" class="phase-setup">SETUP</span>
+            </div>
+            <!-- Start Battle Button -->
+            <button id="start-battle-btn">START BATTLE</button>
           </div>
         </div>
 
-        <!-- Phase Indicator -->
-        <div id="phase-indicator">
-          Phase: <span id="phase-text" class="phase-setup">SETUP</span>
+        <!-- Score Display (legacy, hidden - scores now in battle bar) -->
+        <div id="score-display" style="display:none;">
         </div>
 
         <!-- Selection Panel -->
@@ -936,11 +1155,9 @@
 
         <!-- Minimap -->
         <div id="minimap">
+          <div class="radar-label">AUSPEX ARRAY</div>
           <canvas id="minimap-canvas" width="200" height="200"></canvas>
         </div>
-
-        <!-- Start Battle Button -->
-        <button id="start-battle-btn">START BATTLE</button>
 
         <!-- Call Reinforcements Button (DEPRECATED - replaced by battle-unit-bar)
         <button id="call-reinforcements-btn" style="

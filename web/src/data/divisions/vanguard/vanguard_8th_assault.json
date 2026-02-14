@@ -56,10 +56,48 @@
   },
   "roster": [
     {
-      "unitId": "vanguard_jetpack_squad",
-      "maxCards": 6,
+      "unitId": "vanguard_command_skimmer",
+      "maxCards": 1,
+      "availability": {
+        "rookie": 0,
+        "trained": 4,
+        "veteran": 2,
+        "elite": 1,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_supply_transport",
+      "maxCards": 2,
+      "availability": {
+        "rookie": 16,
+        "trained": 12,
+        "veteran": 8,
+        "elite": 0,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_plasma_mortar",
+      "maxCards": 1,
       "transportOptions": [
-        "vanguard_apc"
+        "vanguard_storm_transport",
+        "vanguard_supply_transport"
+      ],
+      "availability": {
+        "rookie": 8,
+        "trained": 6,
+        "veteran": 4,
+        "elite": 2,
+        "legend": 0
+      }
+    },
+    {
+      "unitId": "vanguard_jetpack_squad",
+      "maxCards": 4,
+      "transportOptions": [
+        "vanguard_storm_transport",
+        "vanguard_apc_mk1"
       ],
       "availability": {
         "trained": 12,
@@ -70,9 +108,24 @@
       }
     },
     {
+      "unitId": "vanguard_jetpack_assault",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_storm_transport"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
       "unitId": "vanguard_infantry_fusion",
       "maxCards": 2,
       "transportOptions": [
+        "vanguard_storm_transport",
         "vanguard_apc"
       ],
       "availability": {
@@ -87,8 +140,63 @@
       "unitId": "vanguard_heavy_support_auto",
       "maxCards": 1,
       "transportOptions": [
+        "vanguard_storm_transport",
         "vanguard_apc"
       ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_storm_transport",
+        "vanguard_apc_mk1"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_infantry_ion",
+      "maxCards": 2,
+      "transportOptions": [
+        "vanguard_storm_transport",
+        "vanguard_apc"
+      ],
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "vanguard_storm_transport",
+      "maxCards": 3,
+      "notes": "Fast armed transport",
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "vanguard_apc_mk1",
+      "maxCards": 3,
+      "notes": "Light armed transport",
       "availability": {
         "trained": 12,
         "legend": 0,
@@ -166,34 +274,6 @@
     {
       "unitId": "vanguard_missile_tank",
       "maxCards": 2,
-      "availability": {
-        "trained": 12,
-        "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
-      }
-    },
-    {
-      "unitId": "vanguard_infantry",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
-      "availability": {
-        "trained": 12,
-        "legend": 0,
-        "rookie": 16,
-        "elite": 0,
-        "veteran": 8
-      }
-    },
-    {
-      "unitId": "vanguard_infantry_ion",
-      "maxCards": 2,
-      "transportOptions": [
-        "vanguard_apc"
-      ],
       "availability": {
         "trained": 12,
         "legend": 0,

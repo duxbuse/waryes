@@ -1,0 +1,42 @@
+{
+  "id": "vanguard_supply_transport",
+  "name": "Supply Transport",
+  "cost": 30,
+  "icon": "assets/icons/categories/truck.svg",
+  "health": 5,
+  "speed": {
+    "road": 75,
+    "offRoad": 55,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 4,
+    "side": 3,
+    "rear": 2,
+    "top": 1
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 700,
+    "offRoad": 500
+  },
+  "optics": "Poor",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_light_pulse_turret",
+      "count": 1,
+      "maxAmmo": 20,
+      "turretMounted": true
+    }
+  ],
+  "category": "LOG",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 12,
+  "canBeTransported": false,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

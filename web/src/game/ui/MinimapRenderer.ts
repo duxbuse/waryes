@@ -40,6 +40,10 @@ export class MinimapRenderer {
   private lastRenderTime = 0;
   private readonly MAX_INDICATORS = 50;
 
+  // Cached terrain canvas (static - only redrawn on map change)
+  private terrainCache: HTMLCanvasElement | null = null;
+  private terrainCacheDirty = true;
+
   // Colors - dynamic based on biome
   private COLORS = {
     background: '#0a0a0a',
@@ -51,8 +55,8 @@ export class MinimapRenderer {
     hill: '#4a5a3a',
 
     // Teams
-    friendly: '#4a9eff',
-    enemy: '#ff4a4a',
+    friendly: '#00aaff',
+    enemy: '#ff4444',
     neutral: '#888888',
 
     // UI
@@ -136,6 +140,7 @@ export class MinimapRenderer {
     this.map = map;
     this.calculateScale();
     this.applyBiomeColors(map.biome);
+    this.terrainCacheDirty = true; // Invalidate terrain cache on new map
   }
 
   /**
@@ -289,9 +294,39 @@ export class MinimapRenderer {
   private renderTerrain(): void {
     if (!this.map) return;
 
-    const ctx = this.ctx;
+    // Terrain is static — render to offscreen cache once, then blit each frame
+    if (this.terrainCacheDirty || !this.terrainCache) {
+      this.rebuildTerrainCache();
+      this.terrainCacheDirty = false;
+    }
+
+    if (this.terrainCache) {
+      this.ctx.drawImage(this.terrainCache, 0, 0);
+    }
+  }
+
+  /**
+   * Rebuild the offscreen terrain cache canvas (called once per map change)
+   * Replaces 65K+ fillRect calls per frame with a single drawImage blit
+   */
+  private rebuildTerrainCache(): void {
+    if (!this.map) return;
+
     const terrain = this.map.terrain;
-    const cellSize = this.map.cellSize; // Use actual cell size from map
+    const cellSize = this.map.cellSize;
+
+    // Create offscreen canvas matching the terrain area dimensions
+    const cacheWidth = Math.ceil(this.map.width * this.pixelsPerMeter);
+    const cacheHeight = Math.ceil(this.map.height * this.pixelsPerMeter);
+
+    if (!this.terrainCache) {
+      this.terrainCache = document.createElement('canvas');
+    }
+    this.terrainCache.width = cacheWidth;
+    this.terrainCache.height = cacheHeight;
+
+    const cacheCtx = this.terrainCache.getContext('2d');
+    if (!cacheCtx) return;
 
     for (let z = 0; z < terrain.length; z++) {
       for (let x = 0; x < terrain[z]!.length; x++) {
@@ -307,9 +342,8 @@ export class MinimapRenderer {
         const pixelY = z * cellSize * this.pixelsPerMeter;
         const pixelSize = cellSize * this.pixelsPerMeter;
 
-        // Minimap terrain is always fully visible - only enemy units are hidden by fog of war
-        ctx.fillStyle = color;
-        ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
+        cacheCtx.fillStyle = color;
+        cacheCtx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
       }
     }
   }

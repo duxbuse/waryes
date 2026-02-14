@@ -246,7 +246,7 @@ export class SelectionManager {
       // Check if unit is a transport with passengers
       if (unit.transportCapacity > 0) {
         const passengers = this.game.transportManager.getPassengers(unit);
-        statsHtml += `<div style="margin-top: 4px; color: #4a9eff;">🚚 Passengers: ${passengers.length}/${unit.transportCapacity}</div>`;
+        statsHtml += `<div style="margin-top: 4px; color: var(--blue-primary, #00aaff);">🚚 Passengers: ${passengers.length}/${unit.transportCapacity}</div>`;
       }
 
       // Add weapon stats

@@ -1,0 +1,16 @@
+{
+  "name": "Light Pulse Turret",
+  "range": 400,
+  "penetration": 5,
+  "damage": 1,
+  "suppression": 8,
+  "rateOfFire": 80,
+  "accuracy": 0.5,
+  "aimTime": 0.6,
+  "reloadTime": 2,
+  "salvoLength": 4,
+  "supplyCost": 2,
+  "id": "vanguard_light_pulse_turret",
+  "isAntiAir": false,
+  "canTargetGround": true
+}

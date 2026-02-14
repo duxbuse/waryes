@@ -158,6 +158,14 @@ export class UnitManager {
   }
 
   /**
+   * Find the Unit wrapper for a given SimUnit instance.
+   * Used by the SimGameContext adapter to bridge sim→rendering layer.
+   */
+  findUnitBySim(simUnit: { id: string }): Unit | null {
+    return this.units.get(simUnit.id) || null;
+  }
+
+  /**
    * Get all units (optionally filtered by team)
    * Returns cached array for performance - do not modify!
    */

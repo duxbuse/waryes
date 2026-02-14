@@ -114,7 +114,6 @@ export class DeploymentManager {
           width: 260px;
           max-height: calc(100% - 180px);
           background: rgba(0, 0, 0, 0.85);
-          border-radius: 8px;
           padding: 10px;
           overflow: hidden;
           display: flex;
@@ -135,8 +134,9 @@ export class DeploymentManager {
         }
 
         .credits-display {
+          font-family: var(--font-mono, monospace);
           font-size: 16px;
-          color: #ffd700;
+          color: var(--amber, #ff8800);
         }
 
         .shift-hint {
@@ -158,18 +158,17 @@ export class DeploymentManager {
           border: 1px solid #333;
           color: #888;
           cursor: pointer;
-          border-radius: 4px;
         }
 
         .deploy-cat-tab:hover {
-          background: rgba(74, 158, 255, 0.1);
+          background: rgba(0, 170, 255, 0.1);
           color: #e0e0e0;
         }
 
         .deploy-cat-tab.active {
-          background: rgba(74, 158, 255, 0.3);
-          border-color: #4a9eff;
-          color: #4a9eff;
+          background: rgba(0, 170, 255, 0.2);
+          border-color: var(--blue-primary, #00aaff);
+          color: var(--blue-primary, #00aaff);
         }
 
         .deploy-cat-tab .count {
@@ -190,20 +189,19 @@ export class DeploymentManager {
           margin: 5px 0;
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid #333;
-          border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s;
           position: relative;
         }
 
         .deploy-unit-card:hover {
-          background: rgba(74, 158, 255, 0.1);
-          border-color: #4a9eff;
+          background: rgba(0, 170, 255, 0.1);
+          border-color: var(--blue-primary, #00aaff);
         }
 
         .deploy-unit-card.selected {
-          background: rgba(74, 158, 255, 0.3);
-          border-color: #4a9eff;
+          background: rgba(0, 170, 255, 0.2);
+          border-color: var(--blue-primary, #00aaff);
         }
 
         .deploy-unit-card.all-deployed {
@@ -220,7 +218,6 @@ export class DeploymentManager {
           width: 40px;
           height: 40px;
           background: #333;
-          border-radius: 4px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -234,8 +231,7 @@ export class DeploymentManager {
           right: -4px;
           min-width: 18px;
           height: 18px;
-          background: #4a9eff;
-          border-radius: 9px;
+          background: var(--blue-primary, #00aaff);
           font-size: 11px;
           font-weight: bold;
           color: white;
@@ -265,7 +261,8 @@ export class DeploymentManager {
 
         .deploy-unit-cost {
           font-size: 12px;
-          color: #ffd700;
+          color: var(--amber, #ff8800);
+          font-family: var(--font-mono, 'Share Tech Mono', monospace);
         }
 
         .deploy-unit-status {
@@ -805,9 +802,8 @@ export class DeploymentManager {
           <div class="battle-unit-card ${allDeployed ? 'all-deployed' : ''} ${tooExpensive && !allDeployed ? 'too-expensive' : ''} ${isSelected ? 'selected' : ''}"
                data-unit-type="${stack.unitData.id}"
                title="${stack.unitData.name} - ${stack.unitData.cost} credits${allDeployed ? ' (all deployed)' : ''}">
-            <span class="unit-count-badge ${allDeployed ? 'empty' : ''}">${stack.available}</span>
-            <span class="unit-name">${stack.unitData.name.slice(0, 8)}</span>
-            <span class="unit-cost">${stack.unitData.cost}</span>
+            <span class="unit-name">${stack.unitData.name}</span>
+            <span class="unit-cost-row"><span class="unit-cost">${stack.unitData.cost}</span><span class="unit-count-badge ${allDeployed ? 'empty' : ''}">x${stack.available}</span></span>
           </div>
         `;
       }).join('');
@@ -876,6 +872,11 @@ export class DeploymentManager {
     if (topCredits) {
       topCredits.textContent = this.credits.toString();
     }
+    // Update battle-bar credits
+    const barCredits = document.getElementById('bar-credits-value');
+    if (barCredits) {
+      barCredits.textContent = this.credits.toString();
+    }
   }
 
   /**
@@ -887,6 +888,10 @@ export class DeploymentManager {
       unitBar.classList.add('visible');
       this.renderBattleUnitBar();
     }
+    const infoPanel = document.getElementById('battle-info-panel');
+    if (infoPanel) {
+      infoPanel.classList.add('visible');
+    }
   }
 
   /**
@@ -896,6 +901,10 @@ export class DeploymentManager {
     const unitBar = document.getElementById('battle-unit-bar');
     if (unitBar) {
       unitBar.classList.remove('visible');
+    }
+    const infoPanel = document.getElementById('battle-info-panel');
+    if (infoPanel) {
+      infoPanel.classList.remove('visible');
     }
   }
 

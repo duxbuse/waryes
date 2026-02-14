@@ -25,53 +25,85 @@ const __dirname = path.dirname(__filename);
 // MOCK SETUP
 // ============================================================================
 
-// Mock the Game class with all required managers
-const createMockGame = () => ({
-  unitManager: {
-    destroyUnit: vi.fn(),
-    getAllUnits: vi.fn().mockReturnValue([]),
-    getUnitsInRadius: vi.fn().mockReturnValue([]),
-  },
-  selectionManager: {
-    removeFromSelection: vi.fn(),
-  },
-  scene: {
-    add: vi.fn(),
-    remove: vi.fn(),
-  },
-  pathfindingManager: {
-    findPath: vi.fn().mockReturnValue([]),
-    findNearestReachablePosition: vi.fn().mockReturnValue(null),
-  },
-  buildingManager: {
-    findNearestBuilding: vi.fn().mockReturnValue(null),
-    hasCapacity: vi.fn().mockReturnValue(false),
-    tryGarrison: vi.fn().mockReturnValue(false),
-    ungarrison: vi.fn().mockReturnValue(null),
-    spawnDefensiveStructure: vi.fn().mockReturnValue(null),
-  },
-  transportManager: {
-    tryMount: vi.fn().mockReturnValue(false),
-    unloadAll: vi.fn().mockReturnValue([]),
-  },
-  fogOfWarManager: {
-    isEnabled: vi.fn().mockReturnValue(false),
-    isVisible: vi.fn().mockReturnValue(true),
-  },
-  visualEffectsManager: {
-    createDestructionEffect: vi.fn(),
-  },
-  audioManager: {
-    playSound: vi.fn(),
-  },
-  pathRenderer: {
-    updatePath: vi.fn(),
-    clearPath: vi.fn(),
-    updatePathQueue: vi.fn(),
-  },
+// Minimal SimGameContext mock for SimUnit construction and updates
+const createMockSimContext = () => ({
   currentMap: null,
-  getElevationAt: vi.fn().mockReturnValue(0),
-}) as unknown as Game;
+  phase: 'battle' as const,
+  rng: { next: () => 0.5 },
+  getElevationAt: () => 0,
+  getTerrainAt: () => null,
+  getWeaponData: () => undefined,
+  getUnitData: () => undefined,
+  getUnitsInRadius: () => [],
+  getAllUnits: () => [],
+  destroyUnit: vi.fn(),
+  findPath: vi.fn((_from: THREE.Vector3, to: THREE.Vector3) => [to.clone()]),
+  findNearestReachablePosition: vi.fn((_from: THREE.Vector3, to: THREE.Vector3) => to.clone()),
+  findNearestBuilding: () => null,
+  hasBuildingCapacity: () => false,
+  tryGarrison: () => false,
+  ungarrison: () => null,
+  spawnDefensiveStructure: () => null,
+  tryMount: () => false,
+  unloadAll: () => [],
+  isFogOfWarEnabled: () => false,
+  isPositionVisible: () => true,
+});
+
+// Expose simContext for assertions in tests
+let currentSimContext: ReturnType<typeof createMockSimContext>;
+
+// Mock the Game class with all required managers
+const createMockGame = () => {
+  currentSimContext = createMockSimContext();
+  return {
+    unitManager: {
+      destroyUnit: vi.fn(),
+      getAllUnits: vi.fn().mockReturnValue([]),
+      getUnitsInRadius: vi.fn().mockReturnValue([]),
+    },
+    selectionManager: {
+      removeFromSelection: vi.fn(),
+    },
+    scene: {
+      add: vi.fn(),
+      remove: vi.fn(),
+    },
+    pathfindingManager: {
+      findPath: vi.fn().mockReturnValue([]),
+      findNearestReachablePosition: vi.fn().mockReturnValue(null),
+    },
+    buildingManager: {
+      findNearestBuilding: vi.fn().mockReturnValue(null),
+      hasCapacity: vi.fn().mockReturnValue(false),
+      tryGarrison: vi.fn().mockReturnValue(false),
+      ungarrison: vi.fn().mockReturnValue(null),
+      spawnDefensiveStructure: vi.fn().mockReturnValue(null),
+    },
+    transportManager: {
+      tryMount: vi.fn().mockReturnValue(false),
+      unloadAll: vi.fn().mockReturnValue([]),
+    },
+    fogOfWarManager: {
+      isEnabled: vi.fn().mockReturnValue(false),
+      isVisible: vi.fn().mockReturnValue(true),
+    },
+    visualEffectsManager: {
+      createDestructionEffect: vi.fn(),
+    },
+    audioManager: {
+      playSound: vi.fn(),
+    },
+    pathRenderer: {
+      updatePath: vi.fn(),
+      clearPath: vi.fn(),
+      updatePathQueue: vi.fn(),
+    },
+    currentMap: null,
+    getElevationAt: vi.fn().mockReturnValue(0),
+    getSimContext: () => currentSimContext,
+  } as unknown as Game;
+};
 
 // Factory for creating test units
 const createTestUnit = (game: Game, overrides: Partial<UnitConfig> = {}): Unit => {
@@ -324,7 +356,8 @@ describe('Game Stability: Combat', () => {
 
       unit.takeDamage(50);
       expect(unit.health).toBe(0);
-      expect(mockGame.unitManager.destroyUnit).toHaveBeenCalledWith(unit);
+      // Death now goes through SimGameContext.destroyUnit (SimUnit → context)
+      expect(currentSimContext.destroyUnit).toHaveBeenCalled();
     });
 
     it('should handle multiple damage instances', () => {

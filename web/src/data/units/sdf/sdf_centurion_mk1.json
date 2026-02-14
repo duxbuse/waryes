@@ -1,0 +1,42 @@
+{
+  "id": "sdf_centurion_mk1",
+  "name": "Centurion Mk.I",
+  "cost": 35,
+  "icon": "assets/icons/units/sdf/sdf_centurion_apc.png",
+  "health": 6,
+  "speed": {
+    "road": 55,
+    "offRoad": 40,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 7,
+    "side": 5,
+    "rear": 4,
+    "top": 2
+  },
+  "fuel": 400,
+  "autonomy": {
+    "road": 500,
+    "offRoad": 350
+  },
+  "optics": "Normal",
+  "stealth": "None",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_laser_rifle_pintle",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 10,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

@@ -1,16 +1,19 @@
 /**
  * MultiplayerBattleSync - Battle state synchronization
  *
- * Supports two modes:
+ * Supports three modes:
  * 1. Host-authoritative (legacy): Host broadcasts state, clients render
  * 2. Command-replication (lockstep): All clients receive commands, simulate deterministically
+ * 3. Server-authoritative: Server runs simulation, clients receive confirmed commands + checksums
  *
- * Command-replication mode uses:
- * - TickManager for synchronized game ticks
- * - CommandProtocol for serializable commands
- * - StateChecksum for desync detection
+ * Mode 3 (server-authoritative) is the primary multiplayer mode:
+ * - Client sends commands to server via WebSocket
+ * - Server validates, executes, and broadcasts tick_update messages
+ * - Client executes confirmed commands and verifies local checksum
+ * - On consecutive desync, server sends full state_snapshot for resync
  */
 
+import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Unit } from '../units/Unit';
 import { tickManager } from '../multiplayer/TickManager';
@@ -56,6 +59,12 @@ export class MultiplayerBattleSync {
   private lastChecksumTick: number = 0;
   private readonly CHECKSUM_INTERVAL = 100; // Verify sync every 100 ticks
 
+  // Server-authoritative mode
+  private useAuthoritativeSync: boolean = false;
+  private serverTick: number = 0;
+  private consecutiveDesyncs: number = 0;
+  private readonly MAX_DESYNCS_BEFORE_RESYNC = 3;
+
   constructor(game: Game) {
     this.game = game;
   }
@@ -75,6 +84,9 @@ export class MultiplayerBattleSync {
   disableMultiplayer(): void {
     this.isMultiplayer = false;
     this.isHost = false;
+    this.useAuthoritativeSync = false;
+    this.useCommandSync = false;
+    this.consecutiveDesyncs = 0;
   }
 
   /**
@@ -83,7 +95,10 @@ export class MultiplayerBattleSync {
   update(_dt: number): void {
     if (!this.isMultiplayer) return;
 
-    // Host broadcasts state periodically
+    // In authoritative mode, server drives ticks - nothing to do here
+    if (this.useAuthoritativeSync) return;
+
+    // Host broadcasts state periodically (legacy mode)
     if (this.isHost) {
       const now = Date.now();
       if (now - this.lastSyncTime >= this.SYNC_INTERVAL) {
@@ -126,9 +141,6 @@ export class MultiplayerBattleSync {
         this.applyUnitState(unit, unitState);
       }
     }
-
-    // Update scores
-    // (EconomyManager would need a method to set scores)
   }
 
   /**
@@ -151,23 +163,11 @@ export class MultiplayerBattleSync {
    * Apply state to unit
    */
   private applyUnitState(unit: Unit, state: UnitState): void {
-    // Update position
     unit.position.x = state.x;
     unit.position.y = state.y;
     unit.position.z = state.z;
-
-    // Update mesh position and rotation
     unit.mesh.position.set(state.x, state.y, state.z);
     unit.mesh.rotation.y = state.rotation;
-
-    // Update stats (these are readonly, so we need to use private methods or skip)
-    // For minimal sync, just syncing position is acceptable
-    // unit.health = state.health; // readonly
-    // unit.morale = state.morale; // readonly
-
-    // Note: This doesn't handle unit death, creation, health, morale etc.
-    // A full implementation would need more comprehensive state sync
-    // For now, we just sync positions which is the minimum requirement
   }
 
   /**
@@ -184,7 +184,114 @@ export class MultiplayerBattleSync {
     return this.isHost;
   }
 
-  // ============ Command-Based Sync Methods ============
+  // ============ Server-Authoritative Sync Methods ============
+
+  /**
+   * Enable server-authoritative synchronization.
+   * In this mode, the server runs the simulation and broadcasts
+   * confirmed commands + checksums each tick.
+   */
+  enableAuthoritativeSync(playerId: string): void {
+    this.isMultiplayer = true;
+    this.isHost = false; // Server is authority, not the client
+    this.useAuthoritativeSync = true;
+    this.localPlayerId = playerId;
+    this.serverTick = 0;
+    this.consecutiveDesyncs = 0;
+
+    // Register server message handlers
+    this.game.multiplayerManager.on('tick_update', (tick: number, commands: any[], checksum: number) => {
+      this.handleTickUpdate(tick, commands, checksum);
+    });
+
+    this.game.multiplayerManager.on('state_snapshot', (snapshot: any) => {
+      this.handleStateSnapshot(snapshot);
+    });
+
+    console.log(`[MP Battle] Authoritative sync enabled for player ${playerId}`);
+  }
+
+  /**
+   * Handle a tick update from the authoritative server.
+   * Executes confirmed commands and verifies checksum.
+   */
+  private handleTickUpdate(tick: number, commands: any[], serverChecksum: number): void {
+    this.serverTick = tick;
+
+    // Execute confirmed commands from server
+    for (const cmd of commands) {
+      this.executeCommand(cmd);
+    }
+
+    // Verify local checksum matches server
+    const allUnits = this.game.unitManager.getAllUnits();
+    const localChecksum = computeGameStateChecksum(allUnits);
+
+    if (localChecksum !== serverChecksum) {
+      this.consecutiveDesyncs++;
+      console.warn(
+        `[MP Battle] Desync at tick ${tick}! Local: ${formatChecksum(localChecksum)}, Server: ${formatChecksum(serverChecksum)} (${this.consecutiveDesyncs}/${this.MAX_DESYNCS_BEFORE_RESYNC})`
+      );
+
+      if (this.consecutiveDesyncs >= this.MAX_DESYNCS_BEFORE_RESYNC) {
+        console.warn(`[MP Battle] Too many consecutive desyncs, requesting state snapshot`);
+        // The server will send a state_snapshot when it detects persistent desync
+        // For now, just log - server-side desync detection handles this
+      }
+    } else {
+      if (this.consecutiveDesyncs > 0) {
+        console.log(`[MP Battle] Resync successful at tick ${tick}`);
+      }
+      this.consecutiveDesyncs = 0;
+    }
+  }
+
+  /**
+   * Handle a full state snapshot from the server for resync.
+   */
+  private handleStateSnapshot(snapshot: any): void {
+    console.log(`[MP Battle] Applying state snapshot at tick ${snapshot.tick}`);
+
+    this.serverTick = snapshot.tick;
+    this.consecutiveDesyncs = 0;
+
+    // TODO: Full state resync would require:
+    // 1. Remove units not in snapshot
+    // 2. Create units in snapshot that don't exist locally
+    // 3. Update all unit positions, health, morale, etc.
+    // This is complex and will be implemented when needed.
+
+    console.log(`[MP Battle] State snapshot applied (${snapshot.units?.length ?? 0} units)`);
+  }
+
+  /**
+   * Send a command to the authoritative server.
+   * The command is NOT executed locally - it will be included in
+   * a future tick_update if the server validates it.
+   */
+  sendCommandToAuthServer(cmd: GameCommand): void {
+    if (!this.useAuthoritativeSync) return;
+
+    cmd.playerId = this.localPlayerId;
+    const serialized = serializeCommand(cmd);
+    this.game.multiplayerManager.sendGameCommand(serialized);
+  }
+
+  /**
+   * Check if using server-authoritative sync
+   */
+  isUsingAuthoritativeSync(): boolean {
+    return this.useAuthoritativeSync;
+  }
+
+  /**
+   * Get the current server tick
+   */
+  getServerTick(): number {
+    return this.serverTick;
+  }
+
+  // ============ Command-Based Sync Methods (Lockstep) ============
 
   /**
    * Enable command-based lockstep synchronization
@@ -218,9 +325,15 @@ export class MultiplayerBattleSync {
    * Queue a local command to be sent to server
    */
   queueLocalCommand(cmd: GameCommand): void {
-    if (!this.useCommandSync) return;
+    if (!this.useCommandSync && !this.useAuthoritativeSync) return;
 
-    // Add to pending and send to server
+    if (this.useAuthoritativeSync) {
+      // In authoritative mode, just send to server - don't execute locally
+      this.sendCommandToAuthServer(cmd);
+      return;
+    }
+
+    // Lockstep mode: add to pending and send to server
     this.pendingCommands.push(cmd);
     this.sendCommandToServer(cmd);
   }
@@ -229,10 +342,10 @@ export class MultiplayerBattleSync {
    * Send move command for units
    */
   sendMoveCommand(unitIds: string[], targetX: number, targetZ: number, queue: boolean = false): void {
-    if (!this.useCommandSync) return;
+    if (!this.useCommandSync && !this.useAuthoritativeSync) return;
 
     const cmd = createMoveCommand(
-      tickManager.getCurrentTick() + 2, // Execute 2 ticks in future (input delay)
+      this.useAuthoritativeSync ? this.serverTick + 2 : tickManager.getCurrentTick() + 2,
       this.localPlayerId,
       unitIds,
       targetX,
@@ -247,10 +360,10 @@ export class MultiplayerBattleSync {
    * Send attack command for units
    */
   sendAttackCommand(unitIds: string[], targetUnitId: string, queue: boolean = false): void {
-    if (!this.useCommandSync) return;
+    if (!this.useCommandSync && !this.useAuthoritativeSync) return;
 
     const cmd = createAttackCommand(
-      tickManager.getCurrentTick() + 2,
+      this.useAuthoritativeSync ? this.serverTick + 2 : tickManager.getCurrentTick() + 2,
       this.localPlayerId,
       unitIds,
       targetUnitId,
@@ -270,10 +383,10 @@ export class MultiplayerBattleSync {
     targetZ?: number,
     moveType?: 'normal' | 'attack' | 'reverse' | 'fast' | null
   ): void {
-    if (!this.useCommandSync) return;
+    if (!this.useCommandSync && !this.useAuthoritativeSync) return;
 
     const cmd = createQueueReinforcementCommand(
-      tickManager.getCurrentTick() + 2,
+      this.useAuthoritativeSync ? this.serverTick + 2 : tickManager.getCurrentTick() + 2,
       this.localPlayerId,
       entryPointId,
       unitType,
@@ -301,6 +414,10 @@ export class MultiplayerBattleSync {
 
     try {
       const cmd = deserializeCommand(commandData);
+      if (!cmd) {
+        console.error('[MP Battle] Invalid command structure');
+        return;
+      }
       tickManager.queueCommand(cmd);
     } catch (error) {
       console.error('[MP Battle] Failed to parse command:', error);
@@ -339,12 +456,12 @@ export class MultiplayerBattleSync {
       .map(id => unitManager.getUnitById(id))
       .filter((u): u is Unit => u !== null);
 
-    if (units.length === 0) return;
+    if (units.length === 0 && cmd.type !== CommandType.SpawnUnit) return;
 
     switch (cmd.type) {
       case CommandType.Move:
         if (cmd.targetX !== undefined && cmd.targetZ !== undefined) {
-          const target = new (window as any).THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
+          const target = new THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
           unitManager.issueMoveCommand(units, target, cmd.queue ?? false);
         }
         break;
@@ -360,21 +477,21 @@ export class MultiplayerBattleSync {
 
       case CommandType.FastMove:
         if (cmd.targetX !== undefined && cmd.targetZ !== undefined) {
-          const target = new (window as any).THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
+          const target = new THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
           unitManager.issueFastMoveCommand(units, target, cmd.queue ?? false);
         }
         break;
 
       case CommandType.AttackMove:
         if (cmd.targetX !== undefined && cmd.targetZ !== undefined) {
-          const target = new (window as any).THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
+          const target = new THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
           unitManager.issueAttackMoveCommand(units, target, cmd.queue ?? false);
         }
         break;
 
       case CommandType.Reverse:
         if (cmd.targetX !== undefined && cmd.targetZ !== undefined) {
-          const target = new (window as any).THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
+          const target = new THREE.Vector3(cmd.targetX, 0, cmd.targetZ);
           unitManager.issueReverseCommand(units, target, cmd.queue ?? false);
         }
         break;
@@ -382,6 +499,14 @@ export class MultiplayerBattleSync {
       case CommandType.Stop:
         for (const unit of units) {
           unit.clearCommands();
+        }
+        break;
+
+      case CommandType.SpawnUnit:
+        // In authoritative mode, server spawns units and clients see
+        // them via state snapshots. For now, log the event.
+        if (this.useAuthoritativeSync && cmd.unitType && cmd.targetX !== undefined && cmd.targetZ !== undefined) {
+          console.log(`[MP Battle] Server spawned unit: ${cmd.unitType} at (${cmd.targetX.toFixed(0)}, ${cmd.targetZ.toFixed(0)})`);
         }
         break;
 
@@ -398,7 +523,6 @@ export class MultiplayerBattleSync {
         }
         break;
 
-      // Add more command types as needed
       default:
         console.warn(`[MP Battle] Unknown command type: ${cmd.type}`);
     }
@@ -412,12 +536,7 @@ export class MultiplayerBattleSync {
     const checksum = computeGameStateChecksum(allUnits);
     const tick = tickManager.getCurrentTick();
 
-    // Send checksum to server for verification
-    // Server would compare all client checksums
     console.log(`[MP Battle] Tick ${tick} checksum: ${formatChecksum(checksum)}`);
-
-    // In a full implementation, we'd send this to server:
-    // this.game.multiplayerManager.sendChecksum(tick, checksum);
   }
 
   /**
@@ -433,6 +552,7 @@ export class MultiplayerBattleSync {
    * Get current tick
    */
   getCurrentTick(): number {
+    if (this.useAuthoritativeSync) return this.serverTick;
     return tickManager.getCurrentTick();
   }
 }

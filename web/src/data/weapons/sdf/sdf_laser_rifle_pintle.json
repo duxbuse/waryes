@@ -1,0 +1,16 @@
+{
+  "id": "sdf_laser_rifle_pintle",
+  "name": "Laser Rifle (Pintle)",
+  "range": 600,
+  "penetration": 3,
+  "damage": 1,
+  "suppression": 20,
+  "rateOfFire": 200,
+  "accuracy": 0.4,
+  "aimTime": 0.5,
+  "reloadTime": 3,
+  "salvoLength": 8,
+  "supplyCost": 3,
+  "isAntiAir": false,
+  "canTargetGround": true
+}

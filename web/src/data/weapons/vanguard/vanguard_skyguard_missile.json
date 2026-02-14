@@ -1,0 +1,19 @@
+{
+  "name": "Skyguard Missile",
+  "range": 2000,
+  "penetration": 25,
+  "damage": 6,
+  "suppression": 250,
+  "rateOfFire": 4,
+  "accuracy": 0.7,
+  "aimTime": 1.2,
+  "reloadTime": 6,
+  "salvoLength": 2,
+  "supplyCost": 15,
+  "isGuided": true,
+  "projectileSpeed": 400,
+  "turn_speed": 150,
+  "id": "vanguard_skyguard_missile",
+  "isAntiAir": true,
+  "canTargetGround": false
+}

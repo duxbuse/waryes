@@ -116,8 +116,9 @@
     },
     {
       "unitId": "sdf_trooper",
-      "maxCards": 4,
+      "maxCards": 2,
       "transportOptions": [
+        "sdf_centurion_mk1",
         "sdf_transport_truck"
       ],
       "availability": {
@@ -129,9 +130,71 @@
       }
     },
     {
-      "unitId": "sdf_engineer",
+      "unitId": "sdf_trooper_mech",
       "maxCards": 2,
       "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_centurion_mk3"
+      ],
+      "availability": {
+        "trained": 8,
+        "legend": 0,
+        "rookie": 12,
+        "elite": 4,
+        "veteran": 6
+      }
+    },
+    {
+      "unitId": "sdf_stormtrooper",
+      "maxCards": 2,
+      "transportOptions": [
+        "sdf_centurion_mk1",
+        "sdf_armored_transport"
+      ],
+      "notes": "Elite infantry",
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_stormtrooper_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_centurion_mk3"
+      ],
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
+      }
+    },
+    {
+      "unitId": "sdf_militia",
+      "maxCards": 4,
+      "transportOptions": [
+        "sdf_transport_truck"
+      ],
+      "notes": "Cheap screening infantry",
+      "availability": {
+        "trained": 16,
+        "legend": 0,
+        "rookie": 24,
+        "elite": 0,
+        "veteran": 12
+      }
+    },
+    {
+      "unitId": "sdf_engineer",
+      "maxCards": 1,
+      "transportOptions": [
+        "sdf_centurion_mk1",
         "sdf_transport_truck"
       ],
       "notes": "Repair crew",
@@ -141,6 +204,45 @@
         "rookie": 16,
         "elite": 0,
         "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_engineer_mech",
+      "maxCards": 1,
+      "transportOptions": [
+        "sdf_centurion_apc",
+        "sdf_centurion_mk3"
+      ],
+      "availability": {
+        "trained": 6,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 3,
+        "veteran": 4
+      }
+    },
+    {
+      "unitId": "sdf_centurion_mk1",
+      "maxCards": 3,
+      "notes": "Light armed transport",
+      "availability": {
+        "trained": 12,
+        "legend": 0,
+        "rookie": 16,
+        "elite": 0,
+        "veteran": 8
+      }
+    },
+    {
+      "unitId": "sdf_centurion_mk3",
+      "maxCards": 2,
+      "notes": "Heavy armed IFV",
+      "availability": {
+        "trained": 4,
+        "legend": 0,
+        "rookie": 0,
+        "elite": 2,
+        "veteran": 3
       }
     },
     {
@@ -209,37 +311,6 @@
         "rookie": 3,
         "elite": 0,
         "veteran": 1
-      }
-    },
-    {
-      "unitId": "sdf_stormtrooper",
-      "maxCards": 3,
-      "transportOptions": [
-        "sdf_transport_truck",
-        "sdf_armored_transport"
-      ],
-      "notes": "Elite infantry",
-      "availability": {
-        "trained": 6,
-        "legend": 0,
-        "rookie": 0,
-        "elite": 3,
-        "veteran": 4
-      }
-    },
-    {
-      "unitId": "sdf_militia",
-      "maxCards": 4,
-      "transportOptions": [
-        "sdf_transport_truck"
-      ],
-      "notes": "Cheap screening infantry",
-      "availability": {
-        "trained": 16,
-        "legend": 0,
-        "rookie": 24,
-        "elite": 0,
-        "veteran": 12
       }
     },
     {

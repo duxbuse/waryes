@@ -17,6 +17,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/cinzel": "^5.2.8",
+    "@fontsource/crimson-pro": "^5.2.8",
+    "@fontsource/playfair-display-sc": "^5.2.8",
+    "@fontsource/share-tech-mono": "^5.2.7",
     "three": "^0.170.0"
   },
   "devDependencies": {

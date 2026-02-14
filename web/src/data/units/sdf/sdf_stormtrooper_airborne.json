@@ -1,0 +1,39 @@
+{
+  "id": "sdf_stormtrooper_airborne",
+  "name": "Airborne Stormtrooper",
+  "cost": 40,
+  "icon": "assets/icons/units/sdf/sdf_stormtrooper.png",
+  "health": 8,
+  "speed": {
+    "road": 15,
+    "offRoad": 12,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 5,
+    "side": 5,
+    "rear": 5,
+    "top": 5
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Good",
+  "stealth": "Medium",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_heavy_laser_rifle",
+      "count": 8,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

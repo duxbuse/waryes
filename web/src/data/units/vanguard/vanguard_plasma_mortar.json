@@ -1,0 +1,45 @@
+{
+  "id": "vanguard_plasma_mortar",
+  "name": "Plasma Mortar Team",
+  "cost": 55,
+  "icon": "assets/icons/units/vanguard/vanguard_plasma_mortar.png",
+  "health": 5,
+  "speed": {
+    "road": 12,
+    "offRoad": 8,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Good",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_plasma_mortar_weapon",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "vanguard_kinetic_pistol",
+      "count": 2,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "ART",
+  "tags": ["artillery", "indirect_fire"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

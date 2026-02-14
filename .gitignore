@@ -12,6 +12,19 @@ web/coverage/
 web/playwright-report/
 web/test-results/
 
+# Server
+server/node_modules/
+server/.env
+
+# Shared package
+shared/node_modules/
+shared/bun.lockb
+
+# Environment files
+.env
+*.env.local
+docker-compose.override.yml
+
 # IDE
 .vscode/
 .idea/
@@ -31,3 +44,4 @@ Thumbs.db
 .worktrees/
 .security-key
 logs/security/
+.playwright-mcp/

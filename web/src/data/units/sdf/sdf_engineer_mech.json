@@ -1,0 +1,45 @@
+{
+  "id": "sdf_engineer_mech",
+  "name": "Mechanized Engineer",
+  "cost": 35,
+  "icon": "assets/icons/units/sdf/sdf_engineer.png",
+  "health": 8,
+  "speed": {
+    "road": 12,
+    "offRoad": 10,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 0,
+    "side": 0,
+    "rear": 0,
+    "top": 0
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Medium",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_laser_rifle",
+      "count": 6,
+      "maxAmmo": 20,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_flamer",
+      "count": 2,
+      "maxAmmo": 6,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": ["engineer", "can_build"],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

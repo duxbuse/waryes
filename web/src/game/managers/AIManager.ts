@@ -2681,23 +2681,48 @@ export class AIManager {
    * Pick a destination for a reinforcement unit based on zone priorities.
    */
   private pickReinforcementDestination(zones: readonly CaptureZone[], team: 'player' | 'enemy'): { x: number; z: number } | undefined {
-    let bestDest: { x: number; z: number } | undefined;
     let bestPriority = -1;
     const opposingTeam = team === 'enemy' ? 'player' : 'enemy';
 
+    // First pass: find the best priority level
     for (const zone of zones) {
       let priority = 0;
-      if (zone.owner === opposingTeam) priority = 3; // Highest - attack opposing zones
-      else if (zone.owner === 'neutral') priority = 2; // Capture neutral zones
-      else if (zone.owner === team) priority = 0; // Already owned
+      if (zone.owner === opposingTeam) priority = 3;
+      else if (zone.owner === 'neutral') priority = 2;
+      else if (zone.owner === team) priority = 0;
 
       if (priority > bestPriority) {
         bestPriority = priority;
-        bestDest = { x: zone.x, z: zone.z };
       }
     }
 
-    return bestDest;
+    if (bestPriority < 0) return undefined;
+
+    // Collect all zones at the best priority level
+    const bestZones: CaptureZone[] = [];
+    for (const zone of zones) {
+      let priority = 0;
+      if (zone.owner === opposingTeam) priority = 3;
+      else if (zone.owner === 'neutral') priority = 2;
+      else if (zone.owner === team) priority = 0;
+
+      if (priority === bestPriority) {
+        bestZones.push(zone);
+      }
+    }
+
+    if (bestZones.length === 0) return undefined;
+
+    // Pick randomly from best zones so units spread across objectives
+    const chosen = bestZones[Math.floor(Math.random() * bestZones.length)];
+    if (!chosen) return undefined;
+
+    // Add offset so units don't converge on exact zone center
+    const DEST_SPREAD = 15;
+    return {
+      x: chosen.x + (Math.random() - 0.5) * DEST_SPREAD * 2,
+      z: chosen.z + (Math.random() - 0.5) * DEST_SPREAD * 2,
+    };
   }
 
   clear(): void {

@@ -4,9 +4,10 @@
 
 import { ScreenType, type Screen } from '../core/ScreenManager';
 import type { GameMap, DeckData, MapSize, BiomeType } from '../data/types';
-import { loadSavedDecks } from './DeckBuilderScreen';
+import { loadSavedDecks } from './ArmouryScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { BIOME_CONFIGS } from '../data/biomeConfigs';
+import { getUsername, isAuthenticated } from '../api/ApiClient';
 
 // Create a default deck for quick start using valid SDF units
 function createDefaultDeck(): DeckData {
@@ -59,7 +60,18 @@ export interface SkirmishConfig {
 export interface SkirmishSetupCallbacks {
   onBack: () => void;
   onStartBattle: (config: SkirmishConfig) => void;
-  onHostOnline: (config: SkirmishConfig) => void;
+  onHostOnline: (config: SkirmishConfig) => Promise<string | null>;
+  onCancelHosting: () => void;
+}
+
+// Generate a stable guest name for unauthenticated players
+const guestId = Math.floor(Math.random() * 900) + 100;
+
+function getPlayerDisplayName(): string {
+  if (isAuthenticated()) {
+    return getUsername() ?? `Guest-${guestId}`;
+  }
+  return `Guest-${guestId}`;
 }
 
 export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Screen {
@@ -70,6 +82,8 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   let selectedBiome: BiomeType | undefined = undefined;  // undefined = auto-select from seed
   let generatedMap: GameMap | null = null;
   let isGeneratingMap = false;
+  let isHosting = false;
+  let hostedGameCode: string | null = null;
 
   // Team configuration (5v5 format)
   let team1: PlayerSlot[] = [
@@ -94,16 +108,35 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       <div class="skirmish-header">
         <button class="back-btn" id="skirmish-back-btn">&larr; Back</button>
         <h2>SKIRMISH SETUP</h2>
-        <div></div>
+        <div class="game-code-display hidden" id="game-code-display">
+          <span class="code-label">CODE:</span>
+          <span class="code-value" id="game-code-value">----</span>
+          <button class="code-copy-btn" id="code-copy-btn" title="Copy game code">COPY</button>
+        </div>
+      </div>
+      <div class="gothic-divider" style="align-self: center;">
+        <div class="line"></div>
+        <span class="sym">&#10016;</span>
+        <span class="sym">&#9880;</span>
+        <span class="sym">&#10016;</span>
+        <div class="line"></div>
       </div>
 
       <div class="skirmish-content">
         <div class="teams-row">
           <div class="setup-section team-section">
+            <div class="corner-flourish tl"><div class="diamond"></div></div>
+            <div class="corner-flourish tr"><div class="diamond"></div></div>
+            <div class="corner-flourish bl"><div class="diamond"></div></div>
+            <div class="corner-flourish br"><div class="diamond"></div></div>
             <h3>Team 1 (Defenders)</h3>
             <div id="team1-slots" class="team-slots"></div>
           </div>
           <div class="setup-section team-section">
+            <div class="corner-flourish tl"><div class="diamond"></div></div>
+            <div class="corner-flourish tr"><div class="diamond"></div></div>
+            <div class="corner-flourish bl"><div class="diamond"></div></div>
+            <div class="corner-flourish br"><div class="diamond"></div></div>
             <h3>Team 2 (Attackers)</h3>
             <div id="team2-slots" class="team-slots"></div>
           </div>
@@ -162,12 +195,19 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
         </div>
       </div>
 
+      <div class="footer-divider">
+        <div class="gothic-divider" style="max-width: none; width: 80%; margin: 0 auto;">
+          <div class="line"></div>
+          <span class="sym">&#9876;</span>
+          <div class="line"></div>
+        </div>
+      </div>
       <div class="skirmish-footer">
         <button id="skirmish-host-online-btn" class="host-online-btn">
-          HOST ONLINE
+          &#9884; HOST ONLINE &#9884;
         </button>
         <button id="skirmish-start-btn" class="start-btn" disabled>
-          START BATTLE
+          &#9884; START BATTLE &#9884;
         </button>
       </div>
     </div>
@@ -181,7 +221,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, #0a0a1a 0%, #15152a 100%);
+      background: transparent;
       z-index: 100;
       display: flex;
       justify-content: center;
@@ -198,44 +238,88 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       max-height: 90vh;
       display: flex;
       flex-direction: column;
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 12px;
+      background: linear-gradient(175deg, var(--steel-mid), var(--steel-dark));
+      border: 1px solid var(--steel-highlight);
       padding: 20px;
       box-sizing: border-box;
+      position: relative;
+      animation: sectionBootUp 1.0s ease-out both;
+      overflow: hidden;
+    }
+
+    /* Outer gold frame */
+    .skirmish-container::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border: 1px solid var(--gold-dim);
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    /* Watermark */
+    .skirmish-container::after {
+      content: '\u269C';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 200px;
+      color: var(--gold);
+      opacity: 0.015;
+      pointer-events: none;
+      font-family: serif;
+    }
+
+    @keyframes sectionBootUp {
+      0%   { opacity: 0; transform: translateY(30px); filter: brightness(2.5) blur(6px); }
+      30%  { filter: brightness(1.5) blur(2px); }
+      100% { opacity: 1; transform: translateY(0); filter: brightness(1) blur(0); }
     }
 
     .skirmish-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--gold-dim);
+      position: relative;
     }
 
     .skirmish-header h2 {
-      color: #4a9eff;
-      letter-spacing: 3px;
+      color: var(--amber);
+      font-family: var(--font-heading);
+      letter-spacing: 4px;
       margin: 0;
+      font-size: 18px;
+      text-shadow: 0 0 12px rgba(255, 136, 0, 0.3);
     }
 
     .back-btn {
-      padding: 8px 20px;
-      background: rgba(74, 158, 255, 0.2);
-      border: 1px solid rgba(74, 158, 255, 0.5);
-      color: #e0e0e0;
+      padding: 6px 16px;
+      font-family: var(--font-heading);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, var(--steel-light), var(--steel-mid));
+      border: 1px solid rgba(196, 164, 74, 0.2);
+      color: var(--gold);
       cursor: pointer;
-      border-radius: 4px;
       transition: all 0.2s;
+      clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);
     }
 
     .back-btn:hover {
-      background: rgba(74, 158, 255, 0.4);
-      border-color: #4a9eff;
+      background: linear-gradient(180deg, var(--steel-highlight), var(--steel-light));
+      border-color: var(--gold);
+      color: var(--gold-light);
     }
 
     .back-btn:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .skirmish-content {
@@ -261,9 +345,20 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .setup-section {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
+      background: linear-gradient(175deg, rgba(42, 42, 48, 0.9), rgba(26, 26, 32, 0.95));
+      border: 1px solid var(--steel-highlight);
       padding: 15px;
+      position: relative;
+    }
+
+    /* Gold inner frame on setup sections */
+    .setup-section::before {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border: 1px solid var(--gold-dim);
+      opacity: 0.12;
+      pointer-events: none;
     }
 
     .team-section {
@@ -282,38 +377,42 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       gap: 8px;
       padding: 6px 10px;
       background: rgba(0, 0, 0, 0.3);
-      border-radius: 4px;
+      border: 1px solid var(--steel-light);
       font-size: 13px;
       min-height: 50px;
     }
 
     .slot-row.you {
-      background: rgba(74, 158, 255, 0.2);
-      border: 1px solid rgba(74, 158, 255, 0.5);
+      background: rgba(0, 170, 255, 0.15);
+      border: 1px solid rgba(0, 170, 255, 0.4);
     }
 
     .slot-row.cpu {
-      background: rgba(255, 180, 50, 0.15);
+      background: rgba(255, 180, 50, 0.1);
+      border-color: var(--amber-dim);
     }
 
     .slot-row.closed {
       background: rgba(50, 50, 50, 0.3);
+      border-color: var(--steel-light);
       opacity: 0.5;
     }
 
     .slot-number {
       width: 20px;
+      font-family: var(--font-mono);
       color: #bbb;
       font-weight: bold;
     }
 
     .slot-type {
       flex: 1;
+      font-family: var(--font-mono);
       color: #e0e0e0;
     }
 
     .slot-type.you {
-      color: #4a9eff;
+      color: var(--blue-primary);
       font-weight: bold;
     }
 
@@ -333,11 +432,11 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .slot-btn {
       padding: 4px 8px;
       font-size: 11px;
+      font-family: var(--font-mono);
       background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #444;
+      border: 1px solid var(--steel-highlight);
       color: #aaa;
       cursor: pointer;
-      border-radius: 3px;
     }
 
     .slot-btn:hover {
@@ -346,119 +445,139 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     }
 
     .slot-btn.active {
-      background: rgba(74, 158, 255, 0.3);
-      border-color: #4a9eff;
-      color: #4a9eff;
+      background: rgba(0, 170, 255, 0.3);
+      border-color: var(--blue-primary);
+      color: var(--blue-primary);
     }
 
     .slot-btn:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .difficulty-select {
       padding: 3px 6px;
       font-size: 11px;
-      background: #1a1a2a;
-      border: 1px solid #444;
+      font-family: var(--font-mono);
+      background: var(--steel-dark);
+      border: 1px solid var(--steel-highlight);
       color: #e0e0e0;
-      border-radius: 3px;
       cursor: pointer;
     }
 
     .difficulty-select:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .deck-select {
       padding: 3px 6px;
       font-size: 10px;
-      background: #1a1a2a;
-      border: 1px solid #444;
+      font-family: var(--font-mono);
+      background: var(--steel-dark);
+      border: 1px solid var(--steel-highlight);
       color: #e0e0e0;
-      border-radius: 3px;
       cursor: pointer;
       max-width: 120px;
     }
 
     .deck-select:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .setup-section h3 {
       margin: 0 0 15px 0;
-      font-size: 14px;
-      color: #bbb;
+      font-family: var(--font-heading);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gold);
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 8px rgba(196, 164, 74, 0.3);
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(196, 164, 74, 0.15);
+    }
+
+    .setup-section h3::before {
+      content: '\u2720 ';
+      font-size: 10px;
+      opacity: 0.6;
+    }
+
+    .setup-section h3::after {
+      content: ' \u2720';
+      font-size: 10px;
+      opacity: 0.6;
     }
 
     .setup-select {
       width: 100%;
       padding: 10px;
-      background: #1a1a2a;
-      border: 1px solid #333;
+      background: var(--steel-dark);
+      border: 1px solid var(--steel-highlight);
       color: #e0e0e0;
-      border-radius: 4px;
       font-size: 14px;
+      font-family: var(--font-body);
       cursor: pointer;
     }
 
     .setup-select:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .biome-select {
       width: 100%;
       padding: 10px;
-      background: #1a1a2a;
-      border: 1px solid #333;
+      background: var(--steel-dark);
+      border: 1px solid var(--steel-highlight);
       color: #e0e0e0;
-      border-radius: 4px;
       font-size: 14px;
+      font-family: var(--font-body);
       cursor: pointer;
     }
 
     .biome-select:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .deck-preview {
       margin-top: 15px;
       padding: 10px;
       background: rgba(0, 0, 0, 0.3);
-      border-radius: 4px;
+      border: 1px solid var(--steel-light);
       min-height: 100px;
       max-height: 150px;
       overflow-y: auto;
     }
 
     .deck-preview .placeholder {
+      font-family: var(--font-body);
       color: #aaa;
       text-align: center;
       padding: 20px;
     }
 
     .deck-info {
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.8;
     }
 
     .deck-info .label {
-      color: #bbb;
+      font-family: var(--font-heading);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
     .deck-info .value {
-      color: #e0e0e0;
+      font-family: var(--font-mono);
+      color: var(--cyan);
+      text-shadow: 0 0 6px rgba(0, 255, 204, 0.2);
     }
 
     .setting-row {
@@ -467,8 +586,12 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
     .setting-row label {
       display: block;
-      font-size: 13px;
-      color: #bbb;
+      font-family: var(--font-heading);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 2px;
+      text-transform: uppercase;
       margin-bottom: 8px;
     }
 
@@ -480,31 +603,31 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .size-btn {
       flex: 1;
       padding: 10px;
+      font-family: var(--font-mono);
       background: rgba(255, 255, 255, 0.05);
-      border: 1px solid #333;
-      color: #bbb;
-      border-radius: 4px;
+      border: 1px solid var(--steel-highlight);
+      color: var(--steel-bright);
       cursor: pointer;
       transition: all 0.2s;
       font-size: 12px;
     }
 
     .size-btn:hover {
-      background: rgba(74, 158, 255, 0.1);
-      border-color: #4a9eff;
+      background: rgba(0, 170, 255, 0.1);
+      border-color: var(--blue-primary);
       color: #e0e0e0;
     }
 
     .size-btn.active {
-      background: rgba(74, 158, 255, 0.3);
-      border-color: #4a9eff;
-      color: #4a9eff;
+      background: rgba(0, 170, 255, 0.2);
+      border-color: var(--blue-primary);
+      color: var(--blue-primary);
+      text-shadow: 0 0 8px rgba(0, 170, 255, 0.3);
     }
 
     .size-btn:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .seed-input-row {
@@ -515,36 +638,40 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .seed-input {
       flex: 1;
       padding: 10px;
-      background: #1a1a2a;
-      border: 1px solid #333;
+      font-family: var(--font-mono);
+      background: var(--steel-dark);
+      border: 1px solid var(--steel-highlight);
       color: #e0e0e0;
-      border-radius: 4px;
       font-size: 14px;
     }
 
     .seed-input:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .random-btn {
       padding: 10px 20px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #444;
-      color: #e0e0e0;
-      border-radius: 4px;
+      font-family: var(--font-heading);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, var(--steel-light), var(--steel-mid));
+      border: 1px solid var(--steel-highlight);
+      color: var(--gold);
       cursor: pointer;
     }
 
     .random-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
+      background: linear-gradient(180deg, var(--steel-highlight), var(--steel-light));
+      border-color: var(--gold);
+      color: var(--gold-light);
     }
 
     .random-btn:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
     }
 
     .map-preview-section {
@@ -558,49 +685,58 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       justify-content: center;
       align-items: center;
       background: #0a0a1a;
-      border-radius: 4px;
+      border: 1px solid var(--steel-light);
     }
 
-    #preview-canvas {
-      border-radius: 4px;
+    .footer-divider {
+      margin-top: 16px;
+      margin-bottom: 12px;
     }
 
     .skirmish-footer {
-      margin-top: 20px;
       display: flex;
+      gap: 15px;
       justify-content: center;
       flex-shrink: 0;
       padding-bottom: 10px;
     }
 
     .start-btn {
-      padding: 15px 60px;
-      font-size: 18px;
-      font-weight: bold;
+      padding: 0 50px;
+      height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
       letter-spacing: 3px;
-      background: linear-gradient(135deg, #4a9eff 0%, #2070cc 100%);
-      border: none;
-      color: white;
-      border-radius: 8px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, rgba(0, 170, 255, 0.3), rgba(0, 136, 221, 0.2));
+      border: 1px solid var(--blue-primary);
+      color: var(--blue-glow);
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.2s;
+      clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+      text-shadow: 0 0 8px rgba(0, 170, 255, 0.4);
     }
 
     .start-btn:hover:not(:disabled) {
-      transform: scale(1.02);
-      box-shadow: 0 0 30px rgba(74, 158, 255, 0.4);
+      background: linear-gradient(180deg, rgba(0, 170, 255, 0.5), rgba(0, 136, 221, 0.3));
+      box-shadow: 0 0 20px rgba(0, 170, 255, 0.3);
+      color: #fff;
     }
 
     .start-btn:disabled {
-      background: #333;
-      color: #bbb;
+      background: linear-gradient(180deg, var(--steel-light), var(--steel-mid));
+      border-color: var(--steel-highlight);
+      color: var(--steel-bright);
       cursor: not-allowed;
     }
 
     .start-btn:focus-visible {
-      outline: 3px solid #4a9eff;
+      outline: 2px solid var(--blue-primary);
       outline-offset: 2px;
-      box-shadow: 0 0 30px rgba(74, 158, 255, 0.6);
     }
 
     .start-btn.loading {
@@ -620,34 +756,111 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       vertical-align: middle;
     }
 
-    .skirmish-footer {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-    }
-
     .host-online-btn {
-      padding: 15px 60px;
-      font-size: 18px;
-      font-weight: bold;
+      padding: 0 50px;
+      height: 48px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
       letter-spacing: 3px;
-      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-      border: none;
-      color: white;
-      border-radius: 8px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, rgba(255, 136, 0, 0.3), rgba(255, 136, 0, 0.15));
+      border: 1px solid var(--amber);
+      color: var(--amber-light);
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.2s;
+      clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+      text-shadow: 0 0 8px rgba(255, 136, 0, 0.4);
     }
 
     .host-online-btn:hover {
-      transform: scale(1.02);
-      box-shadow: 0 0 30px rgba(255, 152, 0, 0.4);
+      background: linear-gradient(180deg, rgba(255, 136, 0, 0.5), rgba(255, 136, 0, 0.25));
+      box-shadow: 0 0 20px rgba(255, 136, 0, 0.3);
+      color: #fff;
     }
 
     .host-online-btn:focus-visible {
-      outline: 3px solid #ff9800;
+      outline: 2px solid var(--amber);
       outline-offset: 2px;
-      box-shadow: 0 0 30px rgba(255, 152, 0, 0.6);
+    }
+
+    .host-online-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .host-online-btn.hosting {
+      background: linear-gradient(180deg, rgba(0, 255, 136, 0.25), rgba(0, 200, 100, 0.12));
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      text-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+      cursor: pointer;
+    }
+
+    .host-cancel-hint {
+      display: block;
+      font-size: 8px;
+      letter-spacing: 1px;
+      opacity: 0.5;
+      margin-top: 2px;
+      text-shadow: none;
+    }
+
+    .game-code-display {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+    }
+
+    .game-code-display.hidden {
+      visibility: hidden;
+    }
+
+    .game-code-display .code-label {
+      color: var(--gold-dim);
+      letter-spacing: 2px;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+
+    .game-code-display .code-value {
+      color: var(--amber);
+      font-size: 14px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 8px rgba(255, 136, 0, 0.4);
+    }
+
+    .game-code-display .code-copy-btn {
+      padding: 3px 8px;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      letter-spacing: 1px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--steel-highlight);
+      color: var(--steel-bright);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .game-code-display .code-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: var(--gold);
+      border-color: var(--gold-dim);
+    }
+
+    .slot-row.open {
+      background: rgba(0, 255, 136, 0.08);
+      border: 1px dashed rgba(0, 255, 204, 0.3);
+    }
+
+    .slot-type.open {
+      color: var(--cyan);
+      font-style: italic;
     }
 
     .map-preview {
@@ -668,7 +881,6 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       gap: 10px;
       color: #fff;
       font-size: 14px;
-      border-radius: 8px;
       backdrop-filter: blur(4px);
       transition: opacity 0.2s;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
@@ -684,8 +896,8 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     .loading-spinner {
       width: 30px;
       height: 30px;
-      border: 3px solid rgba(74, 158, 255, 0.3);
-      border-top: 3px solid #4a9eff;
+      border: 3px solid rgba(0, 170, 255, 0.3);
+      border-top: 3px solid var(--blue-primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
@@ -717,7 +929,11 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       </optgroup>
       ${savedDecks.length > 0 ? `
         <optgroup label="My Decks">
-          ${savedDecks.map(d => `<option value="${d.id}" ${selectedId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+          ${savedDecks.map(d => {
+            const safeName = d.name.replace(/[<>&"']/g, (c: string) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c] || c));
+            const safeId = String(d.id).replace(/[<>&"']/g, (c: string) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c] || c));
+            return `<option value="${safeId}" ${selectedId === d.id ? 'selected' : ''}>${safeName}</option>`;
+          }).join('')}
         </optgroup>
       ` : ''}
     `;
@@ -733,10 +949,10 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     function renderSlot(slot: PlayerSlot, index: number, teamNum: 1 | 2): string {
       const isYou = slot.type === 'YOU';
       const isCpu = slot.type === 'CPU';
+      const isOpen = slot.type === 'OPEN';
 
-
-      const slotClass = isYou ? 'you' : isCpu ? 'cpu' : 'closed';
-      const typeLabel = isYou ? 'YOU' : isCpu ? `CPU (${slot.difficulty})` : 'CLOSED';
+      const slotClass = isYou ? 'you' : isCpu ? 'cpu' : isOpen ? 'open' : 'closed';
+      const typeLabel = isYou ? getPlayerDisplayName() : isCpu ? `CPU (${slot.difficulty})` : isOpen ? 'OPEN SLOT' : 'CLOSED';
 
       let controls = '';
       if (isYou) {
@@ -747,33 +963,39 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
             </select>
           </div>
         `;
+      } else if (isCpu) {
+        controls = `
+          <div class="slot-controls">
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="open">OPEN</button>
+              <button class="slot-btn active" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
+              <select class="difficulty-select" data-team="${teamNum}" data-slot="${index}">
+                  <option value="Easy" ${slot.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
+                  <option value="Medium" ${slot.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
+                  <option value="Hard" ${slot.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
+              </select>
+              <select class="deck-select" data-team="${teamNum}" data-slot="${index}">
+                  <option value="">Random Deck</option>
+                  ${STARTER_DECKS.map(d => `<option value="${d.id}" ${slot.deckId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+              </select>
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="close">X</button>
+          </div>
+          `;
+      } else if (isOpen) {
+        controls = `
+          <div class="slot-controls">
+              <button class="slot-btn active" data-team="${teamNum}" data-slot="${index}" data-action="open">OPEN</button>
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="close">X</button>
+          </div>
+          `;
       } else {
-        // CPU Slots: CPU Button, Difficulty, Deck, X Button (Right)
-        if (isCpu) {
-          controls = `
-            <div class="slot-controls">
-                <button class="slot-btn active" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
-                <select class="difficulty-select" data-team="${teamNum}" data-slot="${index}">
-                    <option value="Easy" ${slot.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
-                    <option value="Medium" ${slot.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
-                    <option value="Hard" ${slot.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
-                </select>
-                <select class="deck-select" data-team="${teamNum}" data-slot="${index}">
-                    <option value="">Random Deck</option>
-                    ${STARTER_DECKS.map(d => `<option value="${d.id}" ${slot.deckId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
-                </select>
-                <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="close">X</button>
-            </div>
-            `;
-        }
-        // Closed Slots: Just CPU Button (to open)
-        else {
-          controls = `
-            <div class="slot-controls">
-                <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
-            </div>
-            `;
-        }
+        // Closed slot
+        controls = `
+          <div class="slot-controls">
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="open">OPEN</button>
+              <button class="slot-btn" data-team="${teamNum}" data-slot="${index}" data-action="cpu">CPU</button>
+          </div>
+          `;
       }
 
       return `
@@ -804,6 +1026,8 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
 
         if (action === 'cpu') {
           slot.type = 'CPU';
+        } else if (action === 'open') {
+          slot.type = 'OPEN';
         } else if (action === 'close') {
           slot.type = 'CLOSED';
         }
@@ -893,10 +1117,11 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       categoryCounts.set(unit.unitId, count + 1);
     }
 
+    const deckName = selectedDeck.name.replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c] || c));
     preview.innerHTML = `
       <div class="deck-info">
-        <div><span class="label">Name:</span> <span class="value">${selectedDeck.name}</span></div>
-        <div><span class="label">Units:</span> <span class="value">${selectedDeck.units.length}</span></div>
+        <div><span class="label">Name:</span> <span class="value">${deckName}</span></div>
+        <div><span class="label">Units:</span> <span class="value">${selectedDeck.units.reduce((sum, u) => sum + (u.quantity || 1), 0)}</span></div>
         <div><span class="label">Activation Points:</span> <span class="value">${selectedDeck.activationPoints}/50</span></div>
       </div>
     `;
@@ -1228,8 +1453,8 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
             const z2 = (zone.maxZ + map.height / 2) * scale;
 
             const isPlayer = zone.team === 'player';
-            const fillColor = isPlayer ? 'rgba(74, 158, 255, 0.4)' : 'rgba(255, 74, 74, 0.4)';
-            const strokeColor = isPlayer ? '#4a9eff' : '#ff4a4a';
+            const fillColor = isPlayer ? 'rgba(0, 170, 255, 0.4)' : 'rgba(255, 34, 0, 0.4)';
+            const strokeColor = isPlayer ? 'var(--blue-primary)' : 'var(--red-glow)';
 
             // Fill
             ctx.fillStyle = fillColor;
@@ -1247,7 +1472,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
             const screenY = (point.z + map.height / 2) * scale;
             const r = point.radius * scale;
 
-            const color = point.team === 'player' ? '#4a9eff' : '#ff4a4a';
+            const color = point.team === 'player' ? 'var(--blue-primary)' : 'var(--red-glow)';
 
             // Arrow dimensions
             const arrowLength = r * 2.5;
@@ -1333,9 +1558,11 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       btn.innerHTML = '<span class="button-spinner"></span>GENERATING MAP...';
     } else {
       btn.classList.remove('loading');
-      btn.innerHTML = 'START BATTLE';
+      btn.innerHTML = '&#9884; START BATTLE &#9884;';
     }
   }
+
+  let escHandler: ((e: KeyboardEvent) => void) | null = null;
 
   const onEnter = () => {
     renderTeamSlots();
@@ -1343,6 +1570,14 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     renderDeckPreview();
     renderMapPreview();
     updateStartButton();
+
+    // ESC key to go back
+    escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        callbacks.onBack();
+      }
+    };
+    document.addEventListener('keydown', escHandler);
 
     // Bind events
     element.querySelector('#skirmish-back-btn')?.addEventListener('click', callbacks.onBack);
@@ -1421,9 +1656,43 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
       }
     });
 
-    element.querySelector('#skirmish-host-online-btn')?.addEventListener('click', () => {
+    // Setup copy button (persistent, not re-attached each time)
+    element.querySelector('#code-copy-btn')?.addEventListener('click', () => {
+      if (hostedGameCode) {
+        navigator.clipboard.writeText(hostedGameCode).then(() => {
+          const copyBtn = element.querySelector('#code-copy-btn') as HTMLButtonElement;
+          if (copyBtn) {
+            copyBtn.textContent = 'COPIED!';
+            setTimeout(() => { copyBtn.textContent = 'COPY'; }, 1500);
+          }
+        });
+      }
+    });
+
+    element.querySelector('#skirmish-host-online-btn')?.addEventListener('click', async () => {
+      const hostBtn = element.querySelector('#skirmish-host-online-btn') as HTMLButtonElement;
+
+      if (isHosting) {
+        // Cancel hosting
+        callbacks.onCancelHosting();
+        isHosting = false;
+        hostedGameCode = null;
+
+        // Hide game code
+        const codeDisplay = element.querySelector('#game-code-display');
+        if (codeDisplay) codeDisplay.classList.add('hidden');
+
+        // Reset button
+        hostBtn.classList.remove('hosting');
+        hostBtn.innerHTML = '&#9884; HOST ONLINE &#9884;';
+        return;
+      }
+
       if (selectedDeck) {
-        callbacks.onHostOnline({
+        hostBtn.disabled = true;
+        hostBtn.innerHTML = '<span class="button-spinner"></span>CONNECTING...';
+
+        const gameCode = await callbacks.onHostOnline({
           deck: selectedDeck,
           mapSize,
           mapSeed,
@@ -1431,13 +1700,57 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
           team1,
           team2,
         });
+
+        if (gameCode) {
+          isHosting = true;
+          hostedGameCode = gameCode;
+
+          // Show game code in header
+          const codeDisplay = element.querySelector('#game-code-display');
+          const codeValue = element.querySelector('#game-code-value');
+          if (codeDisplay && codeValue) {
+            codeValue.textContent = gameCode;
+            codeDisplay.classList.remove('hidden');
+          }
+
+          // Update button to hosting state (clickable to cancel)
+          hostBtn.classList.add('hosting');
+          hostBtn.innerHTML = '&#9884; HOSTING &#9884;<span class="host-cancel-hint">press to cancel</span>';
+          hostBtn.disabled = false;
+        } else {
+          // Failed to create lobby
+          hostBtn.disabled = false;
+          hostBtn.innerHTML = '&#9884; HOST ONLINE &#9884;';
+        }
       }
     });
+  };
+
+  const onExit = () => {
+    if (escHandler) {
+      document.removeEventListener('keydown', escHandler);
+      escHandler = null;
+    }
+    // Cancel hosting if active when leaving the screen
+    if (isHosting) {
+      callbacks.onCancelHosting();
+    }
+    isHosting = false;
+    hostedGameCode = null;
+    const codeDisplay = element.querySelector('#game-code-display');
+    if (codeDisplay) codeDisplay.classList.add('hidden');
+    const hostBtn = element.querySelector('#skirmish-host-online-btn') as HTMLButtonElement | null;
+    if (hostBtn) {
+      hostBtn.classList.remove('hosting');
+      hostBtn.disabled = false;
+      hostBtn.innerHTML = '&#9884; HOST ONLINE &#9884;';
+    }
   };
 
   return {
     type: ScreenType.SkirmishSetup,
     element,
     onEnter,
+    onExit,
   };
 }

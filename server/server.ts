@@ -10,6 +10,23 @@
  */
 
 import { RateLimiter } from './RateLimiter';
+import { createAuthRouter } from './routes/auth';
+import { handleDeckRoute } from './routes/decks';
+import { handleMatchRoute } from './routes/matches';
+import { GameSessionManager } from './game/GameSessionManager';
+import { loadGameData } from './game/ServerDataLoader';
+import type { SessionPlayer } from './game/GameSession';
+import { logger } from './logger';
+import { RedisCoordinator } from './RedisCoordinator';
+import { verifyToken } from './auth/jwt';
+
+interface WsData {
+  connectionId: string;
+  playerId: string | null;
+  username: string | null;
+  wsPlayerId?: string | null;
+  wsUsername?: string | null;
+}
 
 interface Player {
   id: string;
@@ -34,9 +51,15 @@ interface GameLobby {
 }
 
 class MultiplayerServer {
-  private lobbies: Map<string, GameLobby> = new Map();
+  readonly lobbies: Map<string, GameLobby> = new Map();
   private playerConnections: Map<string, any> = new Map(); // connectionId -> ws
   private reconnectWindows: Map<string, NodeJS.Timeout> = new Map();
+
+  // Authoritative game sessions
+  readonly sessionManager = new GameSessionManager();
+
+  // Redis-based coordination for horizontal scaling
+  readonly coordinator: RedisCoordinator;
 
   // Rate limiters for different message types
   private rateLimitGameCommand: RateLimiter;
@@ -50,6 +73,9 @@ class MultiplayerServer {
     this.rateLimitUpdateState = new RateLimiter(30, 60000); // 30 updates per minute
     this.rateLimitLobbyActions = new RateLimiter(10, 60000); // 10 lobby actions per minute
     this.rateLimitHostActions = new RateLimiter(5, 60000); // 5 host actions per minute
+
+    const maxGames = parseInt(process.env['MAX_CONCURRENT_GAMES'] ?? '20', 10);
+    this.coordinator = new RedisCoordinator(parseInt(process.env['PORT'] ?? '3001', 10), maxGames);
 
     this.startCleanupTask();
   }
@@ -180,13 +206,14 @@ class MultiplayerServer {
     if (lobby.hostId === playerId) {
       const remainingPlayers = Array.from(lobby.players.values());
       if (remainingPlayers.length > 0) {
-        const newHost = remainingPlayers[0];
+        const newHost = remainingPlayers[0]!;
         lobby.hostId = newHost.id;
         newHost.isHost = true;
         console.log(`[Host Changed] ${newHost.name} is new host of ${code}`);
       } else {
-        // No players left, close lobby
+        // No players left, close lobby and destroy game session
         this.lobbies.delete(code);
+        this.sessionManager.destroySession(code);
         console.log(`[Lobby Closed] ${code} - no players remaining`);
         return;
       }
@@ -208,7 +235,16 @@ class MultiplayerServer {
     const player = lobby.players.get(playerId);
     if (!player) return;
 
-    Object.assign(player, updates);
+    // Only update allowed fields (prevent prototype pollution / privilege escalation)
+    if (updates.team !== undefined && (updates.team === 'team1' || updates.team === 'team2' || updates.team === 'spectator')) {
+      player.team = updates.team;
+    }
+    if (updates.deckId !== undefined) {
+      player.deckId = typeof updates.deckId === 'string' ? updates.deckId : null;
+    }
+    if (updates.isReady !== undefined && typeof updates.isReady === 'boolean') {
+      player.isReady = updates.isReady;
+    }
     player.lastSeen = Date.now();
 
     this.broadcastToLobby(code, {
@@ -254,7 +290,35 @@ class MultiplayerServer {
       return { success: false, error: 'Need at least 1 ready player per team' };
     }
 
+    // Check server capacity
+    if (!this.sessionManager.hasCapacity()) {
+      return { success: false, error: 'Server is at maximum game capacity' };
+    }
+
     lobby.status = 'in_progress';
+
+    // Create authoritative game session
+    const sessionPlayers: SessionPlayer[] = Array.from(lobby.players.values()).map(p => ({
+      id: p.id,
+      name: p.name,
+      team: (p.team === 'team1' ? 'player' : 'enemy') as 'player' | 'enemy',
+      deckId: p.deckId,
+      ws: this.playerConnections.get(p.connectionId),
+      connected: true,
+      lastSeen: Date.now(),
+    }));
+
+    const session = this.sessionManager.createSession({
+      lobbyCode: code,
+      mapSeed: lobby.mapSeed,
+      mapSize: lobby.mapSize,
+      players: sessionPlayers,
+    });
+
+    if (!session) {
+      lobby.status = 'waiting';
+      return { success: false, error: 'Failed to create game session' };
+    }
 
     this.broadcastToLobby(code, {
       type: 'game_starting',
@@ -262,7 +326,11 @@ class MultiplayerServer {
       mapSize: lobby.mapSize,
     });
 
-    console.log(`[Game Started] ${code}`);
+    // Note: Map generation and session.startGame(map) will be called
+    // once the shared map generator is available. For now the session
+    // is created but awaits a map to begin the authoritative tick loop.
+
+    console.log(`[Game Started] ${code} (authoritative session created)`);
     return { success: true };
   }
 
@@ -292,6 +360,12 @@ class MultiplayerServer {
     for (const [code, lobby] of this.lobbies) {
       const player = lobby.players.get(playerId);
       if (!player) continue;
+
+      // Notify game session of disconnect
+      const session = this.sessionManager.getSession(code);
+      if (session) {
+        session.handleDisconnect(playerId);
+      }
 
       // Start 30 second reconnection window
       const timeoutId = setTimeout(() => {
@@ -340,6 +414,13 @@ class MultiplayerServer {
         player.connectionId = connectionId;
         player.lastSeen = Date.now();
 
+        // Reconnect to game session
+        const ws = this.playerConnections.get(connectionId);
+        const session = this.sessionManager.getSession(lobby.code);
+        if (session && ws) {
+          session.handleReconnect(playerId, ws);
+        }
+
         this.broadcastToLobby(lobby.code, {
           type: 'player_reconnected',
           playerId,
@@ -380,7 +461,18 @@ class MultiplayerServer {
       return { success: false, error: 'Command validation failed' };
     }
 
-    // Broadcast to all players in lobby
+    // Route through authoritative game session if available
+    const session = this.sessionManager.getSession(code);
+    if (session) {
+      const accepted = session.handleCommand(playerId, cmd);
+      if (!accepted) {
+        return { success: false, error: 'Command rejected by authoritative server' };
+      }
+      // The AuthoritativeGame broadcasts tick updates itself
+      return { success: true };
+    }
+
+    // Fallback: relay mode (no authoritative session)
     this.broadcastToLobby(code, {
       type: 'game_command',
       playerId,
@@ -426,9 +518,9 @@ class MultiplayerServer {
       }
     }
 
-    // Allow only alphanumeric + basic punctuation (spaces, hyphens, underscores, periods, apostrophes)
-    // This regex matches strings that contain ONLY allowed characters
-    const allowedPattern = /^[a-zA-Z0-9\s\-_.'\u0080-\uFFFF]+$/;
+    // Allow only ASCII alphanumeric + basic punctuation (spaces, hyphens, underscores, periods, apostrophes)
+    // Excludes Unicode to prevent homoglyph attacks (e.g., Cyrillic 'а' posing as Latin 'a')
+    const allowedPattern = /^[a-zA-Z0-9\s\-_.']+$/;
     if (!allowedPattern.test(trimmedName)) {
       return { valid: false, error: 'Player name contains invalid characters. Use letters, numbers, spaces, hyphens, underscores, periods, or apostrophes only' };
     }
@@ -443,8 +535,15 @@ class MultiplayerServer {
    */
   private validateCommand(lobby: GameLobby, playerId: string, cmd: any): boolean {
     // Check player is in the lobby
-    if (!lobby.players.has(playerId)) {
-      console.log(`[Command Rejected] Player ${playerId} not in lobby`);
+    const commandPlayer = lobby.players.get(playerId);
+    if (!commandPlayer) {
+      logger.warn({ playerId }, 'Command rejected: player not in lobby');
+      return false;
+    }
+
+    // Spectators cannot send game commands
+    if (commandPlayer.team === 'spectator') {
+      logger.warn({ playerId }, 'Command rejected: spectators cannot send commands');
       return false;
     }
 
@@ -454,8 +553,8 @@ class MultiplayerServer {
       return false;
     }
 
-    // Check command type is valid (1-13 based on CommandType enum)
-    if (cmd.type < 1 || cmd.type > 13) {
+    // Check command type is valid (1-14 based on CommandType enum, includes QueueReinforcement=14)
+    if (cmd.type < 1 || cmd.type > 14) {
       console.log(`[Command Rejected] Invalid command type ${cmd.type}`);
       return false;
     }
@@ -535,6 +634,7 @@ class MultiplayerServer {
         if (lobby.status === 'waiting' && now - lobby.createdAt > staleThreshold) {
           console.log(`[Cleanup] Removing stale lobby ${code}`);
           this.lobbies.delete(code);
+          this.sessionManager.destroySession(code);
         }
       }
     }, 300000); // Check every 5 minutes
@@ -544,7 +644,7 @@ class MultiplayerServer {
    * Check rate limit for a connection and message type
    * @returns true if allowed, false if rate limited
    */
-  private checkRateLimit(connectionId: string, messageType: string): boolean {
+  checkRateLimit(connectionId: string, messageType: string): boolean {
     switch (messageType) {
       case 'game_command':
         return this.rateLimitGameCommand.tryConsume(connectionId);
@@ -576,7 +676,7 @@ class MultiplayerServer {
    * Get retry-after time for a connection and message type
    * @returns milliseconds to wait before retrying
    */
-  private getRetryAfter(connectionId: string, messageType: string): number {
+  getRetryAfter(connectionId: string, messageType: string): number {
     switch (messageType) {
       case 'game_command':
         return this.rateLimitGameCommand.getRetryAfter(connectionId);
@@ -605,7 +705,7 @@ class MultiplayerServer {
   /**
    * Clear rate limit data for a connection (called on disconnect)
    */
-  private clearRateLimits(connectionId: string): void {
+  clearRateLimits(connectionId: string): void {
     this.rateLimitGameCommand.clear(connectionId);
     this.rateLimitUpdateState.clear(connectionId);
     this.rateLimitLobbyActions.clear(connectionId);
@@ -629,37 +729,131 @@ class MultiplayerServer {
 }
 
 // Create server instance
-const server = new MultiplayerServer();
+const mpServer = new MultiplayerServer();
+
+// Load game data (units, weapons, divisions) for authoritative simulation
+await loadGameData();
+
+// Auth rate limiter (separate from WS rate limiters)
+const authRateLimiter = new RateLimiter(5, 60000); // 5 per minute default
+const handleAuthRoute = createAuthRouter(authRateLimiter);
+
+// CORS headers for all API responses
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+function corsHeaders(): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+}
+
+// Track active WebSocket connections for connection limiting
+let activeConnectionCount = 0;
+const MAX_CONNECTIONS = parseInt(process.env.MAX_WS_CONNECTIONS ?? '500', 10);
 
 // Start Bun WebSocket server
 const PORT = process.env.PORT || 3001;
 
-Bun.serve({
+Bun.serve<WsData>({
   port: PORT,
-  fetch(req, server) {
-    // Upgrade to WebSocket
-    if (server.upgrade(req)) {
-      return; // WebSocket connection established
-    }
-
-    // Handle HTTP endpoints for lobby browsing
+  async fetch(req, server) {
     const url = new URL(req.url);
 
-    if (url.pathname === '/lobbies') {
-      const lobbies = server.data.getOpenLobbies();
-      return new Response(JSON.stringify(lobbies), {
-        headers: { 'Content-Type': 'application/json' },
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
+    // Upgrade to WebSocket for /ws path or if upgrade header present
+    if (req.headers.get('upgrade') === 'websocket') {
+      // Validate origin to prevent Cross-Site WebSocket Hijacking
+      const origin = req.headers.get('origin');
+      if (origin && origin !== ALLOWED_ORIGIN) {
+        logger.warn({ origin }, 'WebSocket upgrade rejected: invalid origin');
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      // Connection limit to prevent resource exhaustion
+      if (activeConnectionCount >= MAX_CONNECTIONS) {
+        logger.warn({ count: activeConnectionCount }, 'WebSocket upgrade rejected: max connections reached');
+        return new Response('Service Unavailable', { status: 503 });
+      }
+
+      // Authenticate WebSocket connection via JWT in query param
+      const token = url.searchParams.get('token');
+      let wsPlayerId: string | null = null;
+      let wsUsername: string | null = null;
+      if (token) {
+        try {
+          const payload = await verifyToken(token);
+          if (payload.type === 'access' && payload.sub) {
+            wsPlayerId = payload.sub;
+            wsUsername = payload.username;
+          }
+        } catch {
+          logger.warn('WebSocket upgrade rejected: invalid JWT');
+          return new Response('Unauthorized', { status: 401 });
+        }
+      }
+      // If no token provided, allow anonymous connection (for backward compat)
+      // but authenticated users get their verified identity bound to the socket
+
+      if (server.upgrade(req, { data: { wsPlayerId, wsUsername } as unknown as WsData })) {
+        return; // WebSocket connection established
+      }
+    }
+
+    // Health check - minimal public info only
+    if (url.pathname === '/health') {
+      return new Response(JSON.stringify({ status: 'ok' }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
       });
     }
 
-    return new Response('Stellar Siege Multiplayer Server', { status: 200 });
+    // REST API routes
+    try {
+      if (url.pathname.startsWith('/api/auth/')) {
+        return await handleAuthRoute(req, url.pathname);
+      }
+
+      if (url.pathname.startsWith('/api/decks')) {
+        return await handleDeckRoute(req, url.pathname);
+      }
+
+      if (url.pathname.startsWith('/api/matches')) {
+        return await handleMatchRoute(req, url.pathname);
+      }
+
+      // Legacy lobby browser endpoint
+      if (url.pathname === '/lobbies') {
+        const lobbies = mpServer.getOpenLobbies();
+        return new Response(JSON.stringify(lobbies), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        });
+      }
+    } catch (error) {
+      logger.error({ err: error }, 'API request error');
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
   },
   websocket: {
+    maxPayloadLength: 65536, // 64KB max message size
     open(ws) {
-      const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      ws.data = { connectionId };
-      server.data.registerConnection(connectionId, ws);
-      console.log(`[Connection] ${connectionId}`);
+      const connectionId = crypto.randomUUID();
+      const { wsPlayerId, wsUsername } = ws.data ?? {};
+      ws.data = { connectionId, playerId: wsPlayerId ?? null, username: wsUsername ?? null };
+      mpServer.registerConnection(connectionId, ws);
+      activeConnectionCount++;
+      logger.info({ connectionId, authenticated: !!wsPlayerId }, 'WebSocket connection opened');
     },
     message(ws, message) {
       try {
@@ -667,8 +861,8 @@ Bun.serve({
         const { connectionId } = ws.data;
 
         // Check rate limit before processing message
-        if (!server.data.checkRateLimit(connectionId, data.type)) {
-          const retryAfter = server.data.getRetryAfter(connectionId, data.type);
+        if (!mpServer.checkRateLimit(connectionId, data.type)) {
+          const retryAfter = mpServer.getRetryAfter(connectionId, data.type);
           ws.send(JSON.stringify({
             type: 'rate_limit_exceeded',
             messageType: data.type,
@@ -681,7 +875,7 @@ Bun.serve({
         switch (data.type) {
           case 'create_lobby':
             {
-              const result = server.data.createLobby(data.playerId, data.playerName, data.mapSize);
+              const result = mpServer.createLobby(data.playerId, data.playerName, data.mapSize);
               if (result.success && result.lobby) {
                 ws.send(JSON.stringify({
                   type: 'lobby_created',
@@ -702,7 +896,7 @@ Bun.serve({
 
           case 'join_lobby':
             {
-              const result = server.data.joinLobby(data.code, data.playerId, data.playerName);
+              const result = mpServer.joinLobby(data.code, data.playerId, data.playerName);
               ws.send(JSON.stringify({
                 type: result.success ? 'lobby_joined' : 'error',
                 ...result,
@@ -711,16 +905,16 @@ Bun.serve({
             break;
 
           case 'leave_lobby':
-            server.data.leaveLobby(data.code, data.playerId);
+            mpServer.leaveLobby(data.code, data.playerId);
             break;
 
           case 'update_state':
-            server.data.updatePlayerState(data.code, data.playerId, data.updates);
+            mpServer.updatePlayerState(data.code, data.playerId, data.updates);
             break;
 
           case 'kick_player':
             {
-              const result = server.data.kickPlayer(data.code, data.hostId, data.targetPlayerId);
+              const result = mpServer.kickPlayer(data.code, data.hostId, data.targetPlayerId);
               ws.send(JSON.stringify({
                 type: result.success ? 'kick_success' : 'error',
                 ...result,
@@ -730,7 +924,7 @@ Bun.serve({
 
           case 'start_game':
             {
-              const result = server.data.startGame(data.code, data.hostId);
+              const result = mpServer.startGame(data.code, data.hostId);
               ws.send(JSON.stringify({
                 type: result.success ? 'start_success' : 'error',
                 ...result,
@@ -738,13 +932,10 @@ Bun.serve({
             }
             break;
 
-          case 'game_state_update':
-            server.data.broadcastGameState(data.code, data.state);
-            break;
-
+          // game_state_update removed: authoritative server handles state broadcasts
           case 'game_command':
             {
-              const result = server.data.handleGameCommand(data.code, data.playerId, data.command);
+              const result = mpServer.handleGameCommand(data.code, data.playerId, data.command);
               if (!result.success) {
                 ws.send(JSON.stringify({
                   type: 'command_rejected',
@@ -755,33 +946,52 @@ Bun.serve({
             break;
 
           case 'reconnect':
-            server.data.handleReconnect(data.playerId, connectionId);
+            mpServer.handleReconnect(data.playerId, connectionId);
             break;
         }
       } catch (error) {
-        console.error('[Message Error]', error);
+        logger.error({ err: error }, 'WebSocket message handling error');
         ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
       }
     },
     close(ws) {
       const { connectionId } = ws.data;
-      console.log(`[Close] ${connectionId}`);
+      activeConnectionCount = Math.max(0, activeConnectionCount - 1);
+      logger.info({ connectionId }, 'WebSocket connection closed');
 
       // Find player by connection and handle disconnect
-      for (const lobby of server.data.lobbies.values()) {
+      for (const lobby of mpServer.lobbies.values()) {
         for (const player of lobby.players.values()) {
           if (player.connectionId === connectionId) {
-            server.data.handleDisconnect(player.id);
+            mpServer.handleDisconnect(player.id);
             break;
           }
         }
       }
 
-      server.data.unregisterConnection(connectionId);
+      mpServer.unregisterConnection(connectionId);
     },
   },
-  data: { server } as any,
 });
 
-console.log(`\n🚀 Stellar Siege Multiplayer Server running on ws://localhost:${PORT}`);
-console.log(`📡 Lobby browser available at http://localhost:${PORT}/lobbies\n`);
+logger.info({ port: PORT }, 'Stellar Siege Multiplayer Server started');
+logger.info(`Lobby browser at http://localhost:${PORT}/lobbies`);
+logger.info(`Auth API at http://localhost:${PORT}/api/auth/`);
+logger.info(`Deck API at http://localhost:${PORT}/api/decks/`);
+logger.info(`Match API at http://localhost:${PORT}/api/matches/`);
+logger.info(`Health check at http://localhost:${PORT}/health`);
+
+// Connect Redis coordinator for multi-instance coordination
+mpServer.coordinator
+  .connect(() => mpServer.sessionManager.getLoadInfo())
+  .catch(err => logger.warn({ err }, 'Redis coordinator startup failed (non-fatal)'));
+
+// Graceful shutdown
+const shutdown = async () => {
+  logger.info('Shutting down...');
+  mpServer.sessionManager.dispose();
+  await mpServer.coordinator.dispose();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

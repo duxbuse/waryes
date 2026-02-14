@@ -1,0 +1,48 @@
+{
+  "id": "sdf_wheeled_apc_mk2",
+  "name": "Wheeled APC Mk.II",
+  "cost": 40,
+  "icon": "assets/icons/categories/apc.png",
+  "health": 6,
+  "speed": {
+    "road": 75,
+    "offRoad": 45,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 7,
+    "side": 5,
+    "rear": 3,
+    "top": 2
+  },
+  "fuel": 350,
+  "autonomy": {
+    "road": 550,
+    "offRoad": 380
+  },
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "sdf_rapid_laser_cannon",
+      "count": 1,
+      "maxAmmo": 10,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "sdf_laser_rifle_pintle",
+      "count": 1,
+      "maxAmmo": 15,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 10,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}

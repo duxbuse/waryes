@@ -1,0 +1,45 @@
+{
+  "id": "vanguard_jetpack_assault",
+  "name": "Jetpack Assault Squad",
+  "cost": 50,
+  "icon": "assets/icons/units/vanguard/vanguard_jetpack_squad.png",
+  "health": 5,
+  "speed": {
+    "road": 70,
+    "offRoad": 50,
+    "rotation": 8
+  },
+  "armor": {
+    "front": 20,
+    "side": 20,
+    "rear": 20,
+    "top": 20
+  },
+  "fuel": null,
+  "autonomy": null,
+  "optics": "Normal",
+  "stealth": "Poor",
+  "forwardDeploy": 0,
+  "weapons": [
+    {
+      "weaponId": "vanguard_kinetic_pistol",
+      "count": 5,
+      "maxAmmo": 20,
+      "turretMounted": false
+    },
+    {
+      "weaponId": "vanguard_saw_blade",
+      "count": 5,
+      "maxAmmo": 20,
+      "turretMounted": false
+    }
+  ],
+  "category": "INF",
+  "tags": [],
+  "isCommander": false,
+  "commanderAuraRadius": 0,
+  "transportCapacity": 0,
+  "canBeTransported": true,
+  "transportSize": 1,
+  "veterancyBonus": 0.1
+}
