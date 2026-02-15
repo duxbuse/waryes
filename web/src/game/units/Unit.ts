@@ -234,7 +234,10 @@ export class Unit {
 
   // Frozen
   get isFrozen(): boolean { return this.sim.isFrozen; }
-  setFrozen(frozen: boolean): void { this.sim.setFrozen(frozen); }
+  setFrozen(frozen: boolean): void {
+    console.log(`[Unit] ${this.name} (${this.id}) setFrozen(${frozen}), current command: ${this.sim.getCurrentCommand().type}`);
+    this.sim.setFrozen(frozen);
+  }
 
   // Garrison / Transport state
   get isDigging(): boolean { return this.sim.isDigging; }
@@ -269,8 +272,10 @@ export class Unit {
   }
 
   setMoveCommand(target: THREE.Vector3): void {
+    console.log(`[Unit] ${this.name} (${this.id}) setMoveCommand called, frozen: ${this.isFrozen}, target: (${target.x.toFixed(1)}, ${target.z.toFixed(1)})`);
     this.playVoiceLineThrottled('move_order');
     this.sim.setMoveCommand(target);
+    console.log(`[Unit] ${this.name} current command after set: ${this.sim.getCurrentCommand().type}`);
     if (this.game.pathRenderer) {
       this.game.pathRenderer.updatePath(this, target, 'move');
     }

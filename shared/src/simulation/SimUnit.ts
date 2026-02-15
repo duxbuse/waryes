@@ -139,7 +139,9 @@ export class SimUnit {
   private lastPosition = new THREE.Vector3();
   private hasMovedOnce = false;
   private lastPathfindingAttempt = 0;
-  private readonly pathfindingCooldown = 1.0;
+  private readonly pathfindingCooldown = 1.0; // Cooldown for stuck units
+  private readonly initialPathfindingCooldown = 0.1; // Fast retry for queued pathfinding
+  private hadSuccessfulPath = false; // Track if unit ever had a path
   private isEscaping = false;
   // @ts-expect-error Planned feature - movement modes
   private movementMode: 'normal' | 'fast' | 'reverse' = 'normal';
@@ -613,25 +615,15 @@ export class SimUnit {
       this.currentWaypointIndex = 0;
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
+      this.hadSuccessfulPath = true;
     } else {
-      const fallbackTarget = this.context.findNearestReachablePosition(this.simPosition, target, 50);
-      if (fallbackTarget) {
-        const fallbackPath = this.context.findPath(this.simPosition, fallbackTarget);
-        if (fallbackPath && fallbackPath.length > 0) {
-          this.waypoints = fallbackPath;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
-          this.stuckTimer = 0;
-        } else {
-          this.currentCommand = { type: UnitCommand.None };
-          this.targetPosition = null;
-          this.waypoints = [];
-        }
-      } else {
-        this.currentCommand = { type: UnitCommand.None };
-        this.targetPosition = null;
-        this.waypoints = [];
-      }
+      // Pathfinding failed - could be queued (budget exhausted) or blocked
+      // Keep the command active with empty waypoints so retry logic can handle it
+      // The retry logic will pick up cached paths if they were queued
+      this.waypoints = [];
+      this.targetPosition = null;
+      this.hadSuccessfulPath = false;
+      // Don't clear currentCommand - let retry logic handle it
     }
   }
 
@@ -667,25 +659,12 @@ export class SimUnit {
       this.currentWaypointIndex = 0;
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
+      this.hadSuccessfulPath = true;
     } else {
-      const fallbackTarget = this.context.findNearestReachablePosition(this.simPosition, target, 50);
-      if (fallbackTarget) {
-        const fallbackPath = this.context.findPath(this.simPosition, fallbackTarget);
-        if (fallbackPath && fallbackPath.length > 0) {
-          this.waypoints = fallbackPath;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
-          this.stuckTimer = 0;
-        } else {
-          this.currentCommand = { type: UnitCommand.None };
-          this.targetPosition = null;
-          this.waypoints = [];
-        }
-      } else {
-        this.currentCommand = { type: UnitCommand.None };
-        this.targetPosition = null;
-        this.waypoints = [];
-      }
+      // Pathfinding failed - keep command active for retry logic
+      this.waypoints = [];
+      this.targetPosition = null;
+      this.hadSuccessfulPath = false;
     }
   }
 
@@ -708,25 +687,12 @@ export class SimUnit {
       this.currentWaypointIndex = 0;
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
+      this.hadSuccessfulPath = true;
     } else {
-      const fallbackTarget = this.context.findNearestReachablePosition(this.simPosition, target, 50);
-      if (fallbackTarget) {
-        const fallbackPath = this.context.findPath(this.simPosition, fallbackTarget);
-        if (fallbackPath && fallbackPath.length > 0) {
-          this.waypoints = fallbackPath;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
-          this.stuckTimer = 0;
-        } else {
-          this.currentCommand = { type: UnitCommand.None };
-          this.targetPosition = null;
-          this.waypoints = [];
-        }
-      } else {
-        this.currentCommand = { type: UnitCommand.None };
-        this.targetPosition = null;
-        this.waypoints = [];
-      }
+      // Pathfinding failed - keep command active for retry logic
+      this.waypoints = [];
+      this.targetPosition = null;
+      this.hadSuccessfulPath = false;
     }
   }
 
@@ -749,25 +715,12 @@ export class SimUnit {
       this.currentWaypointIndex = 0;
       this.targetPosition = this.waypoints[0]!.clone();
       this.stuckTimer = 0;
+      this.hadSuccessfulPath = true;
     } else {
-      const fallbackTarget = this.context.findNearestReachablePosition(this.simPosition, target, 50);
-      if (fallbackTarget) {
-        const fallbackPath = this.context.findPath(this.simPosition, fallbackTarget);
-        if (fallbackPath && fallbackPath.length > 0) {
-          this.waypoints = fallbackPath;
-          this.currentWaypointIndex = 0;
-          this.targetPosition = this.waypoints[0]!.clone();
-          this.stuckTimer = 0;
-        } else {
-          this.currentCommand = { type: UnitCommand.None };
-          this.targetPosition = null;
-          this.waypoints = [];
-        }
-      } else {
-        this.currentCommand = { type: UnitCommand.None };
-        this.targetPosition = null;
-        this.waypoints = [];
-      }
+      // Pathfinding failed - keep command active for retry logic
+      this.waypoints = [];
+      this.targetPosition = null;
+      this.hadSuccessfulPath = false;
     }
   }
 
@@ -1007,7 +960,11 @@ export class SimUnit {
         const currentTime = performance.now() / 1000;
         const timeSinceLastAttempt = currentTime - this.lastPathfindingAttempt;
 
-        if (timeSinceLastAttempt >= this.pathfindingCooldown) {
+        // Use shorter cooldown if unit never had a path (waiting for queued pathfinding)
+        // Use longer cooldown if unit had a path but got stuck (avoid spamming pathfinding)
+        const cooldown = this.hadSuccessfulPath ? this.pathfindingCooldown : this.initialPathfindingCooldown;
+
+        if (timeSinceLastAttempt >= cooldown) {
           this.lastPathfindingAttempt = currentTime;
 
           let path = this.context.findPath(this.simPosition, this.currentCommand.target);
@@ -1025,6 +982,7 @@ export class SimUnit {
             this.targetPosition = this.waypoints[0]!.clone();
             this.stuckTimer = 0;
             this.isEscaping = false;
+            this.hadSuccessfulPath = true; // Mark that unit has had at least one successful path
           } else {
             this.completeCommand();
             return;

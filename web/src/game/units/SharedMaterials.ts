@@ -8,14 +8,14 @@ import * as THREE from 'three';
 // Unit body materials (MeshBasicMaterial for bright colors unaffected by lighting)
 const unitMaterials = {
   player: new THREE.MeshBasicMaterial({
-    color: 0x4a9eff, // Blue for player's own units
+    color: 0x4aff4a, // Green for player's own units
     depthWrite: true,
     depthTest: true,
     transparent: false,
     side: THREE.DoubleSide,
   }),
   ally: new THREE.MeshBasicMaterial({
-    color: 0x4aff4a, // Green for allied units
+    color: 0x4a9eff, // Blue for allied units
     depthWrite: true,
     depthTest: true,
     transparent: false,

@@ -989,6 +989,11 @@ export class Game {
     return this._phase;
   }
 
+  /** Get local player ID (for credits, commands, etc.) */
+  getLocalPlayerId(): string {
+    return this.multiplayerManager.getPlayerId();
+  }
+
   setPhase(phase: GamePhase): void {
     const oldPhase = this._phase;
     this._phase = phase;
@@ -1614,7 +1619,18 @@ export class Game {
     // Initialize pathfinding
     this.pathfindingManager.initialize();
 
-    // Execute all pre-orders
+    // Start battle and unfreeze units FIRST (before executing pre-orders)
+    console.log('[Game] Starting battle...');
+    this.setPhase(GamePhase.Battle);
+    this.unitManager.unfreezeAll();
+    console.log('[Game] Battle started, units unfrozen');
+
+    // Reset pathfinding budget to allow all pre-orders to pathfind at battle start
+    // Without this, only MAX_PATHFINDING_PER_FRAME (5) units can pathfind in one frame
+    this.pathfindingManager.resetFrameBudget();
+    console.log('[Game] Pathfinding budget reset for pre-order execution');
+
+    // NOW execute all pre-orders (units must be unfrozen to accept commands properly)
     this.executePreOrders();
 
     // Clear pre-order path visualizations (dashed lines)
@@ -1623,12 +1639,6 @@ export class Game {
     // Initialize AI strategy and queue initial movements
     // This ensures AI units have orders ready and begin moving immediately
     this.aiManager.initializeBattle();
-
-    // Start battle
-    console.log('[Game] Starting battle...');
-    this.setPhase(GamePhase.Battle);
-    this.unitManager.unfreezeAll();
-    console.log('[Game] Battle started, units unfrozen');
   }
 
   /**
@@ -1658,7 +1668,7 @@ export class Game {
       this.pathRenderer.showPreOrderPath(unit, startPos, target, type);
     }
 
-    console.log(`Pre-order queued for unit ${unitId}: ${type}`);
+    console.log(`[Game] Pre-order queued for unit ${unit.name} (${unitId}), type: ${type}, total orders: ${orders.length}`);
   }
 
   /**
@@ -1667,12 +1677,26 @@ export class Game {
   private executePreOrders(): void {
     const allUnits = this.unitManager.getAllUnits();
 
+    console.log(`[Game] executePreOrders: ${this.preOrders.size} units have pre-orders, ${allUnits.length} total units`);
+
+    let executedCount = 0;
     this.preOrders.forEach((orders, unitId) => {
       const unit = allUnits.find(u => u.id === unitId);
-      if (!unit) return;
+      if (!unit) {
+        console.warn(`[Game] executePreOrders: unit ${unitId} not found in allUnits!`);
+        return;
+      }
+
+      console.log(`[Game] Executing ${orders.length} orders for unit ${unit.name} (${unitId})`);
+
+      // Reset pathfinding budget before each unit's orders
+      // This is a one-time operation at battle start, so bypassing the frame limit is acceptable
+      // Normal gameplay maintains the 5-per-frame limit for 60 FPS performance
+      this.pathfindingManager.resetFrameBudget();
 
       // Execute each order
-      orders.forEach(order => {
+      orders.forEach((order, orderIndex) => {
+        console.log(`  [${orderIndex}] Executing ${order.type} order for ${unit.name}, target: (${order.target.x.toFixed(1)}, ${order.target.z.toFixed(1)})`);
         switch (order.type) {
           case 'move':
             unit.setMoveCommand(order.target);
@@ -1692,10 +1716,13 @@ export class Game {
             unit.setAttackMoveCommand(order.target);
             break;
         }
+        executedCount++;
       });
 
       console.log(`Executed ${orders.length} pre-orders for unit ${unitId}`);
     });
+
+    console.log(`[Game] executePreOrders complete: executed ${executedCount} total orders`);
 
     // Clear pre-orders after execution
     this.preOrders.clear();

@@ -102,6 +102,12 @@ class BinaryHeap {
   }
 }
 
+interface PathfindingRequest {
+  start: THREE.Vector3;
+  goal: THREE.Vector3;
+  requestTime: number;
+}
+
 export class PathfindingManager {
   private readonly game: Game;
   private navGrid: number[][] = []; // Cost grid: 1.0 = normal, 2-5 = high cost, Infinity = impassable
@@ -115,6 +121,12 @@ export class PathfindingManager {
   // Limit A* searches per frame to maintain 60 FPS
   private pathfindingCallsThisFrame = 0;
   private readonly MAX_PATHFINDING_PER_FRAME = 5; // Max 5 A* searches per frame (~20-50ms total)
+
+  // Pathfinding request queue for when budget is exhausted
+  private readonly pathfindingQueue: PathfindingRequest[] = [];
+  // Cache completed paths (key: "startX,startZ,goalX,goalZ")
+  private readonly pathCache = new Map<string, THREE.Vector3[] | null>();
+  private readonly CACHE_TIMEOUT = 2000; // 2 seconds
 
   // Reusable data structures (allocated once, cleared per search)
   private readonly openHeap = new BinaryHeap();
@@ -165,9 +177,53 @@ export class PathfindingManager {
   /**
    * Reset pathfinding budget at start of each frame
    * Called by Game.fixedUpdate()
+   * Also processes queued pathfinding requests
    */
   resetFrameBudget(): void {
+    // Process queued pathfinding requests from previous frames
+    this.processQueuedRequests();
+
+    // Reset budget for new frame
     this.pathfindingCallsThisFrame = 0;
+  }
+
+  /**
+   * Process queued pathfinding requests up to the frame budget
+   */
+  private processQueuedRequests(): void {
+    while (this.pathfindingQueue.length > 0 && this.pathfindingCallsThisFrame < this.MAX_PATHFINDING_PER_FRAME) {
+      const request = this.pathfindingQueue.shift();
+      if (!request) break;
+
+      // Check if request is stale (older than 2 seconds)
+      const age = performance.now() - request.requestTime;
+      if (age > this.CACHE_TIMEOUT) {
+        continue; // Skip stale requests
+      }
+
+      // Process the pathfinding request
+      const path = this.findPathInternal(request.start, request.goal);
+      const cacheKey = this.getCacheKey(request.start, request.goal);
+      this.pathCache.set(cacheKey, path);
+
+      // Clean up cache entry after timeout
+      setTimeout(() => {
+        this.pathCache.delete(cacheKey);
+      }, this.CACHE_TIMEOUT);
+    }
+  }
+
+  /**
+   * Generate cache key for a start/goal pair
+   */
+  private getCacheKey(start: THREE.Vector3, goal: THREE.Vector3): string {
+    // Round to grid precision to increase cache hits
+    const gridSize = this.gridSize;
+    const sx = Math.floor(start.x / gridSize);
+    const sz = Math.floor(start.z / gridSize);
+    const gx = Math.floor(goal.x / gridSize);
+    const gz = Math.floor(goal.z / gridSize);
+    return `${sx},${sz},${gx},${gz}`;
   }
 
   /**
@@ -391,12 +447,39 @@ export class PathfindingManager {
    * Find path from start to goal using A* with binary min-heap
    */
   findPath(start: THREE.Vector3, goal: THREE.Vector3): THREE.Vector3[] | null {
+    // Check cache first for previously computed paths
+    const cacheKey = this.getCacheKey(start, goal);
+    if (this.pathCache.has(cacheKey)) {
+      return this.pathCache.get(cacheKey) ?? null;
+    }
+
     // CRITICAL PERFORMANCE: Check pathfinding budget to prevent frame rate collapse
-    // If budget exhausted, return null and let unit try again next frame
     if (this.pathfindingCallsThisFrame >= this.MAX_PATHFINDING_PER_FRAME) {
-      // Budget exhausted - defer pathfinding to next frame
+      // Budget exhausted - queue request for processing in subsequent frames
+      const existingRequest = this.pathfindingQueue.find(
+        req => this.getCacheKey(req.start, req.goal) === cacheKey
+      );
+
+      if (!existingRequest) {
+        this.pathfindingQueue.push({
+          start: start.clone(),
+          goal: goal.clone(),
+          requestTime: performance.now()
+        });
+      }
+
+      // Return null - caller will retry and get cached result
       return null;
     }
+
+    // Budget available - compute path immediately
+    return this.findPathInternal(start, goal);
+  }
+
+  /**
+   * Internal pathfinding implementation (does the actual A* search)
+   */
+  private findPathInternal(start: THREE.Vector3, goal: THREE.Vector3): THREE.Vector3[] | null {
     this.pathfindingCallsThisFrame++;
 
     // Convert world coordinates to grid coordinates

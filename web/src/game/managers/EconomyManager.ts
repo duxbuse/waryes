@@ -10,6 +10,7 @@ import type { CaptureZone } from '../../data/types';
 import { SimEconomyManager } from '@shared/simulation/SimEconomyManager';
 import type { TeamScore, ZoneUnitEntry } from '@shared/simulation/SimEconomyManager';
 import type { FillEntry } from '../map/ZoneFillRenderer';
+import { CreditTickTimer } from '../ui/CreditTickTimer';
 
 // Re-export shared types for backward compatibility
 export type { TeamScore, ZoneUnitEntry } from '@shared/simulation/SimEconomyManager';
@@ -21,8 +22,11 @@ export class EconomyManager {
   // UI elements
   private creditsEl: HTMLElement | null = null;
   private incomeEl: HTMLElement | null = null;
+  private barCreditsEl: HTMLElement | null = null;
+  private barIncomeEl: HTMLElement | null = null;
   private playerScoreEl: HTMLElement | null = null;
   private enemyScoreEl: HTMLElement | null = null;
+  private tickTimer: CreditTickTimer | null = null;
 
   // Callbacks
   private onVictory: ((winner: 'player' | 'enemy') => void) | null = null;
@@ -36,6 +40,15 @@ export class EconomyManager {
     // Provide the unit query function to the simulation layer
     this.sim.initialize(captureZones, (zone, team) => this.getUnitsInZone(zone, team));
 
+    // Register local player with starting credits
+    const localPlayerId = this.game.getLocalPlayerId();
+    this.sim.registerPlayer(localPlayerId, 'player');
+
+    // For single-player, also register AI players
+    // TODO: In multiplayer, this will be handled by server/lobby setup
+    this.sim.registerPlayer('ai-enemy-1', 'enemy');
+    this.sim.registerPlayer('ai-ally-1', 'player'); // For potential allied AI
+
     // Pass capture zone bounds to fog of war renderer for fog reduction
     this.game.fogOfWarRenderer?.setCaptureZones(captureZones);
 
@@ -48,6 +61,20 @@ export class EconomyManager {
     this.incomeEl = document.getElementById('income-value');
     this.playerScoreEl = document.getElementById('score-blue');
     this.enemyScoreEl = document.getElementById('score-red');
+
+    // Also track battle bar elements
+    this.barCreditsEl = document.getElementById('bar-credits-value');
+    this.barIncomeEl = document.getElementById('bar-income-value');
+
+    // Create tick timer visual next to income display
+    const battleInfoPanel = document.getElementById('battle-info-panel');
+    if (battleInfoPanel && this.barIncomeEl) {
+      // Find the income text element's parent to insert timer after it
+      const incomeParent = this.barIncomeEl.parentElement;
+      if (incomeParent) {
+        this.tickTimer = new CreditTickTimer(incomeParent);
+      }
+    }
   }
 
   setVictoryCallback(callback: (winner: 'player' | 'enemy') => void): void {
@@ -57,6 +84,12 @@ export class EconomyManager {
   update(dt: number): void {
     // Run simulation logic
     this.sim.update(dt);
+
+    // Update tick timer visual
+    if (this.tickTimer) {
+      const progress = this.sim.getTickProgress();
+      this.tickTimer.update(progress);
+    }
 
     // Process rendering events from the simulation
     this.processSimEvents(dt);
@@ -169,24 +202,37 @@ export class EconomyManager {
   }
 
   private updateUI(): void {
-    const credits = this.sim.getPlayerCredits();
+    const localPlayerId = this.game.getLocalPlayerId();
+    const credits = this.sim.getCredits(localPlayerId);
     const score = this.sim.getScore();
     const captureZones = this.sim.getCaptureZones();
 
+    // Update credits display (local player only)
+    const creditsText = credits.toString();
     if (this.creditsEl) {
-      this.creditsEl.textContent = credits.toString();
+      this.creditsEl.textContent = creditsText;
+    }
+    if (this.barCreditsEl) {
+      this.barCreditsEl.textContent = creditsText;
     }
 
-    if (this.incomeEl) {
-      let zoneIncome = 0;
-      for (const zone of captureZones) {
-        if (zone.owner === 'player') {
-          zoneIncome += zone.pointsPerTick;
-        }
+    // Calculate and update income display (based on local player's team)
+    // TODO: Get team from sim instead of hardcoding 'player'
+    let zoneIncome = 0;
+    for (const zone of captureZones) {
+      if (zone.owner === 'player') {
+        zoneIncome += zone.pointsPerTick;
       }
-      this.incomeEl.textContent = `+${10 + zoneIncome}/tick`;
+    }
+    const incomeText = `+${10 + zoneIncome}/tick`;
+    if (this.incomeEl) {
+      this.incomeEl.textContent = incomeText;
+    }
+    if (this.barIncomeEl) {
+      this.barIncomeEl.textContent = incomeText;
     }
 
+    // Update scores
     if (this.playerScoreEl) {
       this.playerScoreEl.textContent = score.player.toString();
     }
@@ -197,22 +243,43 @@ export class EconomyManager {
 
   // ─── Proxy methods for backward compatibility ──────────────────
 
-  getPlayerCredits(): number { return this.sim.getPlayerCredits(); }
-  getEnemyCredits(): number { return this.sim.getEnemyCredits(); }
+  /** Get local player's credits */
+  getPlayerCredits(): number {
+    const localPlayerId = this.game.getLocalPlayerId();
+    return this.sim.getCredits(localPlayerId);
+  }
 
+  /** Get enemy credits (first enemy player found) */
+  getEnemyCredits(): number {
+    return this.sim.getEnemyCredits();
+  }
+
+  /** Spend credits for local player */
   spendCredits(amount: number): boolean {
-    const result = this.sim.spendCredits(amount);
+    const localPlayerId = this.game.getLocalPlayerId();
+    const result = this.sim.spendCredits(localPlayerId, amount);
     if (result) this.updateUI();
     return result;
   }
 
+  /** Add credits to local player */
   addPlayerCredits(amount: number): void {
-    this.sim.addPlayerCredits(amount);
+    const localPlayerId = this.game.getLocalPlayerId();
+    this.sim.addCredits(localPlayerId, amount);
     this.updateUI();
   }
 
-  spendEnemyCredits(amount: number): boolean {
-    return this.sim.spendEnemyCredits(amount);
+  /** Spend credits for a specific player */
+  spendCreditsForPlayer(playerId: string, amount: number): boolean {
+    const result = this.sim.spendCredits(playerId, amount);
+    if (result) this.updateUI();
+    return result;
+  }
+
+  /** Add credits to a specific player */
+  addCreditsToPlayer(playerId: string, amount: number): void {
+    this.sim.addCredits(playerId, amount);
+    this.updateUI();
   }
 
   getScore(): TeamScore { return this.sim.getScore(); }

@@ -44,9 +44,9 @@ export type GetUnitsInZoneFn = (
 ) => Array<{ id: string; x: number; z: number }>;
 
 export class SimEconomyManager {
-  // Credits
-  private playerCredits: number = GAME_CONSTANTS.STARTING_CREDITS;
-  private enemyCredits: number = GAME_CONSTANTS.STARTING_CREDITS;
+  // Credits - now per-player instead of per-team
+  private playerCredits: Map<string, number> = new Map();
+  private playerTeams: Map<string, 'player' | 'enemy'> = new Map();
 
   // Income
   private baseIncome: number = GAME_CONSTANTS.INCOME_PER_TICK;
@@ -81,6 +81,25 @@ export class SimEconomyManager {
     this.zoneUnitEntries.clear();
     this.zoneContestedStates.clear();
     this.victoryWinner = null;
+    // Note: playerCredits and playerTeams are NOT cleared - they persist across game phases
+  }
+
+  /**
+   * Register a player and give them starting credits
+   */
+  registerPlayer(playerId: string, team: 'player' | 'enemy'): void {
+    if (!this.playerCredits.has(playerId)) {
+      this.playerCredits.set(playerId, GAME_CONSTANTS.STARTING_CREDITS);
+    }
+    this.playerTeams.set(playerId, team);
+  }
+
+  /**
+   * Remove a player (e.g., when they disconnect)
+   */
+  removePlayer(playerId: string): void {
+    this.playerCredits.delete(playerId);
+    this.playerTeams.delete(playerId);
   }
 
   // ─── Tick-based update ─────────────────────────────────────────
@@ -102,9 +121,6 @@ export class SimEconomyManager {
   }
 
   private processTick(): void {
-    // Add base income to both teams
-    this.playerCredits += this.baseIncome;
-
     // Calculate bonus income from owned zones
     let playerZoneIncome = 0;
     let enemyZoneIncome = 0;
@@ -119,8 +135,14 @@ export class SimEconomyManager {
       }
     }
 
-    this.playerCredits += playerZoneIncome;
-    this.enemyCredits += this.baseIncome + enemyZoneIncome;
+    // Give income to ALL players (each player gets their own credits)
+    for (const [playerId, team] of this.playerTeams.entries()) {
+      const currentCredits = this.playerCredits.get(playerId) ?? 0;
+      const teamZoneIncome = team === 'player' ? playerZoneIncome : enemyZoneIncome;
+      const totalIncome = this.baseIncome + teamZoneIncome;
+
+      this.playerCredits.set(playerId, currentCredits + totalIncome);
+    }
 
     // Check victory
     if (this.score.player >= this.victoryThreshold) {
@@ -224,29 +246,64 @@ export class SimEconomyManager {
     return this.zoneUnitEntries.get(zoneId) ?? [];
   }
 
+  /** Get current progress toward next tick (0.0 to 1.0) */
+  getTickProgress(): number {
+    return this.tickTimer / this.tickDuration;
+  }
+
   // ─── Credits ───────────────────────────────────────────────────
 
-  getPlayerCredits(): number { return this.playerCredits; }
-  getEnemyCredits(): number { return this.enemyCredits; }
+  /** Get credits for a specific player */
+  getCredits(playerId: string): number {
+    return this.playerCredits.get(playerId) ?? 0;
+  }
 
-  spendCredits(amount: number): boolean {
-    if (this.playerCredits >= amount) {
-      this.playerCredits -= amount;
+  /** Get all player IDs and their credits (for UI/debugging) */
+  getAllPlayerCredits(): Array<{ playerId: string; credits: number; team: 'player' | 'enemy' }> {
+    const result: Array<{ playerId: string; credits: number; team: 'player' | 'enemy' }> = [];
+    for (const [playerId, credits] of this.playerCredits.entries()) {
+      const team = this.playerTeams.get(playerId);
+      if (team) {
+        result.push({ playerId, credits, team });
+      }
+    }
+    return result;
+  }
+
+  /** Spend credits for a specific player */
+  spendCredits(playerId: string, amount: number): boolean {
+    const currentCredits = this.playerCredits.get(playerId) ?? 0;
+    if (currentCredits >= amount) {
+      this.playerCredits.set(playerId, currentCredits - amount);
       return true;
     }
     return false;
   }
 
-  addPlayerCredits(amount: number): void {
-    this.playerCredits += amount;
+  /** Add credits to a specific player */
+  addCredits(playerId: string, amount: number): void {
+    const currentCredits = this.playerCredits.get(playerId) ?? 0;
+    this.playerCredits.set(playerId, currentCredits + amount);
   }
 
-  spendEnemyCredits(amount: number): boolean {
-    if (this.enemyCredits >= amount) {
-      this.enemyCredits -= amount;
-      return true;
+  /** Legacy method - kept for backward compatibility, uses first player on team */
+  getPlayerCredits(): number {
+    for (const [playerId, team] of this.playerTeams.entries()) {
+      if (team === 'player') {
+        return this.playerCredits.get(playerId) ?? 0;
+      }
     }
-    return false;
+    return 0;
+  }
+
+  /** Legacy method - kept for backward compatibility, uses first enemy on team */
+  getEnemyCredits(): number {
+    for (const [playerId, team] of this.playerTeams.entries()) {
+      if (team === 'enemy') {
+        return this.playerCredits.get(playerId) ?? 0;
+      }
+    }
+    return 0;
   }
 
   // ─── Score & Zones ─────────────────────────────────────────────

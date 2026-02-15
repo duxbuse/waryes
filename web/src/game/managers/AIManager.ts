@@ -2539,10 +2539,13 @@ export class AIManager {
       const maxPerCheck = 3;
 
       while (unitsBought < maxPerCheck) {
-        // Use appropriate credit pool
-        const credits = teamState.team === 'enemy'
-          ? this.game.economyManager.getEnemyCredits()
-          : this.game.economyManager.getPlayerCredits();
+        // Get AI player ID for this team
+        // For enemy: use first enemy AI player
+        // For ally: use first ally AI player (credits are shared among allies)
+        const aiPlayerId = teamState.team === 'enemy' ? 'ai-enemy-1' : 'ai-ally-1';
+
+        // Get credits for this AI player
+        const credits = this.game.economyManager.sim.getCredits(aiPlayerId);
 
         console.log(`[AIManager] checkReinforcements(${teamState.team}): buy attempt #${unitsBought + 1}, credits=${credits}`);
 
@@ -2580,12 +2583,10 @@ export class AIManager {
 
         console.log(`[AIManager] checkReinforcements(${teamState.team}): best pick=${bestType}, cost=${bestCost}, score=${bestScore.toFixed(1)}`);
 
-        // Spend credits from appropriate pool
-        const spent = teamState.team === 'enemy'
-          ? this.game.economyManager.spendEnemyCredits(bestCost)
-          : this.game.economyManager.spendCredits(bestCost);
+        // Spend credits from AI player's pool
+        const spent = this.game.economyManager.spendCreditsForPlayer(aiPlayerId, bestCost);
         if (!spent) {
-          console.log(`[AIManager] checkReinforcements(${teamState.team}): spendCredits failed for ${bestCost}`);
+          console.log(`[AIManager] checkReinforcements(${teamState.team}): spendCredits failed for ${bestCost} (player: ${aiPlayerId})`);
           break;
         }
 
@@ -2605,9 +2606,7 @@ export class AIManager {
         }
 
         if (success) {
-          const remainingCredits = teamState.team === 'enemy'
-            ? this.game.economyManager.getEnemyCredits()
-            : this.game.economyManager.getPlayerCredits();
+          const remainingCredits = this.game.economyManager.sim.getCredits(aiPlayerId);
           console.log(`[AIManager] Queued ${teamState.team} reinforcement: ${bestType} (cost: ${bestCost}, remaining credits: ${remainingCredits}, dest: ${dest ? `(${dest.x.toFixed(0)},${dest.z.toFixed(0)})` : 'none'})`);
 
           // Update composition counts so subsequent buys in this loop reflect what we just bought

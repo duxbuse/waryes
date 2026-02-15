@@ -137,7 +137,8 @@ export class InputManager {
       this.state.dragStartX = event.clientX;
       this.state.dragStartY = event.clientY;
     } else if (event.button === 2) {
-      // Right click
+      // Right click - prevent default browser behavior (especially Firefox's Shift+Right-Click menu)
+      event.preventDefault();
       this.state.isRightMouseDown = true;
       this.state.rightDragStartX = event.clientX;
       this.state.rightDragStartY = event.clientY;
@@ -166,7 +167,8 @@ export class InputManager {
       this.state.isDragging = false;
       this.hideSelectionBox();
     } else if (event.button === 2) {
-      // Right click - check if it was a drag (formation) or click (command)
+      // Right click - prevent default browser behavior (especially Firefox's Shift+Right-Click menu)
+      event.preventDefault();
 
       // Check if waiting for reinforcement destination - right-click cancels
       if (this.game.deploymentManager.isWaitingForReinforcementDestination()) {
@@ -271,11 +273,12 @@ export class InputManager {
   }
 
   private onDoubleClick(event: MouseEvent): void {
-    // Double click to select all units of same type
+    // Double click to select all units of same type (player-owned only)
     const hits = this.game.getUnitsAtScreen(event.clientX, event.clientY);
     if (hits.length > 0) {
       const clickedUnit = this.findUnitFromMesh(hits[0]!);
-      if (clickedUnit) {
+      // Only allow selection of player-owned units (not allied units)
+      if (clickedUnit && clickedUnit.team === 'player' && clickedUnit.ownerId === 'player') {
         this.game.selectionManager.selectAllOfType(clickedUnit.unitType);
       }
     }
@@ -508,7 +511,8 @@ export class InputManager {
 
     if (hits.length > 0) {
       const clickedUnit = this.findUnitFromMesh(hits[0]!);
-      if (clickedUnit) {
+      // Only allow selection of player-owned units (not allied units)
+      if (clickedUnit && clickedUnit.team === 'player' && clickedUnit.ownerId === 'player') {
         if (this.state.modifiers.shift) {
           // Add/remove from selection
           this.game.selectionManager.toggleSelection(clickedUnit);
@@ -599,7 +603,9 @@ export class InputManager {
         else if (reverse) orderType = 'reverse';
         else if (fast) orderType = 'fast';
 
-        selectedUnits.forEach(unit => {
+        console.log(`[InputManager] Queueing pre-orders for ${selectedUnits.length} units, type: ${orderType}`);
+        selectedUnits.forEach((unit, index) => {
+          console.log(`  [${index}] About to queue pre-order for unit ${unit.name} (${unit.id})`);
           this.game.queuePreOrder(unit.id, orderType, worldPos.clone());
         });
       } else {
@@ -662,8 +668,8 @@ export class InputManager {
       this.game.camera
     );
 
-    // Filter to only player units
-    const playerUnits = unitsInBox.filter(u => u.team === 'player');
+    // Filter to only player-owned units (not allied units)
+    const playerUnits = unitsInBox.filter(u => u.team === 'player' && u.ownerId === 'player');
 
     if (playerUnits.length > 0) {
       if (this.state.modifiers.shift) {

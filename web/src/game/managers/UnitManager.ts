@@ -242,10 +242,13 @@ export class UnitManager {
   issueMoveCommand(units: readonly Unit[], target: THREE.Vector3, queue: boolean): void {
     if (units.length === 0) return;
 
+    console.log(`[UnitManager] issueMoveCommand called with ${units.length} units, queue=${queue}`);
+
     // Formation offset calculation
     const spacing = 4;
     const unitsPerRow = Math.ceil(Math.sqrt(units.length));
 
+    let commandCount = 0;
     units.forEach((unit, index) => {
       const row = Math.floor(index / unitsPerRow);
       const col = index % unitsPerRow;
@@ -261,7 +264,9 @@ export class UnitManager {
       } else {
         unit.setMoveCommand(unitTarget);
       }
+      commandCount++;
     });
+    console.log(`[UnitManager] Issued ${commandCount} move commands`);
   }
 
   /**
@@ -370,12 +375,13 @@ export class UnitManager {
   }
 
   /**
-   * Sell selected units (refund credits)
+   * Sell selected units (refund credits) - only player-owned units, not allies
    */
   sellSelected(): void {
     const selected = this.game.selectionManager.getSelectedUnits();
     for (const unit of selected) {
-      if (unit.team === 'player') {
+      // Only allow selling player-owned units (not allied units)
+      if (unit.team === 'player' && unit.ownerId === 'player') {
         // TODO: Refund credits based on unit cost
         this.destroyUnit(unit);
       }

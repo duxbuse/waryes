@@ -2,12 +2,9 @@
  * Base HTTP client with JWT auto-refresh
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../config';
 
-// Enforce HTTPS in production builds
-if (import.meta.env.PROD && !API_BASE.startsWith('https://')) {
-  console.error('[Security] VITE_API_URL must use HTTPS in production. Current:', API_BASE);
-}
+const API_BASE = API_URL;
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;

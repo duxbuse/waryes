@@ -11,6 +11,7 @@
 
 import type { Game } from '../../core/Game';
 import { getAccessToken } from '../../api/ApiClient';
+import { WS_URL, API_URL } from '../../config';
 
 export interface MultiplayerPlayer {
   id: string;
@@ -68,7 +69,7 @@ export class MultiplayerManager {
 
   constructor(_game: Game) {
     // this._game = game; // Currently unused
-    this.serverUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
+    this.serverUrl = WS_URL;
     this.playerId = this.generatePlayerId();
     this.playerName = this.loadPlayerName();
   }
@@ -293,8 +294,7 @@ export class MultiplayerManager {
    */
   async getOpenLobbies(): Promise<LobbyListItem[]> {
     try {
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiBase}/lobbies`);
+      const response = await fetch(`${API_URL}/lobbies`);
       return await response.json();
     } catch (error) {
       console.error('[Multiplayer] Failed to fetch lobbies:', error);

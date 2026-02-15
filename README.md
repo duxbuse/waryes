@@ -25,7 +25,10 @@ The easiest way to play without setting up a local development environment:
 cp .env.example .env
 # Edit .env and set secure passwords for POSTGRES_PASSWORD and REDIS_PASSWORD
 
-# 2. Start all services (database, Redis, game server, and web client)
+# 2. (Optional) Validate your configuration
+bash validate-env.sh
+
+# 3. Start all services (database, Redis, game server, and web client)
 docker-compose up -d
 
 # 3. Open your browser to http://localhost:8080
@@ -62,7 +65,21 @@ ALLOWED_ORIGIN=https://yourdomain.com
 NODE_ENV=production
 ```
 
-See [DOCKER.md](./DOCKER.md) for detailed deployment documentation.
+✅ **NEW: Runtime Configuration** - You can now change API/WebSocket URLs without rebuilding:
+```bash
+# Update .env with new URLs
+VITE_API_URL=https://new-api.yourdomain.com
+VITE_WS_URL=wss://new-api.yourdomain.com
+
+# Just restart the container (no rebuild needed)
+docker-compose restart game-client
+
+# Validate configuration
+bash validate-runtime-config.sh game-client
+```
+
+See [web/RUNTIME_CONFIG.md](./web/RUNTIME_CONFIG.md) for detailed runtime configuration documentation.
+See [DOCKER.md](./DOCKER.md) and [CLOUD_DEPLOYMENT_CHECKLIST.md](./CLOUD_DEPLOYMENT_CHECKLIST.md) for detailed deployment documentation.
 
 #### Option 2: Local Development
 

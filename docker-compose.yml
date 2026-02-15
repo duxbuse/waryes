@@ -39,6 +39,7 @@ services:
       PORT: "3001"
       DATABASE_URL: postgresql://gameserver:${POSTGRES_PASSWORD}@postgres:5432/stellarsiege
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       NODE_ENV: ${NODE_ENV:-development}
       MAX_CONCURRENT_GAMES: "20"
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:8080}
@@ -55,9 +56,9 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
-        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3001}
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3001}
     ports:
       - "${CLIENT_PORT:-8080}:80"
     depends_on:

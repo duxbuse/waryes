@@ -47,8 +47,9 @@ export class TacticalIconRenderer {
 
   // Team colors
   private readonly TEAM_COLORS = {
-    player: '#3B82F6', // Blue
-    enemy: '#EF4444', // Red
+    player: '#4aff4a', // Green for player's own units
+    ally: '#3B82F6', // Blue for allied units
+    enemy: '#EF4444', // Red for enemy units
   };
 
   // Icon shapes per category (NATO-style simplified)
@@ -77,11 +78,11 @@ export class TacticalIconRenderer {
   }
 
   /**
-   * Preload all icon textures for both teams
+   * Preload all icon textures for all teams (player, ally, enemy)
    */
   private preloadIconTextures(): void {
     const categories: UnitCategory[] = ['LOG', 'INF', 'TNK', 'REC', 'AA', 'ART', 'HEL', 'AIR'];
-    const teams: ('player' | 'enemy')[] = ['player', 'enemy'];
+    const teams: ('player' | 'ally' | 'enemy')[] = ['player', 'ally', 'enemy'];
 
     for (const category of categories) {
       for (const team of teams) {
@@ -97,7 +98,7 @@ export class TacticalIconRenderer {
   /**
    * Create an icon texture for a unit category and team
    */
-  private createIconTexture(category: UnitCategory, team: 'player' | 'enemy'): THREE.Texture {
+  private createIconTexture(category: UnitCategory, team: 'player' | 'ally' | 'enemy'): THREE.Texture {
     const canvas = document.createElement('canvas');
     canvas.width = this.CANVAS_SIZE;
     canvas.height = this.CANVAS_SIZE;
@@ -221,7 +222,16 @@ export class TacticalIconRenderer {
       return;
     }
 
-    const team = unit.team as 'player' | 'enemy';
+    // Determine team for icon color: player, ally, or enemy
+    let team: 'player' | 'ally' | 'enemy';
+    if (unit.team === 'enemy') {
+      team = 'enemy';
+    } else if (unit.ownerId === 'player') {
+      team = 'player';
+    } else {
+      team = 'ally';
+    }
+
     const textureKey = `${unit.category}_${team}`;
     const texture = this.iconTextures.get(textureKey);
 

@@ -1,10 +1,6 @@
 # Stage 1: Build the application
 FROM oven/bun:1 AS builder
 
-# Build arguments for environment variables
-ARG VITE_API_URL=http://localhost:3001
-ARG VITE_WS_URL=ws://localhost:3001
-
 WORKDIR /app
 
 # Copy package files for both shared and web
@@ -23,25 +19,31 @@ RUN bun install --frozen-lockfile
 COPY shared/ /app/shared/
 COPY web/ /app/web/
 
-# Set environment variables for build
-ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_WS_URL=${VITE_WS_URL}
-
-# Build the application
+# Build the application (no build-time env vars needed - runtime config is used)
 WORKDIR /app/web
 RUN bun run build
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
 
+# Install gettext for envsubst
+RUN apk add --no-cache gettext
+
 # Copy built files to nginx html directory
 COPY --from=builder /app/web/dist /usr/share/nginx/html
+
+# Copy config template (will be processed at runtime)
+COPY web/public/config.template.js /usr/share/nginx/html/config.template.js
 
 # Copy nginx configuration
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy entrypoint script
+COPY web/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Use custom entrypoint that generates runtime config
+ENTRYPOINT ["/docker-entrypoint.sh"]
