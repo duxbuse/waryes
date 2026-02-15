@@ -67,7 +67,7 @@ export class BenchmarkManager {
         const size = 'medium';
 
         // Start skirmish (this generates map and switches screens)
-        this.game.startSkirmish(
+        await this.game.startSkirmish(
             { id: 'benchmark', name: 'Benchmark', divisionId: 'test', units: [], activationPoints: 0 }, // Dummy deck
             size,
             seed,
@@ -75,8 +75,8 @@ export class BenchmarkManager {
             [{ type: 'CPU', difficulty: 'Medium' }]
         );
 
-        // Wait for map generation and scene setup
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait for scene setup
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         // 2. Setup camera
         // Position camera to see the action

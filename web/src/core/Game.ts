@@ -26,11 +26,12 @@ import { BuildingManager } from '../game/managers/BuildingManager';
 import { TransportManager } from '../game/managers/TransportManager';
 import { SmokeManager } from '../game/managers/SmokeManager';
 import { PathfindingManager } from '../game/managers/PathfindingManager';
+import { NavMeshManager } from '../game/navigation/NavMeshManager';
 import { DamageNumberManager } from '../game/effects/DamageNumbers';
 import { VisualEffectsManager } from '../game/effects/VisualEffects';
 import { AudioManager } from '../game/audio/AudioManager';
 import { ScreenManager, ScreenType } from './ScreenManager';
-import { MapGenerator } from '../game/map/MapGenerator';
+import { generateMapAsync } from '../game/map/generateMapAsync';
 import { MapRenderer } from '../game/map/MapRenderer';
 import { MinimapRenderer } from '../game/ui/MinimapRenderer';
 import { PathRenderer } from '../game/rendering/PathRenderer';
@@ -88,6 +89,7 @@ export class Game {
   public readonly transportManager: TransportManager;
   public readonly smokeManager: SmokeManager;
   public readonly pathfindingManager: PathfindingManager;
+  public readonly navMeshManager: NavMeshManager;
   public readonly damageNumberManager: DamageNumberManager;
   public readonly visualEffectsManager: VisualEffectsManager;
   public readonly audioManager: AudioManager;
@@ -235,6 +237,11 @@ export class Game {
     this.transportManager = new TransportManager(this);
     this.smokeManager = new SmokeManager(this);
     this.pathfindingManager = new PathfindingManager(this);
+    this.navMeshManager = new NavMeshManager(this);
+    // Initialize recast-navigation WASM early (non-blocking)
+    this.navMeshManager.initWasm().catch(err => {
+      console.warn('[Game] NavMesh WASM init failed, falling back to grid A*:', err);
+    });
     this.damageNumberManager = new DamageNumberManager(this);
     this.visualEffectsManager = new VisualEffectsManager(this);
     this.audioManager = new AudioManager();
@@ -554,6 +561,7 @@ export class Game {
     // CRITICAL PERFORMANCE: Reset pathfinding budget at start of each frame
     // This prevents pathfinding from consuming entire frame budget
     this.pathfindingManager.resetFrameBudget();
+    this.navMeshManager.resetFrameBudget();
 
     if (this._phase === GamePhase.Battle) {
       const t0 = performance.now();
@@ -875,7 +883,7 @@ export class Game {
       }
     });
     travLabel.appendChild(travCheckbox);
-    travLabel.appendChild(document.createTextNode('Traversability'));
+    travLabel.appendChild(document.createTextNode('Navigation'));
     this.debugPanel.appendChild(travLabel);
 
     // FPS / draw calls overlay toggle
@@ -1037,7 +1045,7 @@ export class Game {
   /**
    * Start a skirmish battle with the given configuration
    */
-  startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[], biome?: BiomeType, existingMap?: GameMap): void {
+  async startSkirmish(deck: DeckData, mapSize: MapSize, mapSeed: number, team1?: PlayerSlot[], team2?: PlayerSlot[], biome?: BiomeType, existingMap?: GameMap): Promise<void> {
     // Save configuration for rematch
     this.lastDeck = deck;
     this.lastMapSize = mapSize;
@@ -1048,12 +1056,11 @@ export class Game {
     // Reset stats for new game
     this.resetStats();
 
-    // Use existing map if provided, otherwise generate new one
+    // Use existing map if provided, otherwise generate new one in worker
     if (existingMap) {
       this.currentMap = existingMap;
     } else {
-      const generator = new MapGenerator(mapSeed, mapSize, biome);
-      this.currentMap = generator.generate();
+      this.currentMap = await generateMapAsync(mapSeed, mapSize, biome);
     }
 
     // Recreate MapRenderer with biome colors
@@ -1065,6 +1072,9 @@ export class Game {
     // Render map
     if (this.mapRenderer) {
       this.mapRenderer.render(this.currentMap);
+
+      // Generate navmesh from rendered terrain
+      this.navMeshManager.generateFromScene();
 
       // Wire terrain zone shader to LOS preview renderer
       if (this.losPreviewRenderer) {
@@ -1153,17 +1163,16 @@ export class Game {
    * Start a multiplayer battle with server-authoritative sync.
    * Similar to startSkirmish but doesn't spawn AI units (server handles all simulation).
    */
-  startMultiplayerBattle(
+  async startMultiplayerBattle(
     mapSeed: number,
     mapSize: MapSize,
     deckId: string | null,
     playerTeam: 'team1' | 'team2',
-  ): void {
+  ): Promise<void> {
     this.resetStats();
 
-    // Generate map deterministically from seed (must match server)
-    const generator = new MapGenerator(mapSeed, mapSize);
-    this.currentMap = generator.generate();
+    // Generate map deterministically from seed (must match server) in worker
+    this.currentMap = await generateMapAsync(mapSeed, mapSize);
 
     // Setup map rendering
     if (this.mapRenderer) {
@@ -1171,6 +1180,9 @@ export class Game {
     }
     this.mapRenderer = new MapRenderer(this.scene, this.currentMap.biome);
     this.mapRenderer.render(this.currentMap);
+
+    // Generate navmesh from rendered terrain
+    this.navMeshManager.generateFromScene();
 
     if (this.losPreviewRenderer) {
       this.losPreviewRenderer.setTerrainZoneShader(this.mapRenderer.getTerrainZoneShader());
@@ -2084,7 +2096,7 @@ export class Game {
     const mainMenuBtn = document.getElementById('victory-main-menu-btn');
 
     if (playAgainBtn) {
-      playAgainBtn.addEventListener('click', () => {
+      playAgainBtn.addEventListener('click', async () => {
         // Hide victory screen
         const victoryScreen = document.getElementById('victory-screen');
         if (victoryScreen) {
@@ -2093,7 +2105,7 @@ export class Game {
 
         // Restart with same settings
         if (this.lastDeck) {
-          this.startSkirmish(this.lastDeck, this.lastMapSize, this.lastMapSeed, this.lastTeam1, this.lastTeam2);
+          await this.startSkirmish(this.lastDeck, this.lastMapSize, this.lastMapSeed, this.lastTeam1, this.lastTeam2);
         }
       });
     }
@@ -2156,9 +2168,21 @@ export class Game {
         if (unit) game.unitManager.destroyUnit(unit);
       },
 
-      findPath: (from, to) => game.pathfindingManager.findPath(from, to),
-      findNearestReachablePosition: (from, to, maxRadius) =>
-        game.pathfindingManager.findNearestReachablePosition(from, to, maxRadius),
+      findPath: (from, to) => {
+        // Prefer navmesh pathfinding, fall back to grid A*
+        if (game.navMeshManager.isReady) {
+          const navPath = game.navMeshManager.findPath(from, to);
+          if (navPath) return navPath;
+        }
+        return game.pathfindingManager.findPath(from, to);
+      },
+      findNearestReachablePosition: (from, to, maxRadius) => {
+        if (game.navMeshManager.isReady) {
+          const navPos = game.navMeshManager.findNearestReachablePosition(from, to, maxRadius);
+          if (navPos) return navPos;
+        }
+        return game.pathfindingManager.findNearestReachablePosition(from, to, maxRadius);
+      },
 
       findNearestBuilding: (position, radius) =>
         game.buildingManager.findNearestBuilding(position, radius),
@@ -2191,6 +2215,8 @@ export class Game {
         if (!transportUnit) return [];
         return game.transportManager.unloadAll(transportUnit).map(u => u.sim);
       },
+
+      isPositionOnNavMesh: (x, z) => game.navMeshManager.isPositionOnNavMesh(x, z),
 
       isFogOfWarEnabled: () => game.fogOfWarManager.isEnabled(),
       isPositionVisible: (x, z) => game.fogOfWarManager.isVisible(x, z),

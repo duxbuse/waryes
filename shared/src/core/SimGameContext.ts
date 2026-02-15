@@ -46,6 +46,9 @@ export interface SimGameContext {
   tryMount(passenger: SimUnit, transport: SimUnit): boolean;
   unloadAll(transport: SimUnit): SimUnit[];
 
+  // Navigation
+  isPositionOnNavMesh(x: number, z: number): boolean;
+
   // Fog of war
   isFogOfWarEnabled(): boolean;
   isPositionVisible(x: number, z: number): boolean;

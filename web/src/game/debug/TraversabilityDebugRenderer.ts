@@ -1,20 +1,22 @@
 /**
- * TraversabilityDebugRenderer - Debug overlay showing navGrid traversability
+ * TraversabilityDebugRenderer - Debug overlay showing navigation data
  *
- * Builds a single static mesh colored by pathfinding cost:
- * - Green: normal passable (cost = 1.0)
- * - Yellow: high cost / steep (cost 1.0–5.0)
- * - Red: impassable (cost = Infinity)
+ * Shows EITHER:
+ *   1. NavMesh polygons (cyan wireframe + translucent fill) when navmesh is available
+ *   2. Grid-based traversability overlay (green/yellow/red) as fallback
  *
  * Built once when toggled on, disposed when toggled off.
  * No per-frame cost.
  */
 
 import * as THREE from 'three';
+import { NavMeshHelper } from '@recast-navigation/three';
+import type { NavMesh } from '@recast-navigation/core';
 import type { Game } from '../../core/Game';
 
 export class TraversabilityDebugRenderer {
   private mesh: THREE.Mesh | null = null;
+  private navMeshHelper: THREE.Object3D | null = null;
   private readonly game: Game;
   private readonly scene: THREE.Scene;
 
@@ -26,6 +28,65 @@ export class TraversabilityDebugRenderer {
   build(): void {
     this.dispose();
 
+    // Try navmesh visualization first
+    const navMesh = this.game.navMeshManager.getNavMesh();
+    if (navMesh) {
+      this.buildNavMeshOverlay(navMesh);
+    } else {
+      this.buildGridOverlay();
+    }
+  }
+
+  /**
+   * Show navmesh polygons as a translucent wireframe overlay
+   */
+  private buildNavMeshOverlay(navMesh: NavMesh): void {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00cccc,
+      transparent: true,
+      opacity: 0.25,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      wireframe: false,
+    });
+
+    const helper = new NavMeshHelper(navMesh, { navMeshMaterial: material });
+    helper.name = 'navmesh-debug';
+    helper.renderOrder = 999;
+
+    // Offset slightly above terrain to reduce z-fighting
+    helper.position.y = 0.3;
+
+    this.navMeshHelper = helper;
+    this.scene.add(helper);
+
+    // Add a wireframe on top for polygon edge visibility
+    const wireframeMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      wireframe: true,
+    });
+
+    const wireHelper = new NavMeshHelper(navMesh, { navMeshMaterial: wireframeMat });
+    wireHelper.name = 'navmesh-debug-wire';
+    wireHelper.renderOrder = 1000;
+    wireHelper.position.y = 0.35;
+
+    // Attach as child so dispose cleans up both
+    helper.add(wireHelper);
+
+    console.log('[TraversabilityDebugRenderer] NavMesh overlay enabled');
+  }
+
+  /**
+   * Fallback: show grid-based traversability colored by pathfinding cost
+   *   Green  = normal passable (cost = 1.0)
+   *   Yellow = high cost / steep (cost 1.0-5.0)
+   *   Red    = impassable (cost = Infinity)
+   */
+  private buildGridOverlay(): void {
     const data = this.game.pathfindingManager.getNavGridData();
     if (data.gridWidth === 0 || data.gridHeight === 0) return;
 
@@ -130,6 +191,8 @@ export class TraversabilityDebugRenderer {
     this.mesh.name = 'traversability-debug';
     this.mesh.renderOrder = 999; // Render on top
     this.scene.add(this.mesh);
+
+    console.log('[TraversabilityDebugRenderer] Grid overlay enabled (navmesh not available)');
   }
 
   dispose(): void {
@@ -138,6 +201,19 @@ export class TraversabilityDebugRenderer {
       this.mesh.geometry.dispose();
       (this.mesh.material as THREE.Material).dispose();
       this.mesh = null;
+    }
+    if (this.navMeshHelper) {
+      // Dispose child wireframe helper materials/geometries
+      this.navMeshHelper.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose();
+          }
+        }
+      });
+      this.scene.remove(this.navMeshHelper);
+      this.navMeshHelper = null;
     }
   }
 }

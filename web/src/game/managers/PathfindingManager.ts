@@ -3,9 +3,9 @@
  *
  * Features:
  * - Grid-based navigation with terrain awareness
- * - A* algorithm for optimal paths
+ * - A* algorithm with binary min-heap for optimal performance
  * - Obstacle avoidance (cliffs, buildings, water)
- * - Path smoothing for natural movement
+ * - Slope-aware path smoothing for natural movement
  * - Dynamic rerouting when blocked
  */
 
@@ -19,6 +19,87 @@ interface PathNode {
   h: number; // Heuristic to goal
   f: number; // Total cost
   parent: PathNode | null;
+  heapIndex: number; // Index in the binary heap
+}
+
+// ─── Binary Min-Heap for A* open list ───────────────────────────
+// Replaces O(n) linear scan with O(log n) insert/extract-min
+
+class BinaryHeap {
+  private data: PathNode[] = [];
+
+  get length(): number {
+    return this.data.length;
+  }
+
+  clear(): void {
+    this.data.length = 0;
+  }
+
+  push(node: PathNode): void {
+    node.heapIndex = this.data.length;
+    this.data.push(node);
+    this.bubbleUp(this.data.length - 1);
+  }
+
+  pop(): PathNode | undefined {
+    const data = this.data;
+    if (data.length === 0) return undefined;
+    const top = data[0]!;
+    const last = data.pop()!;
+    if (data.length > 0) {
+      data[0] = last;
+      last.heapIndex = 0;
+      this.sinkDown(0);
+    }
+    return top;
+  }
+
+  /** Re-heapify after decreasing a node's f-score */
+  decreaseKey(node: PathNode): void {
+    this.bubbleUp(node.heapIndex);
+  }
+
+  private bubbleUp(idx: number): void {
+    const data = this.data;
+    const node = data[idx]!;
+    while (idx > 0) {
+      const parentIdx = (idx - 1) >> 1;
+      const parent = data[parentIdx]!;
+      if (node.f >= parent.f) break;
+      data[idx] = parent;
+      parent.heapIndex = idx;
+      idx = parentIdx;
+    }
+    data[idx] = node;
+    node.heapIndex = idx;
+  }
+
+  private sinkDown(idx: number): void {
+    const data = this.data;
+    const length = data.length;
+    const node = data[idx]!;
+    while (true) {
+      const left = 2 * idx + 1;
+      const right = 2 * idx + 2;
+      let smallest = idx;
+
+      if (left < length && data[left]!.f < data[smallest]!.f) {
+        smallest = left;
+      }
+      if (right < length && data[right]!.f < data[smallest]!.f) {
+        smallest = right;
+      }
+      if (smallest === idx) break;
+
+      const swap = data[smallest]!;
+      data[idx] = swap;
+      swap.heapIndex = idx;
+      idx = smallest;
+    }
+    data[idx] = node;
+    node.heapIndex = idx;
+  }
 }
 
 export class PathfindingManager {
@@ -34,6 +115,27 @@ export class PathfindingManager {
   // Limit A* searches per frame to maintain 60 FPS
   private pathfindingCallsThisFrame = 0;
   private readonly MAX_PATHFINDING_PER_FRAME = 5; // Max 5 A* searches per frame (~20-50ms total)
+
+  // Reusable data structures (allocated once, cleared per search)
+  private readonly openHeap = new BinaryHeap();
+  // Flat lookup: gScore per grid cell (Infinity = not visited / in closed set uses separate bitmap)
+  private gScoreGrid: Float32Array = new Float32Array(0);
+  // Bitmap for closed set: 1 bit per cell packed into Uint32Array
+  private closedBitmap: Uint32Array = new Uint32Array(0);
+  // Flat node lookup for open-set membership (null = not in open set)
+  private nodeGrid: (PathNode | null)[] = [];
+
+  // Static neighbor offsets (allocated once)
+  private static readonly NEIGHBORS = [
+    { x: 0, z: -1 }, // N
+    { x: 1, z: -1 }, // NE
+    { x: 1, z: 0 },  // E
+    { x: 1, z: 1 },  // SE
+    { x: 0, z: 1 },  // S
+    { x: -1, z: 1 }, // SW
+    { x: -1, z: 0 }, // W
+    { x: -1, z: -1 } // NW
+  ];
 
   constructor(game: Game) {
     this.game = game;
@@ -88,6 +190,12 @@ export class PathfindingManager {
         this.navGrid[z]![x] = 1.0;
       }
     }
+
+    // Allocate reusable A* data structures
+    const totalCells = this.gridWidth * this.gridHeight;
+    this.gScoreGrid = new Float32Array(totalCells);
+    this.closedBitmap = new Uint32Array(Math.ceil(totalCells / 32));
+    this.nodeGrid = new Array(totalCells).fill(null) as (PathNode | null)[];
 
     // Calculate terrain costs based on slope and obstacles
     this.buildNavigationGrid();
@@ -213,6 +321,7 @@ export class PathfindingManager {
   /**
    * Calculate cost for a cell based on terrain and slope
    * Returns 1.0 for normal terrain, 2-5 for rough/steep terrain, Infinity for impassable
+   * Samples cardinal AND diagonal directions for better cliff detection
    */
   private getCellCost(worldX: number, worldZ: number): number {
     // Check terrain type first
@@ -230,13 +339,22 @@ export class PathfindingManager {
       return Infinity;
     }
 
-    // Check slope in all directions
+    // Check slope in all 8 directions (cardinal + diagonal)
     const height = this.game.getElevationAt(worldX, worldZ);
     const sampleDist = this.gridSize / 2;
+    const diagDist = sampleDist * 0.707; // sqrt(2)/2 for diagonal sampling
+
+    // Cardinal directions
     const heightN = this.game.getElevationAt(worldX, worldZ + sampleDist);
     const heightS = this.game.getElevationAt(worldX, worldZ - sampleDist);
     const heightE = this.game.getElevationAt(worldX + sampleDist, worldZ);
     const heightW = this.game.getElevationAt(worldX - sampleDist, worldZ);
+
+    // Diagonal directions
+    const heightNE = this.game.getElevationAt(worldX + diagDist, worldZ + diagDist);
+    const heightNW = this.game.getElevationAt(worldX - diagDist, worldZ + diagDist);
+    const heightSE = this.game.getElevationAt(worldX + diagDist, worldZ - diagDist);
+    const heightSW = this.game.getElevationAt(worldX - diagDist, worldZ - diagDist);
 
     const MAX_SLOPE = 1.0; // 45 degrees - impassable beyond this
     const HIGH_SLOPE = 0.7; // 35 degrees - high cost but passable
@@ -245,7 +363,13 @@ export class PathfindingManager {
     const slopeS = Math.abs(heightS - height) / sampleDist;
     const slopeE = Math.abs(heightE - height) / sampleDist;
     const slopeW = Math.abs(heightW - height) / sampleDist;
-    const maxSlope = Math.max(slopeN, slopeS, slopeE, slopeW);
+    // Diagonal slopes use diagDist for proper distance
+    const slopeNE = Math.abs(heightNE - height) / diagDist;
+    const slopeNW = Math.abs(heightNW - height) / diagDist;
+    const slopeSE = Math.abs(heightSE - height) / diagDist;
+    const slopeSW = Math.abs(heightSW - height) / diagDist;
+
+    const maxSlope = Math.max(slopeN, slopeS, slopeE, slopeW, slopeNE, slopeNW, slopeSE, slopeSW);
 
     // Impassable if slope exceeds maximum
     if (maxSlope > MAX_SLOPE) {
@@ -264,7 +388,7 @@ export class PathfindingManager {
 
 
   /**
-   * Find path from start to goal using A*
+   * Find path from start to goal using A* with binary min-heap
    */
   findPath(start: THREE.Vector3, goal: THREE.Vector3): THREE.Vector3[] | null {
     // CRITICAL PERFORMANCE: Check pathfinding budget to prevent frame rate collapse
@@ -289,112 +413,112 @@ export class PathfindingManager {
 
     // Check if start and goal are valid
     if (!this.isGridPassable(startGrid.x, startGrid.z)) {
-      // Reduce console spam - only log occasionally
       if (Math.random() < 0.1) {
         console.warn('[PathfindingManager] Start position is blocked');
       }
       return null;
     }
     if (!this.isGridPassable(goalGrid.x, goalGrid.z)) {
-      // Reduce console spam - only log occasionally
       if (Math.random() < 0.1) {
         console.warn('[PathfindingManager] Goal position is blocked');
       }
       return null;
     }
 
-    // A* algorithm
-    const openList: PathNode[] = [];
-    const closedSet = new Set<string>();
+    // Reset reusable data structures
+    const gridW = this.gridWidth;
+    this.openHeap.clear();
+    this.gScoreGrid.fill(Infinity);
+    this.closedBitmap.fill(0);
+    // Only clear nodeGrid cells we'll actually touch (lazy clear via generation counter
+    // would be ideal, but filling with null is fast enough for 2000 iterations max)
+    // We clear as we go instead - check gScore for membership
 
+    const startIdx = startGrid.z * gridW + startGrid.x;
     const startNode: PathNode = {
       x: startGrid.x,
       z: startGrid.z,
       g: 0,
       h: this.heuristic(startGrid.x, startGrid.z, goalGrid.x, goalGrid.z),
       f: 0,
-      parent: null
+      parent: null,
+      heapIndex: 0,
     };
     startNode.f = startNode.g + startNode.h;
-    openList.push(startNode);
+    this.gScoreGrid[startIdx] = 0;
+    this.nodeGrid[startIdx] = startNode;
+    this.openHeap.push(startNode);
 
     // Safety limit to prevent infinite loops on large maps
-    // Lowered from 10000 to 2000 for faster failure and better performance
     const MAX_ITERATIONS = 2000;
     let iterations = 0;
 
-    while (openList.length > 0 && iterations < MAX_ITERATIONS) {
+    while (this.openHeap.length > 0 && iterations < MAX_ITERATIONS) {
       iterations++;
-      // Find node with lowest f score
-      let currentIdx = 0;
-      for (let i = 1; i < openList.length; i++) {
-        if (openList[i]!.f < openList[currentIdx]!.f) {
-          currentIdx = i;
-        }
-      }
 
-      const current = openList[currentIdx]!;
+      const current = this.openHeap.pop()!;
+      const currentIdx = current.z * gridW + current.x;
 
       // Found goal?
       if (current.x === goalGrid.x && current.z === goalGrid.z) {
         return this.reconstructPath(current);
       }
 
-      // Move current from open to closed
-      openList.splice(currentIdx, 1);
-      closedSet.add(`${current.x},${current.z}`);
+      // Mark as closed (set bit in bitmap)
+      const bitmapIndex = currentIdx >> 5;
+      const existingBits = this.closedBitmap[bitmapIndex];
+      if (existingBits !== undefined) {
+        this.closedBitmap[bitmapIndex] = existingBits | (1 << (currentIdx & 31));
+      }
 
       // Check neighbors (8-directional)
-      const neighbors = [
-        { x: 0, z: -1 }, // N
-        { x: 1, z: -1 }, // NE
-        { x: 1, z: 0 },  // E
-        { x: 1, z: 1 },  // SE
-        { x: 0, z: 1 },  // S
-        { x: -1, z: 1 }, // SW
-        { x: -1, z: 0 }, // W
-        { x: -1, z: -1 } // NW
-      ];
-
-      for (const offset of neighbors) {
+      for (const offset of PathfindingManager.NEIGHBORS) {
         const nx = current.x + offset.x;
         const nz = current.z + offset.z;
 
         // Skip if out of bounds or impassable
-        if (!this.isGridPassable(nx, nz)) continue;
+        if (nx < 0 || nx >= this.gridWidth || nz < 0 || nz >= this.gridHeight) continue;
+        const nIdx = nz * gridW + nx;
 
-        // Skip if in closed set
-        const key = `${nx},${nz}`;
-        if (closedSet.has(key)) continue;
+        // Skip if in closed set (check bit)
+        if (this.closedBitmap[nIdx >> 5]! & (1 << (nIdx & 31))) continue;
+
+        const terrainCost = this.navGrid[nz]?.[nx] ?? Infinity;
+        if (terrainCost === Infinity) continue; // Impassable
 
         // Calculate costs with terrain cost multiplier
         const isDiagonal = offset.x !== 0 && offset.z !== 0;
         const baseCost = isDiagonal ? 1.414 : 1.0;
-        const terrainCost = this.navGrid[nz]?.[nx] ?? 1.0;
-        const moveCost = baseCost * terrainCost; // Apply terrain cost multiplier
+        const moveCost = baseCost * terrainCost;
         const g = current.g + moveCost;
+
+        // Check if we already have a better path to this neighbor
+        if (g >= this.gScoreGrid[nIdx]!) continue;
+
         const h = this.heuristic(nx, nz, goalGrid.x, goalGrid.z);
         const f = g + h;
 
-        // Check if neighbor is in open list
-        let neighborNode = openList.find(n => n.x === nx && n.z === nz);
-
-        if (!neighborNode) {
-          // Add to open list
-          neighborNode = { x: nx, z: nz, g, h, f, parent: current };
-          openList.push(neighborNode);
-        } else if (g < neighborNode.g) {
-          // Update if better path found
+        let neighborNode = this.nodeGrid[nIdx];
+        if (neighborNode && this.gScoreGrid[nIdx]! < Infinity) {
+          // Already in open set - update
           neighborNode.g = g;
+          neighborNode.h = h;
           neighborNode.f = f;
           neighborNode.parent = current;
+          this.gScoreGrid[nIdx] = g;
+          this.openHeap.decreaseKey(neighborNode);
+        } else {
+          // New node - add to open set
+          neighborNode = { x: nx, z: nz, g, h, f, parent: current, heapIndex: 0 };
+          this.nodeGrid[nIdx] = neighborNode;
+          this.gScoreGrid[nIdx] = g;
+          this.openHeap.push(neighborNode);
         }
       }
     }
 
     // No path found
     if (iterations >= MAX_ITERATIONS) {
-      // Reduce console spam - only log occasionally (10% of the time)
       if (Math.random() < 0.1) {
         console.warn('[PathfindingManager] A* exceeded max iterations');
       }
@@ -446,6 +570,7 @@ export class PathfindingManager {
 
   /**
    * Check if there's line of sight between two points (for path smoothing)
+   * Now also checks terrain slope along the line to prevent smoothing across cliffs
    */
   private hasLineOfSight(start: THREE.Vector3, end: THREE.Vector3): boolean {
     const dx = end.x - start.x;
@@ -453,14 +578,36 @@ export class PathfindingManager {
     const distance = Math.sqrt(dx * dx + dz * dz);
     const steps = Math.ceil(distance / (this.gridSize / 2));
 
+    let prevHeight = this.game.getElevationAt(start.x, start.z);
+    const stepDist = distance / steps;
+
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const x = start.x + dx * t;
       const z = start.z + dz * t;
       const grid = this.worldToGrid(x, z);
 
+      // Check passability
       if (!this.isGridPassable(grid.x, grid.z)) {
         return false;
+      }
+
+      // Check cell cost - reject high-cost cells (steep terrain near cliffs)
+      const cellCost = this.navGrid[grid.z]?.[grid.x] ?? Infinity;
+      if (cellCost >= 3.0) {
+        return false;
+      }
+
+      // Check slope between consecutive sample points
+      if (i > 0) {
+        const curHeight = this.game.getElevationAt(x, z);
+        if (stepDist > 0.01) {
+          const slope = Math.abs(curHeight - prevHeight) / stepDist;
+          if (slope > 0.9) {
+            return false;
+          }
+        }
+        prevHeight = curHeight;
       }
     }
 

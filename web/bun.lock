@@ -9,6 +9,9 @@
         "@fontsource/crimson-pro": "^5.2.8",
         "@fontsource/playfair-display-sc": "^5.2.8",
         "@fontsource/share-tech-mono": "^5.2.7",
+        "@recast-navigation/core": "^0.43.0",
+        "@recast-navigation/generators": "^0.43.0",
+        "@recast-navigation/three": "^0.43.0",
         "three": "^0.170.0",
       },
       "devDependencies": {
@@ -139,6 +142,14 @@
     "@playwright/test": ["@playwright/test@1.57.0", "", { "dependencies": { "playwright": "1.57.0" }, "bin": { "playwright": "cli.js" } }, "sha512-6TyEnHgd6SArQO8UO2OMTxshln3QMWBtPGrOCgs3wVEmQmwyuNtB10IZMfmYDE0riwNR1cu4q+pPcxMVtaG3TA=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.29", "", {}, "sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww=="],
+
+    "@recast-navigation/core": ["@recast-navigation/core@0.43.0", "", { "dependencies": { "@recast-navigation/wasm": "0.43.0" } }, "sha512-7VGt3QcSJkJuwY1a2RQpZkqiXVk8e6TuaR4cQaNISqp01KZYyxeGEQcRjU8S7OJ9//kXznyvokzFPRSa4XL90g=="],
+
+    "@recast-navigation/generators": ["@recast-navigation/generators@0.43.0", "", { "dependencies": { "@recast-navigation/core": "0.43.0", "@recast-navigation/wasm": "0.43.0" } }, "sha512-+vC4Rs3lOsmg71IrShkZH3acAKlmP0KwV0OOVa5ETk/gvdXWDb//6LxA7dYz9Oq9ztixc8gvDmQSG43b/hn2jQ=="],
+
+    "@recast-navigation/three": ["@recast-navigation/three@0.43.0", "", { "dependencies": { "@recast-navigation/core": "0.43.0", "@recast-navigation/generators": "0.43.0" }, "peerDependencies": { "@types/three": "0.x.x", "three": "0.x.x" } }, "sha512-tHKztKws5Qa8ot8+o8+2YGn85WtwyjCG4+NSnRKxGcgRbtnAc55y6Jpb1HjnOuxiMAum/QGjPEu7fHNvqmyNzg=="],
+
+    "@recast-navigation/wasm": ["@recast-navigation/wasm@0.43.0", "", {}, "sha512-0zEPbCacIpU1nWeErPuo6KK2o+yCKEWimbhtHqIfvulLAZPoq/2ErWH87RddlEwksDBUuXu/DV4+EUNr6LjVvg=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.54.0", "", { "os": "android", "cpu": "arm" }, "sha512-OywsdRHrFvCdvsewAInDKCNyR3laPA2mc9bRYJ6LBp5IyvF3fvXbbNR0bSzHlZVFtn6E0xw2oZlyjg4rKCVcng=="],
 

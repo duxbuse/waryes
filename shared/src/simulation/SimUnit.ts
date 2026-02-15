@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { UnitData, WeaponSlot, WeaponData, Building } from '../data/types';
 import type { SimGameContext } from '../core/SimGameContext';
+import { computeAvoidanceVelocity } from './LocalAvoidance';
 
 // ─── Reusable temp vectors (module-level, zero per-frame allocation) ───
 const _sepForce = new THREE.Vector3();
@@ -1088,13 +1089,8 @@ export class SimUnit {
     // Move
     this.velocity.copy(_moveDir).multiplyScalar(moveDistance);
 
-    // Separation
-    const separationForce = this.applySeparation();
-    if (separationForce.length() > 0) {
-      const separationStrength = 0.6;
-      separationForce.normalize().multiplyScalar(moveDistance * separationStrength);
-      this.velocity.add(separationForce);
-    }
+    // Local avoidance (ORCA-inspired, replaces simple separation)
+    computeAvoidanceVelocity(this, this.velocity, this.context);
 
     // Slope validation
     if (this.shouldCheckTerrain()) {
@@ -1106,7 +1102,8 @@ export class SimUnit {
       if (horizontalDist > 0.01) {
         const slope = Math.abs(nextHeight - currentHeight) / horizontalDist;
         if (slope > 1.0) {
-          this.stuckTimer = 3.0;
+          // Don't jump stuckTimer to 3.0 — let it accumulate naturally via += dt
+          // Jumping caused an immediate escape→repath loop on cliffs
           return;
         }
       }
@@ -1150,12 +1147,8 @@ export class SimUnit {
 
     this.velocity.copy(_moveDir).multiplyScalar(moveSpeed);
 
-    const separationForce = this.applySeparation();
-    if (separationForce.length() > 0) {
-      const separationStrength = 0.6;
-      separationForce.normalize().multiplyScalar(moveSpeed * separationStrength);
-      this.velocity.add(separationForce);
-    }
+    // Local avoidance (ORCA-inspired)
+    computeAvoidanceVelocity(this, this.velocity, this.context);
 
     if (this.shouldCheckTerrain()) {
       _nextPos.copy(this.simPosition).add(this.velocity);
@@ -1586,7 +1579,7 @@ export class SimUnit {
     for (const dir of SimUnit.ESCAPE_DIRS) {
       _testPos.copy(this.simPosition).addScaledVector(dir, escapeDistance);
       const slope = this.calculateSlopeTo(_testPos);
-      if (slope <= 1.0) {
+      if (slope <= 0.8) {
         // Return a new scaled vector (caller stores it as a waypoint)
         return _moveDir.copy(dir).multiplyScalar(escapeDistance);
       }

@@ -447,7 +447,7 @@ export class GameLobbyScreen {
     this.game.multiplayerManager.on('player_left', () => this.refreshPlayerLists());
     this.game.multiplayerManager.on('player_updated', () => this.refreshPlayerLists());
 
-    this.game.multiplayerManager.on('game_starting', (mapSeed: number, mapSize: string) => {
+    this.game.multiplayerManager.on('game_starting', async (mapSeed: number, mapSize: string) => {
       showNotification(`Game starting! Map: ${mapSize}, Seed: ${mapSeed}`, 5000);
 
       const lobby = this.game.multiplayerManager.getCurrentLobby();
@@ -456,7 +456,7 @@ export class GameLobbyScreen {
       const deckId = player?.deckId ?? null;
       const playerTeam = player?.team === 'team2' ? 'team2' : 'team1';
 
-      this.game.startMultiplayerBattle(
+      await this.game.startMultiplayerBattle(
         mapSeed,
         mapSize as 'small' | 'medium' | 'large',
         deckId,

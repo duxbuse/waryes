@@ -46,6 +46,7 @@ const createMockSimContext = () => ({
   spawnDefensiveStructure: () => null,
   tryMount: () => false,
   unloadAll: () => [],
+  isPositionOnNavMesh: () => true,
   isFogOfWarEnabled: () => false,
   isPositionVisible: () => true,
 });

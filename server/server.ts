@@ -738,15 +738,11 @@ await loadGameData();
 const authRateLimiter = new RateLimiter(5, 60000); // 5 per minute default
 const handleAuthRoute = createAuthRouter(authRateLimiter);
 
-// CORS headers for all API responses
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
-function corsHeaders(): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
+// CORS utilities
+import { isOriginAllowed, getCorsHeaders, getAllowedOrigins } from './utils/cors';
+
+const corsHeaders = getCorsHeaders;
+const ALLOWED_ORIGINS = getAllowedOrigins();
 
 // Track active WebSocket connections for connection limiting
 let activeConnectionCount = 0;
@@ -759,18 +755,18 @@ Bun.serve<WsData>({
   port: PORT,
   async fetch(req, server) {
     const url = new URL(req.url);
+    const origin = req.headers.get('origin');
 
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
     // Upgrade to WebSocket for /ws path or if upgrade header present
     if (req.headers.get('upgrade') === 'websocket') {
       // Validate origin to prevent Cross-Site WebSocket Hijacking
-      const origin = req.headers.get('origin');
-      if (origin && origin !== ALLOWED_ORIGIN) {
-        logger.warn({ origin }, 'WebSocket upgrade rejected: invalid origin');
+      if (origin && !isOriginAllowed(origin)) {
+        logger.warn({ origin, allowedOrigins: ALLOWED_ORIGINS }, 'WebSocket upgrade rejected: invalid origin');
         return new Response('Forbidden', { status: 403 });
       }
 
@@ -807,7 +803,7 @@ Bun.serve<WsData>({
     // Health check - minimal public info only
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({ status: 'ok' }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
@@ -829,20 +825,20 @@ Bun.serve<WsData>({
       if (url.pathname === '/lobbies') {
         const lobbies = mpServer.getOpenLobbies();
         return new Response(JSON.stringify(lobbies), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
         });
       }
     } catch (error) {
       logger.error({ err: error }, 'API request error');
       return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   },
   websocket: {

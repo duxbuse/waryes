@@ -16,6 +16,58 @@ See [COMPLETION_STATUS.md](./COMPLETION_STATUS.md) for detailed feature status.
 
 ### Installation & Running
 
+#### Option 1: Docker Compose (Recommended for Players)
+
+The easiest way to play without setting up a local development environment:
+
+```bash
+# 1. Copy and configure environment variables
+cp .env.example .env
+# Edit .env and set secure passwords for POSTGRES_PASSWORD and REDIS_PASSWORD
+
+# 2. Start all services (database, Redis, game server, and web client)
+docker-compose up -d
+
+# 3. Open your browser to http://localhost:8080
+# The game is now ready to play!
+
+# To stop all services
+docker-compose down
+
+# To rebuild after code changes
+docker-compose up -d --build
+```
+
+**What gets started:**
+- PostgreSQL database (port 5432)
+- Redis cache (port 6379)
+- Game server with WebSocket support (port 3001)
+- Web client served by nginx (port 8080)
+
+**Cloud Deployment:**
+For production deployments, configure these environment variables in `.env`:
+
+```bash
+# Backend API URL (use HTTPS in production)
+VITE_API_URL=https://api.yourdomain.com
+VITE_WS_URL=wss://api.yourdomain.com
+
+# Web client port
+CLIENT_PORT=8080
+
+# CORS - allow your domain to connect
+ALLOWED_ORIGIN=https://yourdomain.com
+
+# Set production mode
+NODE_ENV=production
+```
+
+See [DOCKER.md](./DOCKER.md) for detailed deployment documentation.
+
+#### Option 2: Local Development
+
+For developers who want to modify the code:
+
 ```bash
 # Install dependencies
 cd web

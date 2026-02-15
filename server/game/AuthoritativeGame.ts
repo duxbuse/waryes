@@ -539,6 +539,11 @@ export class AuthoritativeGame implements SimGameContext {
     return this.transportManager.unloadAll(transport);
   }
 
+  isPositionOnNavMesh(_x: number, _z: number): boolean {
+    // Server does not have a navmesh — assume all positions walkable
+    return true;
+  }
+
   isFogOfWarEnabled(): boolean {
     // Server always has full visibility (no fog)
     return false;

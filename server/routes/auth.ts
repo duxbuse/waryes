@@ -6,9 +6,38 @@ import { authService } from '../services/AuthService';
 import { authenticateRequest, unauthorizedResponse } from '../auth/middleware';
 import { registerSchema, loginSchema, refreshSchema } from '../validation/schemas';
 import type { RateLimiter } from '../RateLimiter';
+import { getCorsHeaders } from '../utils/cors';
 
 export function createAuthRouter(rateLimiter: RateLimiter) {
   return async function handleAuthRoute(req: Request, path: string): Promise<Response> {
+    const origin = req.headers.get('origin');
+
+    // Response helpers with CORS headers
+    const json = (data: unknown, status: number = 200): Response => {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(origin),
+        },
+      });
+    };
+
+    const badRequest = (message: string): Response => json({ error: message }, 400);
+    const unauthorized = (message: string): Response => json({ error: message }, 401);
+    const notFound = (message: string): Response => json({ error: message }, 404);
+    const conflict = (message: string): Response => json({ error: message }, 409);
+    const methodNotAllowed = (): Response => json({ error: 'Method not allowed' }, 405);
+    const tooManyRequests = (retryAfter: number): Response => {
+      return new Response(JSON.stringify({ error: 'Too many requests', retryAfter }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil(retryAfter / 1000)),
+          ...getCorsHeaders(origin),
+        },
+      });
+    };
     // Use last entry in x-forwarded-for (closest proxy), or fall back to 'unknown'
     const xff = req.headers.get('x-forwarded-for');
     const clientIp = xff ? xff.split(',').pop()!.trim() : 'unknown';
@@ -113,45 +142,4 @@ export function createAuthRouter(rateLimiter: RateLimiter) {
         return notFound('Route not found');
     }
   };
-}
-
-// Response helpers
-function json(data: unknown, status: number = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
-    },
-  });
-}
-
-function badRequest(message: string): Response {
-  return json({ error: message }, 400);
-}
-
-function unauthorized(message: string): Response {
-  return json({ error: message }, 401);
-}
-
-function notFound(message: string): Response {
-  return json({ error: message }, 404);
-}
-
-function conflict(message: string): Response {
-  return json({ error: message }, 409);
-}
-
-function methodNotAllowed(): Response {
-  return json({ error: 'Method not allowed' }, 405);
-}
-
-function tooManyRequests(retryAfter: number): Response {
-  return new Response(JSON.stringify({ error: 'Too many requests', retryAfter }), {
-    status: 429,
-    headers: {
-      'Content-Type': 'application/json',
-      'Retry-After': String(Math.ceil(retryAfter / 1000)),
-    },
-  });
 }

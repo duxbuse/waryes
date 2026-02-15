@@ -120,9 +120,9 @@ async function main(): Promise<void> {
       onBack: () => {
         game.screenManager.switchTo(ScreenType.MainMenu);
       },
-      onStartBattle: (config: SkirmishConfig) => {
+      onStartBattle: async (config: SkirmishConfig) => {
         if (config.deck) {
-          game.startSkirmish(
+          await game.startSkirmish(
             config.deck,
             config.mapSize,
             config.mapSeed,

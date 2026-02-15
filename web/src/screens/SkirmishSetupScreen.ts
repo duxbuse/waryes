@@ -8,6 +8,7 @@ import { loadSavedDecks } from './ArmouryScreen';
 import { STARTER_DECKS } from '../data/starterDecks';
 import { BIOME_CONFIGS } from '../data/biomeConfigs';
 import { getUsername, isAuthenticated } from '../api/ApiClient';
+import { generateMapAsync } from '../game/map/generateMapAsync';
 
 // Create a default deck for quick start using valid SDF units
 function createDefaultDeck(): DeckData {
@@ -84,6 +85,7 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
   let isGeneratingMap = false;
   let isHosting = false;
   let hostedGameCode: string | null = null;
+  let currentGenerationId = 0; // Track generation requests to discard stale results
 
   // Team configuration (5v5 format)
   let team1: PlayerSlot[] = [
@@ -1147,14 +1149,19 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
     isGeneratingMap = true;
     updateStartButton();
 
-    // Defer generation to next tick to allow UI to update
-    setTimeout(() => {
-      // Import map generator dynamically to render preview
-      import('../game/map/MapGenerator').then(({ MapGenerator }) => {
-        try {
-          const generator = new MapGenerator(mapSeed, mapSize, selectedBiome);
-          generatedMap = generator.generate(); // Store map for reuse
-          const map = generatedMap;
+    // Start async map generation in worker
+    currentGenerationId++;
+    const thisGenId = currentGenerationId;
+
+    generateMapAsync(mapSeed, mapSize, selectedBiome).then((map) => {
+      // Discard result if another generation was started
+      if (thisGenId !== currentGenerationId) {
+        console.log(`Discarding stale map generation (ID ${thisGenId}, current ${currentGenerationId})`);
+        return;
+      }
+
+      try {
+        generatedMap = map;
 
           const canvasSize = 200;
           const biomeConfig = BIOME_CONFIGS[map.biome];
@@ -1527,26 +1534,36 @@ export function createSkirmishSetupScreen(callbacks: SkirmishSetupCallbacks): Sc
           ctx.font = '10px monospace';
           ctx.fillText(`Biome: ${biomeConfig.name}`, 5, 198);
 
-        } catch (error) {
-          console.error('Map generation failed:', error);
-          ctx.fillStyle = '#ff4444';
-          ctx.fillRect(0, 0, 200, 200);
-          ctx.fillStyle = '#fff';
-          ctx.font = '12px monospace';
-          ctx.fillText('Generation Error', 50, 100);
-        } finally {
-          // Always hide loading state and re-enable button
-          if (loadingOverlay) loadingOverlay.classList.add('hidden');
-          isGeneratingMap = false;
-          updateStartButton();
-        }
-      }).catch(error => {
-        console.error('Failed to load MapGenerator:', error);
-        if (loadingOverlay) loadingOverlay.classList.add('hidden'); // Also hide here just in case
+      } catch (error) {
+        console.error('Map preview rendering failed:', error);
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(0, 0, 200, 200);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText('Preview Error', 50, 100);
+      } finally {
+        // Always hide loading state and re-enable button
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
         isGeneratingMap = false;
         updateStartButton();
-      });
-    }, 50); // Small delay to let UI render the loading state
+      }
+    }).catch((error) => {
+      console.error('Map generation worker failed:', error);
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      isGeneratingMap = false;
+      updateStartButton();
+
+      // Show error in preview canvas
+      const canvas = element.querySelector('#preview-canvas') as HTMLCanvasElement;
+      const ctx = canvas?.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(0, 0, 200, 200);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText('Generation Error', 50, 100);
+      }
+    });
   }
 
   function updateStartButton(): void {
